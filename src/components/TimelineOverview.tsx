@@ -34,20 +34,24 @@ export const TimelineOverview: React.FC<TimelineOverviewProps> = ({
         return (
           <div className="space-y-1.5 text-xs text-slate-700 pt-1">
             <div className="flex items-start gap-2">
-              <span className="font-semibold text-slate-900 shrink-0">🏦 Branches:</span>
-              <span>BOC, People's Bank, NSB (Foreign study declaration & international card unlocks)</span>
+              <span className="font-semibold text-slate-900 shrink-0">🏦 Friday Bank Run:</span>
+              <span>BOC, People's Bank, NSB (Foreign study declaration & 3DS Alipay/WeChat card unlocks)</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="font-semibold text-slate-900 shrink-0">⏰ Deadline:</span>
-              <span className="font-semibold text-[#007AFF]">Before 3:00 PM branch closing</span>
+              <span className="font-semibold text-slate-900 shrink-0">💵 Cash Reserve:</span>
+              <span>USD $100 bills (crisp/uncreased) + 1,500–3,000 physical RMB notes (passport endorsed)</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="font-semibold text-slate-900 shrink-0">🛍️ Purchases:</span>
-              <span>45cm laptop backpack & CCC-certified power bank</span>
+              <span className="font-semibold text-slate-900 shrink-0">🎁 Gifts Packaging:</span>
+              <span>Cushion 3 seashells, box 2 wooden wind-sail ships & wrap 2 tiny elephants</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="font-semibold text-slate-900 shrink-0">📶 Mobile:</span>
-              <span>Verify Dialog SMS Roaming for banking OTPs</span>
+              <span className="font-semibold text-slate-900 shrink-0">🛡️ Proxy Setup:</span>
+              <span>Import & test Jichang subscription URLs in Shadowrocket, v2rayNG & Clash Verge</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="font-semibold text-slate-900 shrink-0">⏰ Branch Deadline:</span>
+              <span className="font-semibold text-[#007AFF]">Complete bank run before 3:00 PM closing</span>
             </div>
           </div>
         );
@@ -56,16 +60,20 @@ export const TimelineOverview: React.FC<TimelineOverviewProps> = ({
         return (
           <div className="space-y-1.5 text-xs text-slate-700 pt-1">
             <div className="flex items-start gap-2">
-              <span className="font-semibold text-slate-900 shrink-0">📱 Tech Drill:</span>
-              <span>Test Dialog SMS OTP on Samsung S20 FE & verify VPN configs on Wi-Fi</span>
+              <span className="font-semibold text-slate-900 shrink-0">📱 Roaming OTP Drill:</span>
+              <span>Test Dialog SMS OTP delivery on Samsung S20 FE with mobile data locked OFF</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="font-semibold text-slate-900 shrink-0">⚖️ Weigh-In:</span>
-              <span className="font-semibold text-slate-900">Weigh both rolling suitcases to max 23kg limit</span>
+              <span className="font-semibold text-slate-900 shrink-0">⚖️ Suitcase Weigh-In:</span>
+              <span className="font-semibold text-slate-900">Weigh 30×40×70cm & 27×41×57cm bags to max 23.0kg each</span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="font-semibold text-slate-900 shrink-0">🔋 Battery:</span>
-              <span>100% full charge across all 6 electronic devices</span>
+              <span className="font-semibold text-slate-900 shrink-0">🔋 Battery Charge:</span>
+              <span>100% full charge on iPhone 17, S20 FE, Dell 5410, iPad, Soundcore & CCC battery</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="font-semibold text-slate-900 shrink-0">🔒 Suitcase Lock-Up:</span>
+              <span>Final packing verification, gift cushioning check & luggage tag fastening</span>
             </div>
           </div>
         );

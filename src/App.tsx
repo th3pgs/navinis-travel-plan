@@ -15,6 +15,8 @@ import {
   WardrobeItem,
   TimelineMilestone,
   ProcedureStep,
+  BankingTaskItem,
+  GiftItem,
   INITIAL_BAGS,
   INITIAL_DEVICES,
   INITIAL_DOCUMENTS,
@@ -22,6 +24,8 @@ import {
   INITIAL_WARDROBE,
   INITIAL_MILESTONES,
   INITIAL_PROCEDURE_STEPS,
+  INITIAL_BANKING_TASKS,
+  INITIAL_GIFTS,
 } from './data';
 
 import {
@@ -159,6 +163,28 @@ export function App() {
     return INITIAL_PROCEDURE_STEPS;
   });
 
+  const [bankingTasks, setBankingTasks] = useState<BankingTaskItem[]>(() => {
+    const saved = localStorage.getItem('navini_banking_tasks_v5');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return INITIAL_BANKING_TASKS;
+  });
+
+  const [gifts, setGifts] = useState<GiftItem[]>(() => {
+    const saved = localStorage.getItem('navini_gifts_v5');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return INITIAL_GIFTS;
+  });
+
   const [apps, setApps] = useState<AppConfigItem[]>(() => {
     const saved = localStorage.getItem('navini_apps_v5');
     if (saved) {
@@ -201,6 +227,8 @@ export function App() {
         if (remote.wardrobe?.length) setWardrobe(remote.wardrobe);
         if (remote.documents?.length) setDocuments(remote.documents);
         if (remote.procedureSteps?.length) setProcedureSteps(remote.procedureSteps);
+        if (remote.bankingTasks?.length) setBankingTasks(remote.bankingTasks);
+        if (remote.gifts?.length) setGifts(remote.gifts);
         if (remote.apps?.length) setApps(remote.apps);
         if (remote.milestones?.length) setMilestones(remote.milestones);
         if (typeof remote.confirmedCampusChat === 'boolean') {
@@ -221,6 +249,8 @@ export function App() {
       if (incoming.wardrobe?.length) setWardrobe(incoming.wardrobe);
       if (incoming.documents?.length) setDocuments(incoming.documents);
       if (incoming.procedureSteps?.length) setProcedureSteps(incoming.procedureSteps);
+      if (incoming.bankingTasks?.length) setBankingTasks(incoming.bankingTasks);
+      if (incoming.gifts?.length) setGifts(incoming.gifts);
       if (incoming.apps?.length) setApps(incoming.apps);
       if (incoming.milestones?.length) setMilestones(incoming.milestones);
       if (typeof incoming.confirmedCampusChat === 'boolean') {
@@ -243,6 +273,11 @@ export function App() {
 
   // Sync state to local storage & push to Supabase
   const syncAllState = (overrides?: Partial<AppMasterState>) => {
+    const bTasks = overrides?.bankingTasks || bankingTasks;
+    const gItems = overrides?.gifts || gifts;
+    localStorage.setItem('navini_banking_tasks_v5', JSON.stringify(bTasks));
+    localStorage.setItem('navini_gifts_v5', JSON.stringify(gItems));
+
     const masterState: AppMasterState = {
       version: '5.2',
       lastUpdated: new Date().toISOString(),
@@ -252,6 +287,8 @@ export function App() {
       wardrobe: overrides?.wardrobe || wardrobe,
       documents: overrides?.documents || documents,
       procedureSteps: overrides?.procedureSteps || procedureSteps,
+      bankingTasks: bTasks,
+      gifts: gItems,
       apps: overrides?.apps || apps,
       milestones: overrides?.milestones || milestones,
       confirmedCampusChat: overrides?.confirmedCampusChat ?? confirmedCampusChat,
@@ -379,6 +416,58 @@ export function App() {
     syncAllState({ procedureSteps: updated });
   };
 
+  // Handlers for Banking Tasks
+  const toggleBankingTask = (id: string) => {
+    const updated = bankingTasks.map((t) => (t.id === id ? { ...t, isDone: !t.isDone } : t));
+    setBankingTasks(updated);
+    syncAllState({ bankingTasks: updated });
+  };
+
+  const handleAddBankingTask = (task: Omit<BankingTaskItem, 'id'>) => {
+    const newT: BankingTaskItem = { ...task, id: 'bank-' + Date.now() };
+    const updated = [...bankingTasks, newT];
+    setBankingTasks(updated);
+    syncAllState({ bankingTasks: updated });
+  };
+
+  const handleUpdateBankingTask = (id: string, partial: Partial<BankingTaskItem>) => {
+    const updated = bankingTasks.map((t) => (t.id === id ? { ...t, ...partial } : t));
+    setBankingTasks(updated);
+    syncAllState({ bankingTasks: updated });
+  };
+
+  const handleDeleteBankingTask = (id: string) => {
+    const updated = bankingTasks.filter((t) => t.id !== id);
+    setBankingTasks(updated);
+    syncAllState({ bankingTasks: updated });
+  };
+
+  // Handlers for Gifts & Souvenirs
+  const toggleGiftPacked = (id: string) => {
+    const updated = gifts.map((g) => (g.id === id ? { ...g, isPacked: !g.isPacked } : g));
+    setGifts(updated);
+    syncAllState({ gifts: updated });
+  };
+
+  const handleAddGift = (gift: Omit<GiftItem, 'id'>) => {
+    const newG: GiftItem = { ...gift, id: 'gift-' + Date.now() };
+    const updated = [...gifts, newG];
+    setGifts(updated);
+    syncAllState({ gifts: updated });
+  };
+
+  const handleUpdateGift = (id: string, partial: Partial<GiftItem>) => {
+    const updated = gifts.map((g) => (g.id === id ? { ...g, ...partial } : g));
+    setGifts(updated);
+    syncAllState({ gifts: updated });
+  };
+
+  const handleDeleteGift = (id: string) => {
+    const updated = gifts.filter((g) => g.id !== id);
+    setGifts(updated);
+    syncAllState({ gifts: updated });
+  };
+
   // Handlers for Apps
   const toggleAppInstalled = (id: string) => {
     const updated = apps.map((a) => (a.id === id ? { ...a, isInstalled: !a.isInstalled } : a));
@@ -440,6 +529,7 @@ export function App() {
   const packedDocs = documents.filter((d) => d.isPacked).length;
   const docPercent = Math.round((packedDocs / (documents.length || 1)) * 100);
   const doneSteps = procedureSteps.filter((s) => s.isDone).length;
+  const doneBankingTasks = bankingTasks.filter((t) => t.isDone).length;
 
   const configuredApps = apps.filter((a) => a.isConfigured).length;
   const appPercent = Math.round((configuredApps / (apps.length || 1)) * 100);
@@ -449,16 +539,21 @@ export function App() {
       {/* 1. TOP HEADER (Chinese Flag Branding & Live Supabase Rippling Indicator, Requirement #1) */}
       <header className="bg-white/90 backdrop-blur-md border-b border-black/10 sticky top-0 z-40 w-full transition-all">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between gap-3">
-          {/* Logo & Brand with Chinese Flag */}
+          {/* Logo & Brand with China Flag PNG (Requirement #1) */}
           <button
             type="button"
             onClick={() => navigateToView('overview')}
             className="flex items-center gap-2.5 text-left group cursor-pointer"
           >
-            {/* Crisp Rounded-Square Chinese Flag Icon (Requirement #1) */}
-            <div className="w-8 h-8 rounded-xl bg-[#DE2910] text-white flex items-center justify-center font-bold text-base shadow-2xs overflow-hidden shrink-0">
-              🇨🇳
-            </div>
+            {/* Crisp China Flag PNG without red wrapper or emoji */}
+            <img
+              src="https://flagcdn.com/w80/cn.png"
+              alt="China Flag"
+              className="h-[18px] sm:h-[20px] w-auto rounded-[3px] border border-black/10 shrink-0 object-cover inline-block shadow-2xs"
+              onError={(e) => {
+                e.currentTarget.src = './favicon-cn.svg';
+              }}
+            />
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-sm sm:text-base tracking-tight text-slate-900 block leading-tight">
@@ -571,7 +666,7 @@ export function App() {
                   </div>
                 </button>
 
-                {/* Portal 2: Documents & Campus Steps */}
+                {/* Portal 2: Documents & Banking (Requirement #2) */}
                 <button
                   type="button"
                   onClick={() => navigateToView('documents')}
@@ -591,10 +686,10 @@ export function App() {
                     </div>
 
                     <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#F59E0B] transition-colors">
-                      Documents & Steps
+                      Documents & Banking
                     </h3>
                     <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
-                      Original credentials, physical exam forms, and alterable early registration steps.
+                      Original credentials, Friday morning bank run (BOC, PB, NSB), and campus arrival action cards.
                     </p>
                   </div>
 
@@ -603,7 +698,7 @@ export function App() {
                       {packedDocs}/{documents.length} Docs Packed
                     </span>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
-                      {doneSteps}/{procedureSteps.length} Steps Done
+                      {doneBankingTasks}/{bankingTasks.length} Bank Tasks
                     </span>
                   </div>
                 </button>
@@ -658,13 +753,14 @@ export function App() {
           </div>
         )}
 
-        {/* SUB-HUB 1: PHYSICAL GEAR & WARDROBE (FULL VIEW) */}
+        {/* SUB-HUB 1: PHYSICAL GEAR, WARDROBE & GIFTS (FULL VIEW) */}
         {currentView === 'physical' && (
           <PhysicalHub
             onBack={() => navigateToView('overview')}
             wardrobe={wardrobe}
             bags={bags}
             devices={devices}
+            gifts={gifts}
             onToggleWardrobeBought={toggleWardrobeBought}
             onToggleWardrobePacked={toggleWardrobePacked}
             onAddWardrobeItem={handleAddWardrobeItem}
@@ -674,15 +770,20 @@ export function App() {
             onToggleBagPacked={toggleBagPacked}
             onToggleDeviceBought={toggleDeviceBought}
             onToggleDevicePacked={toggleDevicePacked}
+            onToggleGiftPacked={toggleGiftPacked}
+            onAddGift={handleAddGift}
+            onUpdateGift={handleUpdateGift}
+            onDeleteGift={handleDeleteGift}
           />
         )}
 
-        {/* SUB-HUB 2: DOCUMENTS & PROCEDURES (FULL VIEW) */}
+        {/* SUB-HUB 2: DOCUMENTS & BANKING (FULL VIEW) */}
         {currentView === 'documents' && (
           <DocumentationHub
             onBack={() => navigateToView('overview')}
             documents={documents}
             procedureSteps={procedureSteps}
+            bankingTasks={bankingTasks}
             onToggleDocReady={toggleDocReady}
             onToggleDocPacked={toggleDocPacked}
             onAddDoc={handleAddDoc}
@@ -692,6 +793,10 @@ export function App() {
             onAddStep={handleAddStep}
             onUpdateStep={handleUpdateStep}
             onDeleteStep={handleDeleteStep}
+            onToggleBankingTask={toggleBankingTask}
+            onAddBankingTask={handleAddBankingTask}
+            onUpdateBankingTask={handleUpdateBankingTask}
+            onDeleteBankingTask={handleDeleteBankingTask}
           />
         )}
 

@@ -19,7 +19,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name = '', className = 'w-5 h-
     );
   }
 
-  // 2. Google Gemini
+  // 2. Google Gemini - Official 4-point Sparkle Gradient Star
   if (key.includes('gemini')) {
     return (
       <svg viewBox="0 0 24 24" className={className} fill="none">
@@ -38,7 +38,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name = '', className = 'w-5 h-
     );
   }
 
-  // 3. ChatGPT
+  // 3. ChatGPT - Official OpenAI Swirled Blossom Logo
   if (key.includes('chatgpt') || key.includes('openai') || key.includes('gpt')) {
     return (
       <svg viewBox="0 0 24 24" className={`${className} text-[#10A37F]`} fill="currentColor">
@@ -47,7 +47,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name = '', className = 'w-5 h-
     );
   }
 
-  // 4. Google Suite
+  // 4. Google Suite (Gmail, Drive) - Official Multi-Color Google G
   if (key.includes('google') || key.includes('gsuite') || key.includes('drive') || key.includes('gmail')) {
     return (
       <svg viewBox="0 0 24 24" className={className} fill="none">
@@ -59,16 +59,30 @@ export const AppIcon: React.FC<AppIconProps> = ({ name = '', className = 'w-5 h-
     );
   }
 
-  // 5. DeepL
+  // 5. DeepL Translate - Official DeepL Dark Navy & Cyan Chevron
   if (key.includes('deepl')) {
     return (
-      <svg viewBox="0 0 24 24" className={`${className} text-[#0F2B46]`} fill="currentColor">
-        <path d="M12.87 2.2c-.44-.26-.98-.26-1.42 0L3.77 6.64c-.45.26-.72.74-.72 1.26v8.2c0 .52.27 1 .72 1.26l7.68 4.44c.44.26.98.26 1.42 0l7.68-4.44c.45-.26.72-.74.72-1.26V7.9c0-.52-.27-1-.72-1.26L12.87 2.2zm-1.87 3.52l4.8 2.77-4.8 2.77-4.8-2.77 4.8-2.77zm-6.2 4.35l4.8 2.77v5.54l-4.8-2.77V10.07zm14.4 5.54l-4.8 2.77v-5.54l4.8-2.77v5.54z"/>
+      <svg viewBox="0 0 24 24" className={className} fill="none">
+        <rect width="24" height="24" rx="5" fill="#0F2B46"/>
+        <path d="M7 6h5c3.31 0 6 2.69 6 6s-2.69 6-6 6H7V6z" fill="#0F2B46"/>
+        <path d="M9 8h3c2.21 0 4 1.79 4 4s-1.79 4-4 4H9V8z" fill="#00D2D2"/>
+        <path d="M12 10.5l-2.5 3h5l-2.5-3z" fill="#FFFFFF"/>
       </svg>
     );
   }
 
-  // 6. WeChat
+  // 6. Google Translate
+  if (key.includes('translate')) {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none">
+        <rect width="24" height="24" rx="5" fill="#1A73E8"/>
+        <path d="M11.5 6.5h-7v2h4.8c-.4 1.8-1.5 3.3-3 4.3l1.2 1.6c2-1.3 3.3-3.3 3.8-5.9h1.2v-2h-1z" fill="#FFFFFF"/>
+        <path d="M14.5 9h-2l3.5 9h2l3.5-9h-2l-.8 2.2h-3.4l-.8-2.2zm1.4 3.8h2.2l-1.1 3-1.1-3z" fill="#FFFFFF"/>
+      </svg>
+    );
+  }
+
+  // 7. WeChat (微信) - Authentic Dual Chat Bubble with Eyes
   if (key.includes('wechat') || key.includes('微信')) {
     return (
       <svg viewBox="0 0 24 24" className={`${className} text-[#07C160]`} fill="currentColor">
@@ -77,82 +91,110 @@ export const AppIcon: React.FC<AppIconProps> = ({ name = '', className = 'w-5 h-
     );
   }
 
-  // 7. Alipay
+  // 8. Alipay (支付宝) - Official Blue "支" Emblem
   if (key.includes('alipay') || key.includes('支付宝')) {
     return (
-      <svg viewBox="0 0 24 24" className={`${className} text-[#1677FF]`} fill="currentColor">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm3.6 15.2c-.8.5-2.1.8-3.4.8-2.6 0-4.4-1.2-4.4-3.1 0-1.7 1.4-2.8 3.5-3.1 1.2-.2 2.6-.2 3.8-.1v-.7c0-.9-.6-1.4-1.8-1.4-1.1 0-2.2.3-3.1.8l-.5-1.4c1.1-.6 2.6-1 4-1 2.3 0 3.7 1.1 3.7 3.2v4.8c0 .7.1 1.4.3 1.9h-1.9l-.2-.8zm-4.1-1.3c1.7 0 3-.7 3.7-1.4v-1.6c-1 0-2.2 0-3.3.2-1.3.2-2.1.8-2.1 1.7 0 .9.8 1.1 1.7 1.1z"/>
+      <svg viewBox="0 0 24 24" className={`${className}`} fill="none">
+        <rect width="24" height="24" rx="5" fill="#1677FF"/>
+        <path d="M12 4.5c2.5 0 4.5.3 5.5.8l-.8 1.8c-.8-.4-2.2-.6-4.7-.6H7.5v2.2h8v1.8h-8v1.6c1.8.8 4 1.7 6.3 2.6-.9 2.5-2.6 4.3-5.3 5.3l-1.2-1.8c2-.7 3.2-1.9 3.9-3.6-1.8-.7-3.4-1.3-4.7-1.8-.8 3-2.6 5.2-5.5 6.2l-1-1.8c2.4-.7 3.8-2.4 4.5-4.8H5V10.5h2.5V8.5H5V6.7h7z" fill="#FFFFFF"/>
       </svg>
     );
   }
 
-  // 8. DiDi
+  // 9. DiDi Ride Hailing (滴滴出行) - Official Orange "D" Emblem
   if (key.includes('didi') || key.includes('滴滴')) {
     return (
-      <svg viewBox="0 0 24 24" className={`${className} text-[#FF7A00]`} fill="currentColor">
-        <path d="M18.9 4H5.1C4.5 4 4 4.5 4 5.1v13.8c0 .6.5 1.1 1.1 1.1h13.8c.6 0 1.1-.5 1.1-1.1V5.1c0-.6-.5-1.1-1.1-1.1zm-8.4 12.8H7.7V7.2h2.8c2.9 0 4.7 1.7 4.7 4.8 0 3.1-1.8 4.8-4.7 4.8zm5.5 0h-2.1V7.2h2.1v9.6zm-5.5-2.2c1.7 0 2.6-1.1 2.6-2.6s-.9-2.6-2.6-2.6H9.7v5.2h.8z"/>
+      <svg viewBox="0 0 24 24" className={className} fill="none">
+        <rect width="24" height="24" rx="5" fill="#FF7A00"/>
+        <path d="M6 6h6c3.3 0 6 2.7 6 6s-2.7 6-6 6H6V6zm3.5 3v6H12c1.65 0 3-1.35 3-3s-1.35-3-3-3H9.5z" fill="#FFFFFF"/>
+        <circle cx="12" cy="12" r="1.5" fill="#FF7A00"/>
       </svg>
     );
   }
 
-  // 9. Shadowrocket
+  // 10. Shadowrocket - Official Blue Proxy Rocket Icon
   if (key.includes('shadowrocket')) {
     return (
-      <svg viewBox="0 0 24 24" className={`${className} text-[#007AFF]`} fill="currentColor">
-        <path d="M12 2.5c-2.8 0-5.1 1.7-6 4.1-.3.8-.1 1.7.5 2.3l2.8 2.8c.2.2.3.5.3.8v2c0 .3.1.5.3.7l2 2c.2.2.5.3.7.3h2c.3 0 .6-.1.8-.3l2.8-2.8c.6-.6 1.5-.8 2.3-.5 2.4-.9 4.1-3.2 4.1-6 0-3.6-2.9-6.4-6.4-6.4H12zm2.5 5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5zM7 16l-4 4 1.5 1.5L8.5 17.5 7 16zm10 0l1.5 1.5L22.5 13.5 21 12 17 16z" />
+      <svg viewBox="0 0 24 24" className={`${className}`} fill="none">
+        <rect width="24" height="24" rx="5" fill="#007AFF"/>
+        <path d="M12 4c-2.2 0-4 1.8-4 4 0 1.2.5 2.3 1.4 3.1l1.6 1.6v2.3l1 1 1-1V12.7l1.6-1.6c.9-.8 1.4-1.9 1.4-3.1 0-2.2-1.8-4-4-4zm0 2.5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5-1.5-.67-1.5-1.5.67-1.5 1.5-1.5z" fill="#FFFFFF"/>
+        <path d="M8 17l-2 3 3-1-1-2zm8 0l1 2 3 1-2-3-2 0z" fill="#FFCC00"/>
       </svg>
     );
   }
 
-  // 10. v2rayNG
+  // 11. v2rayNG - Official Stylized V2Ray Node Network 'V'
   if (key.includes('v2ray')) {
     return (
-      <svg viewBox="0 0 24 24" className={`${className} text-[#1A56DB]`} fill="currentColor">
-        <path d="M4 4h4l4 12 4-12h4L14 20h-4L4 4z"/>
+      <svg viewBox="0 0 24 24" className={className} fill="none">
+        <rect width="24" height="24" rx="5" fill="#1A56DB"/>
+        <path d="M5 6l5 12h4l5-12h-3.2l-3.8 9.5L8.2 6H5z" fill="#FFFFFF"/>
+        <circle cx="12" cy="18" r="1.5" fill="#38BDF8"/>
+        <circle cx="5" cy="6" r="1.2" fill="#38BDF8"/>
+        <circle cx="19" cy="6" r="1.2" fill="#38BDF8"/>
       </svg>
     );
   }
 
-  // 11. Clash Verge Rev
+  // 12. Clash Verge Rev - Official Clash Cat Silhouette & Shield
   if (key.includes('clash')) {
     return (
-      <svg viewBox="0 0 24 24" className={`${className} text-[#5856D6]`} fill="currentColor">
-        <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3zm0 4a3 3 0 110 6 3 3 0 010-6zm0 13c-2.3 0-4.3-1.1-5.5-2.8.1-1.8 3.7-2.8 5.5-2.8s5.4 1 5.5 2.8c-1.2 1.7-3.2 2.8-5.5 2.8z"/>
+      <svg viewBox="0 0 24 24" className={className} fill="none">
+        <rect width="24" height="24" rx="5" fill="#5856D6"/>
+        <path d="M6 7l3 2h6l3-2-1 8c-.5 3-4.5 5-5 5s-4.5-2-5-5L6 7z" fill="#FFFFFF"/>
+        <circle cx="9.5" cy="12" r="1" fill="#5856D6"/>
+        <circle cx="14.5" cy="12" r="1" fill="#5856D6"/>
+        <path d="M11 14h2" stroke="#5856D6" strokeWidth="1.2" strokeLinecap="round"/>
       </svg>
     );
   }
 
-  // 12. Trip.com
-  if (key.includes('trip')) {
+  // 13. Amap / Gaode Maps (高德地图) - Official Blue Navigation Paperplane
+  if (key.includes('amap') || key.includes('gaode') || key.includes('高德')) {
     return (
-      <svg viewBox="0 0 24 24" className={`${className}`} fill="none">
-        <rect width="24" height="24" rx="6" fill="#0066FF"/>
-        <path d="M5 8.5h14v2H5v-2zm0 5h10v2H5v-2z" fill="#FFFFFF"/>
-        <circle cx="17" cy="15.5" r="2.5" fill="#FF7700"/>
+      <svg viewBox="0 0 24 24" className={className} fill="none">
+        <rect width="24" height="24" rx="5" fill="#0091FF"/>
+        <path d="M12 4l7 14-7-3-7 3 7-14z" fill="#FFFFFF"/>
+        <circle cx="12" cy="13.5" r="1.5" fill="#0091FF"/>
       </svg>
     );
   }
 
-  // 13. Pleco
+  // 14. Baidu Maps (百度地图) - Official Blue Bear Paw & Compass
+  if (key.includes('baidu') || key.includes('百度')) {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none">
+        <rect width="24" height="24" rx="5" fill="#2932E1"/>
+        <ellipse cx="12" cy="14" rx="3.5" ry="3" fill="#FFFFFF"/>
+        <ellipse cx="7.5" cy="10" rx="1.5" ry="2" fill="#FFFFFF"/>
+        <ellipse cx="10" cy="7.5" rx="1.3" ry="1.8" fill="#FFFFFF"/>
+        <ellipse cx="14" cy="7.5" rx="1.3" ry="1.8" fill="#FFFFFF"/>
+        <ellipse cx="16.5" cy="10" rx="1.5" ry="2" fill="#FFFFFF"/>
+      </svg>
+    );
+  }
+
+  // 15. Taobao (淘宝) - Official Orange "淘" Emblem
+  if (key.includes('taobao') || key.includes('淘宝')) {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none">
+        <rect width="24" height="24" rx="5" fill="#FF5000"/>
+        <text x="12" y="17.5" textAnchor="middle" fill="#FFFFFF" fontSize="13" fontWeight="bold" fontFamily="sans-serif">淘</text>
+      </svg>
+    );
+  }
+
+  // 16. Pleco Chinese Dictionary - Crisp Red Chinese Seal with "鱼"
   if (key.includes('pleco') || key.includes('dictionary') || key.includes('鱼')) {
     return (
-      <svg viewBox="0 0 24 24" className={`${className} text-[#DC2626]`} fill="currentColor">
+      <svg viewBox="0 0 24 24" className={className} fill="none">
         <rect width="24" height="24" rx="5" fill="#DC2626"/>
         <text x="12" y="17" textAnchor="middle" fill="#FFFFFF" fontSize="13" fontWeight="bold" fontFamily="sans-serif">鱼</text>
       </svg>
     );
   }
 
-  // 14. Baidu Maps / Amap
-  if (key.includes('baidu') || key.includes('百度') || key.includes('amap') || key.includes('高德')) {
-    return (
-      <svg viewBox="0 0 24 24" className={`${className} text-[#2932E1]`} fill="currentColor">
-        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/>
-      </svg>
-    );
-  }
-
-  // 15. MetroMan Transit
+  // 17. MetroMan Transit
   if (key.includes('metro') || key.includes('subway') || key.includes('transit')) {
     return (
       <svg viewBox="0 0 24 24" className={`${className} text-[#0086F6]`} fill="currentColor">
@@ -161,12 +203,34 @@ export const AppIcon: React.FC<AppIconProps> = ({ name = '', className = 'w-5 h-
     );
   }
 
-  // 16. Meituan
+  // 18. Meituan (美团) - Official Bright Yellow Kangaroo / Delivery Emblem
   if (key.includes('meituan') || key.includes('美团')) {
     return (
-      <svg viewBox="0 0 24 24" className={`${className}`} fill="none">
-        <rect width="24" height="24" rx="5" fill="#FFC300"/>
-        <path d="M7 13c1.5-3.5 5.5-4 10-4-.5 4.5-2.5 7.5-6 8-2 .3-4-1.5-4-4z" fill="#222222"/>
+      <svg viewBox="0 0 24 24" className={className} fill="none">
+        <rect width="24" height="24" rx="5" fill="#FFD000"/>
+        <path d="M6 13c1.5-3.5 5.5-4 10-4-.5 4.5-2.5 7.5-6 8-2 .3-4-1.5-4-4z" fill="#222222"/>
+        <circle cx="10" cy="11" r="1.5" fill="#FFD000"/>
+      </svg>
+    );
+  }
+
+  // 19. Trip.com - Authentic Blue & Orange Wave Emblem
+  if (key.includes('trip')) {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none">
+        <rect width="24" height="24" rx="5" fill="#0066FF"/>
+        <path d="M5 8.5h14v2H5v-2zm0 5h10v2H5v-2z" fill="#FFFFFF"/>
+        <circle cx="17" cy="15.5" r="2.5" fill="#FF7700"/>
+      </svg>
+    );
+  }
+
+  // 20. Zotero & Academic Research - Official Red "Z"
+  if (key.includes('zotero') || key.includes('scholar')) {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="none">
+        <rect width="24" height="24" rx="5" fill="#CC292B"/>
+        <path d="M7 6h10l-7.5 9H17v3H7l7.5-9H7V6z" fill="#FFFFFF"/>
       </svg>
     );
   }

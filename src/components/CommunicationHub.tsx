@@ -211,13 +211,13 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
     setShowAddAppModal(false);
   };
 
-  // Filter apps by device (Requirement #7: Deduplication in "all" view)
+  // Filter apps by device (Requirement #5A: Deduplication & strict device matching)
   const filteredApps = apps.filter((app) => {
     if (selectedDevice === 'all') return true;
-    if (selectedDevice === 'iphone') return app.devices?.includes('iPhone 17') || app.platform === 'iOS';
-    if (selectedDevice === 'samsung') return app.devices?.includes('Samsung S20 FE') || app.platform === 'Android';
-    if (selectedDevice === 'dell') return app.devices?.includes('Dell Laptop') || app.platform === 'Windows';
-    if (selectedDevice === 'ipad') return app.devices?.includes('Apple iPad 11') || (app.platform === 'iOS' && !app.devices);
+    if (selectedDevice === 'iphone') return app.devices ? app.devices.includes('iPhone 17') : app.platform === 'iOS';
+    if (selectedDevice === 'samsung') return app.devices ? app.devices.includes('Samsung S20 FE') : app.platform === 'Android';
+    if (selectedDevice === 'dell') return app.devices ? app.devices.includes('Dell Laptop') : app.platform === 'Windows';
+    if (selectedDevice === 'ipad') return app.devices ? app.devices.includes('Apple iPad 11') : false;
     return true;
   });
 
@@ -466,7 +466,28 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
             ))}
           </div>
 
-          {/* Deduplicated App Rows (Requirement #7) */}
+          {/* GFW Bypass Architecture & Pre-Departure Setup Strategy (Requirement #5C) */}
+          <div className="ios-card p-4 space-y-2 bg-gradient-to-r from-blue-50/70 to-indigo-50/70 border-blue-200">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-[#007AFF] text-white flex items-center justify-center text-xs font-bold shadow-2xs">
+                🛡️
+              </span>
+              <h4 className="font-bold text-xs sm:text-sm text-slate-900">
+                China Proxy Architecture: Jichang + Shadowsocks / VLESS / Trojan
+              </h4>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Modern <strong>"Jichang" (Airport / 机场) subscription services</strong> paired with <strong>Shadowrocket</strong> (iPhone & iPad), <strong>v2rayNG</strong> (Samsung S20 FE), and <strong>Clash Verge Rev</strong> (Dell Laptop) using <strong>Shadowsocks (AEAD-2022), VLESS-Reality, or Trojan protocols</strong> are the gold standard for China—far more reliable and cost-effective than commercial consumer VPNs (ExpressVPN/NordVPN), which frequently get blocked during China's firewall crackdowns.
+            </p>
+            <div className="pt-1.5 border-t border-black/5 flex items-center justify-between text-[11px] text-[#007AFF] font-semibold flex-wrap gap-2">
+              <span>⚠️ Must-Do in Sri Lanka:</span>
+              <span className="text-slate-700 font-normal">
+                Import & test subscription URLs on Friday/Saturday before boarding CMB flight.
+              </span>
+            </div>
+          </div>
+
+          {/* Deduplicated App Rows (Requirement #5A) */}
           <div className="ios-card divide-y divide-black/5 overflow-hidden">
             {filteredApps.map((app) => (
               <div

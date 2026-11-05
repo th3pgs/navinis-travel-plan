@@ -140,7 +140,7 @@ export const AppleSidebar: React.FC<AppleSidebarProps> = ({
             >
               <div className="flex items-center gap-3">
                 <FileText className="w-4 h-4 text-amber-600" />
-                <span>Documents & Campus Steps</span>
+                <span>Documents & Banking</span>
               </div>
               <ChevronRight className="w-4 h-4 opacity-60" />
             </button>

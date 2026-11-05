@@ -1,7 +1,7 @@
 export interface WardrobeItem {
   id: string;
   name: string;
-  category: 'Dresses' | 'Tops' | 'Bottoms' | 'Outerwear' | 'Footwear' | 'Essentials' | 'Luggage';
+  category: 'Dresses' | 'Tops' | 'Bottoms' | 'Outerwear' | 'Footwear' | 'Essentials' | 'Luggage' | 'Gifts & Packaging';
   quantity: number;
   targetBag: 'Main Large Suitcase (30×40×70cm)' | 'Medium Suitcase (27×41×57cm)' | 'Cabin Laptop Backpack' | 'Fanny Pack' | 'Wear on Flight';
   isBought: boolean;
@@ -9,6 +9,25 @@ export interface WardrobeItem {
   colorHex?: string;
   notes?: string;
   photoUrl?: string;
+}
+
+export interface GiftItem {
+  id: string;
+  name: string;
+  quantity: number;
+  targetBag: 'Main Large Suitcase (30×40×70cm)' | 'Medium Suitcase (27×41×57cm)' | 'Cabin Laptop Backpack' | 'Fanny Pack';
+  packagingNote: string;
+  recipient: string;
+  isPacked: boolean;
+}
+
+export interface BankingTaskItem {
+  id: string;
+  bank: 'General / Cash Stash' | 'Bank of Ceylon (BOC)' | "People's Bank" | 'National Savings Bank (NSB)';
+  title: string;
+  detail: string;
+  isDone: boolean;
+  priority?: 'Critical' | 'High' | 'Medium';
 }
 
 export interface BagAsset {
@@ -320,16 +339,6 @@ export const INITIAL_DOCUMENTS: DocumentItem[] = [
     notes: 'Matches visa photograph exactly. Required for campus student ID badge.',
     priority: 'Medium',
   },
-  {
-    id: 'doc-bank',
-    title: 'Foreign Study Declaration Notice (BOC, People\'s, NSB)',
-    issuer: 'Commercial Banks in Sri Lanka',
-    carryLocation: 'Fanny Pack (Zippered Pocket)',
-    isReady: false,
-    isPacked: false,
-    notes: 'Declaration slip confirming foreign study period (Nov 2026 – July 2029).',
-    priority: 'High',
-  },
 ];
 
 // Initial Stock Apps & Communication (Default 0% unchecked, deduplicated, multi-device)
@@ -341,7 +350,7 @@ export const INITIAL_APPS: AppConfigItem[] = [
     devices: ['iPhone 17', 'Apple iPad 11'],
     name: 'Shadowrocket',
     category: 'Proxy & Bypass',
-    role: 'Primary iOS rule-based proxy client with active Ji Chang subscription imported.',
+    role: 'Primary iOS rule-based proxy client with active Jichang subscription imported in Sri Lanka.',
     isInstalled: false,
     isConfigured: false,
     appIcon: 'shadowrocket',
@@ -352,7 +361,7 @@ export const INITIAL_APPS: AppConfigItem[] = [
     devices: ['Samsung S20 FE'],
     name: 'v2rayNG',
     category: 'Proxy & Bypass',
-    role: 'Android proxy client for Samsung S20 FE with backup Ji Chang nodes on Wi-Fi.',
+    role: 'Android proxy client for Samsung S20 FE with backup Jichang nodes (VLESS/Shadowsocks).',
     isInstalled: false,
     isConfigured: false,
     appIcon: 'v2ray',
@@ -363,66 +372,20 @@ export const INITIAL_APPS: AppConfigItem[] = [
     devices: ['Dell Laptop'],
     name: 'Clash Verge Rev',
     category: 'Proxy & Bypass',
-    role: 'Windows Research proxy with System Proxy & TUN Mode on Dell Latitude 5410.',
+    role: 'Windows research proxy with System Proxy & TUN Mode on Dell Latitude 5410.',
     isInstalled: false,
     isConfigured: false,
     appIcon: 'clash',
-  },
-
-  // Stock AI & Global Services
-  {
-    id: 'app-gpt',
-    platform: 'iOS',
-    devices: ['iPhone 17', 'Apple iPad 11', 'Samsung S20 FE', 'Dell Laptop'],
-    name: 'ChatGPT',
-    category: 'Stock AI & Academic',
-    role: 'AI research assistant for Master\'s thesis literature reviews (routes via proxy).',
-    isInstalled: false,
-    isConfigured: false,
-    appIcon: 'chatgpt',
-  },
-  {
-    id: 'app-gemini',
-    platform: 'iOS',
-    devices: ['iPhone 17', 'Apple iPad 11', 'Dell Laptop'],
-    name: 'Google Gemini',
-    category: 'Stock AI & Academic',
-    role: 'Multimodal AI research tool for Food Science and Engineering problem solving.',
-    isInstalled: false,
-    isConfigured: false,
-    appIcon: 'gemini',
-  },
-  {
-    id: 'app-gsuite',
-    platform: 'iOS',
-    devices: ['iPhone 17', 'Apple iPad 11', 'Dell Laptop'],
-    name: 'Google Suite (Gmail, Drive, Scholar)',
-    category: 'Stock AI & Academic',
-    role: 'Academic paper repositories and university file synchronization.',
-    isInstalled: false,
-    isConfigured: false,
-    appIcon: 'google',
-  },
-  {
-    id: 'app-deepl',
-    platform: 'iOS',
-    devices: ['iPhone 17', 'Dell Laptop'],
-    name: 'DeepL Translate',
-    category: 'Stock AI & Academic',
-    role: 'High accuracy academic document translation.',
-    isInstalled: false,
-    isConfigured: false,
-    appIcon: 'deepl',
   },
 
   // Essential Mainland Chinese Ecosystem
   {
     id: 'app-wechat',
     platform: 'iOS',
-    devices: ['iPhone 17', 'Samsung S20 FE', 'Dell Laptop'],
+    devices: ['iPhone 17', 'Samsung S20 FE', 'Dell Laptop', 'Apple iPad 11'],
     name: 'WeChat (微信)',
     category: 'Essential Daily',
-    role: 'Campus lifeline, faculty messaging with Ms. Sun, and student buddy voice calls.',
+    role: 'Campus lifeline, faculty messaging with Ms. Sun, student guide calls & campus mini-programs.',
     isInstalled: false,
     isConfigured: false,
     appIcon: 'wechat',
@@ -441,8 +404,8 @@ export const INITIAL_APPS: AppConfigItem[] = [
   {
     id: 'app-didi',
     platform: 'iOS',
-    devices: ['iPhone 17', 'Samsung S20 FE'],
-    name: 'DiDi English',
+    devices: ['iPhone 17'],
+    name: 'DiDi Ride Hailing (滴滴出行)',
     category: 'Transit & Maps',
     role: 'English ride-hailing app with automatic driver chat translation and cashless billing.',
     isInstalled: false,
@@ -450,12 +413,23 @@ export const INITIAL_APPS: AppConfigItem[] = [
     appIcon: 'didi',
   },
   {
+    id: 'app-amap',
+    platform: 'iOS',
+    devices: ['iPhone 17'],
+    name: 'Amap / Gaode Maps (高德地图)',
+    category: 'Transit & Maps',
+    role: 'Most accurate GPS navigation & campus gate walking maps in Haikou.',
+    isInstalled: false,
+    isConfigured: false,
+    appIcon: 'amap',
+  },
+  {
     id: 'app-baidu',
     platform: 'iOS',
     devices: ['iPhone 17', 'Samsung S20 FE'],
     name: 'Baidu Maps (百度地图)',
     category: 'Transit & Maps',
-    role: 'Accurate campus gate GPS walking routes in China.',
+    role: 'Secondary campus gate GPS walking routes & offline map downloads.',
     isInstalled: false,
     isConfigured: false,
     appIcon: 'baidu',
@@ -466,21 +440,10 @@ export const INITIAL_APPS: AppConfigItem[] = [
     devices: ['iPhone 17'],
     name: 'MetroMan (地铁通)',
     category: 'Transit & Maps',
-    role: 'Offline national metro transit network maps with transfer calculators.',
+    role: 'Offline national metro transit network maps with transfer calculators (Shanghai PVG transit).',
     isInstalled: false,
     isConfigured: false,
     appIcon: 'metroman',
-  },
-  {
-    id: 'app-pleco',
-    platform: 'iOS',
-    devices: ['iPhone 17', 'Apple iPad 11'],
-    name: 'Pleco Chinese Dictionary',
-    category: 'Essential Daily',
-    role: 'Offline Chinese-English dictionary with optical OCR camera character scanner.',
-    isInstalled: false,
-    isConfigured: false,
-    appIcon: 'pleco',
   },
   {
     id: 'app-meituan',
@@ -488,10 +451,21 @@ export const INITIAL_APPS: AppConfigItem[] = [
     devices: ['iPhone 17'],
     name: 'Meituan (美团)',
     category: 'Essential Daily',
-    role: 'Campus food delivery, bottled water replenishment, and Haikou essentials.',
+    role: 'Campus food delivery, bottled water replenishment & Haikou dorm supplies.',
     isInstalled: false,
     isConfigured: false,
     appIcon: 'meituan',
+  },
+  {
+    id: 'app-taobao',
+    platform: 'iOS',
+    devices: ['iPhone 17', 'Apple iPad 11'],
+    name: 'Taobao (淘宝)',
+    category: 'Essential Daily',
+    role: 'Online dorm essentials, bedding, kitchen utensils & university stationery shopping.',
+    isInstalled: false,
+    isConfigured: false,
+    appIcon: 'taobao',
   },
   {
     id: 'app-trip',
@@ -499,10 +473,89 @@ export const INITIAL_APPS: AppConfigItem[] = [
     devices: ['iPhone 17', 'Dell Laptop'],
     name: 'Trip.com',
     category: 'Transit & Maps',
-    role: 'Flight booking check, domestic travel management & e-ticket verification.',
+    role: 'Flight booking check, domestic high-speed train tickets & e-ticket verification.',
     isInstalled: false,
     isConfigured: false,
     appIcon: 'tripdotcom',
+  },
+
+  // Academic, AI & Translation
+  {
+    id: 'app-pleco',
+    platform: 'iOS',
+    devices: ['iPhone 17', 'Apple iPad 11'],
+    name: 'Pleco Chinese Dictionary',
+    category: 'Essential Daily',
+    role: 'Offline Chinese-English dictionary with optical OCR camera character scanner (download packs in Sri Lanka).',
+    isInstalled: false,
+    isConfigured: false,
+    appIcon: 'pleco',
+  },
+  {
+    id: 'app-deepl',
+    platform: 'iOS',
+    devices: ['iPhone 17', 'Dell Laptop'],
+    name: 'DeepL Translate',
+    category: 'Stock AI & Academic',
+    role: 'High accuracy academic document translation for Food Science coursework.',
+    isInstalled: false,
+    isConfigured: false,
+    appIcon: 'deepl',
+  },
+  {
+    id: 'app-gtrans',
+    platform: 'iOS',
+    devices: ['iPhone 17', 'Samsung S20 FE'],
+    name: 'Google Translate',
+    category: 'Essential Daily',
+    role: 'Offline Chinese language pack downloaded in Sri Lanka for instant camera translation.',
+    isInstalled: false,
+    isConfigured: false,
+    appIcon: 'google-translate',
+  },
+  {
+    id: 'app-gpt',
+    platform: 'iOS',
+    devices: ['iPhone 17', 'Samsung S20 FE', 'Dell Laptop', 'Apple iPad 11'],
+    name: 'ChatGPT',
+    category: 'Stock AI & Academic',
+    role: 'AI research assistant for Master\'s thesis literature reviews (routes via proxy).',
+    isInstalled: false,
+    isConfigured: false,
+    appIcon: 'chatgpt',
+  },
+  {
+    id: 'app-gemini',
+    platform: 'iOS',
+    devices: ['iPhone 17', 'Samsung S20 FE', 'Dell Laptop', 'Apple iPad 11'],
+    name: 'Google Gemini',
+    category: 'Stock AI & Academic',
+    role: 'Multimodal AI research tool for Food Science and Engineering problem solving.',
+    isInstalled: false,
+    isConfigured: false,
+    appIcon: 'gemini',
+  },
+  {
+    id: 'app-gsuite',
+    platform: 'iOS',
+    devices: ['iPhone 17', 'Apple iPad 11', 'Dell Laptop'],
+    name: 'Google Suite (Gmail, Drive)',
+    category: 'Stock AI & Academic',
+    role: 'Academic paper repositories and university file cloud synchronization.',
+    isInstalled: false,
+    isConfigured: false,
+    appIcon: 'google',
+  },
+  {
+    id: 'app-zotero',
+    platform: 'Windows',
+    devices: ['Dell Laptop', 'Apple iPad 11'],
+    name: 'Zotero & Google Scholar',
+    category: 'Stock AI & Academic',
+    role: 'Citation management & Food Science and Engineering research paper indexing.',
+    isInstalled: false,
+    isConfigured: false,
+    appIcon: 'zotero',
   },
 ];
 
@@ -808,20 +861,20 @@ export const INITIAL_MILESTONES: TimelineMilestone[] = [
     id: 'm-1',
     dateBadge: 'Nov 6 • Friday',
     dateFull: 'Friday, November 6, 2026',
-    title: 'Bank Deadlines & Roaming Clearances',
-    summary: 'Branch visits to BOC, People\'s Bank, and NSB before 3:00 PM close for foreign study declaration and card unlocks.',
+    title: 'Bank Run, Cash Stash & Roaming Clearances',
+    summary: 'Morning bank visits to BOC, People\'s Bank, and NSB before 3:00 PM for foreign study declarations, international card unlocks, and currency conversion (USD & RMB cash). Afternoon gift packaging and testing proxy subscriptions across all devices.',
     isCompleted: false,
-    keyAction: 'BOC/People\'s/NSB branch visit • Dialog Roaming check • Buy 45cm backpack & CCC power bank',
-    targetCategory: 'physical',
+    keyAction: 'BOC/People\'s/NSB bank run • Cash stash (USD $100s & RMB) • Gift wrapping (7 items) • Proxy subscription setup',
+    targetCategory: 'documents',
   },
   {
     id: 'm-2',
     dateBadge: 'Nov 7 • Saturday',
     dateFull: 'Saturday, November 7, 2026',
-    title: 'Dry Run, OTP Drill & Luggage Weigh-In',
-    summary: 'Test Dialog SMS OTP receipt on Samsung S20 FE, test VPN configs on Wi-Fi, weigh both rolling suitcases to max 23kg.',
+    title: 'Dry Run, OTP Drill & Luggage Lock-Up',
+    summary: 'Test Dialog SMS OTP receipt on Samsung S20 FE, test proxy nodes on Wi-Fi, weigh both rolling suitcases to max 23.0kg, 100% full battery charge across 6 devices, and final suitcase lock-up.',
     isCompleted: false,
-    keyAction: 'OTP test • VPN node latency test • 23kg weigh-in • 100% full charge on all 6 devices',
+    keyAction: 'OTP drill • Jichang node latency test • 23kg suitcase weigh-in • 100% full device charge • Suitcase lock-up',
     targetCategory: 'physical',
   },
   {
@@ -856,205 +909,185 @@ export const INITIAL_MILESTONES: TimelineMilestone[] = [
   },
 ];
 
-// Initial Procedure Steps across 5 Key Stages (editable, addable, deletable)
+// Initial 4 Clean Campus Registration & Arrival Action Steps (Read-only visual guide, editable)
 export const INITIAL_PROCEDURE_STEPS: ProcedureStep[] = [
-  // Stage 1: Pre-Departure Sri Lanka
   {
-    id: 'p-1',
-    stage: 'prep-srilanka',
-    category: 'Banking & Mobile',
-    title: 'Visit BOC, People\'s Bank & NSB Branches',
-    detail: 'Complete Foreign Study Declaration and verify international debit card unlocks for online transactions before 3:00 PM.',
-    carryBag: 'Fanny Pack (Bank cards & cash)',
-    isDone: false,
-    isEditable: true,
-  },
-  {
-    id: 'p-2',
-    stage: 'prep-srilanka',
-    category: 'Mobile Network',
-    title: 'Activate Dialog Roaming for SMS OTPs',
-    detail: 'Ensure Dialog SMS roaming is enabled on Samsung S20 FE. Turn Mobile Data and Data Roaming OFF to prevent high roaming charges.',
-    carryBag: 'Samsung S20 FE in Fanny Pack',
-    isDone: false,
-    isEditable: true,
-  },
-  {
-    id: 'p-3',
-    stage: 'prep-srilanka',
-    category: 'Luggage Prep',
-    title: 'Luggage Weigh-In & Labeling',
-    detail: 'Weigh Main Suitcase (30×40×70cm) and Medium Suitcase (27×41×57cm) with luggage scale. Must not exceed 23.0 kg each. Fasten name tags.',
-    carryBag: 'Checked Bags',
-    isDone: false,
-    isEditable: true,
-  },
-  {
-    id: 'p-4',
-    stage: 'prep-srilanka',
-    category: 'Purchases',
-    title: 'Purchase Tech Laptop Backpack & 10,000mAh Power Bank',
-    detail: 'Get the ~45cm carry-on backpack and CCC-certified power bank from trusted store in Colombo.',
-    carryBag: 'Carry-On Backpack',
-    isDone: false,
-    isEditable: true,
-  },
-
-  // Stage 2: Colombo Airport Departure (CMB)
-  {
-    id: 'p-5',
-    stage: 'airport-cmb',
-    category: 'Check-In',
-    title: 'Arrive at Bandaranaike Airport (17:20 PM)',
-    detail: 'Arrive 3.5 hours prior to China Eastern MU6018 (20:50 takeoff). Have passport, Admission Notice, and e-ticket receipt ready at entrance security.',
-    carryBag: 'Fanny Pack',
-    isDone: false,
-    isEditable: true,
-  },
-  {
-    id: 'p-6',
-    stage: 'airport-cmb',
-    category: 'Baggage Drop',
-    title: 'China Eastern Check-In & Bag Drop',
-    detail: 'Present passport & Admission Notice #263660001. Drop 2 checked suitcases. Note: Luggage tags will read PVG (Must be collected in Shanghai!). Obtain boarding pass for MU6018.',
-    carryBag: 'Check-In Counter',
-    isDone: false,
-    isEditable: true,
-  },
-  {
-    id: 'p-7',
-    stage: 'airport-cmb',
-    category: 'Cabin Security',
-    title: 'Security Screening (Laptops & Battery Out)',
-    detail: 'Remove Dell 5410, iPad 11, and CCC Power Bank into separate security trays. DO NOT put liquids over 100ml in cabin bag.',
-    carryBag: 'Cabin Backpack',
-    isDone: false,
-    isEditable: true,
-  },
-
-  // Stage 3: Shanghai Pudong (PVG T1) International Arrival & Transit
-  {
-    id: 'p-8',
-    stage: 'transit-pvg',
-    category: 'Connectivity',
-    title: 'Turn On Saily/Airalo Travel eSIM',
-    detail: 'Upon landing at 06:05 AM, toggle iPhone 17 cellular data to Travel eSIM. Verify network connection and bypass of GFW.',
-    carryBag: 'iPhone 17 (Fanny Pack)',
-    isDone: false,
-    isEditable: true,
-  },
-  {
-    id: 'p-9',
-    stage: 'transit-pvg',
-    category: 'Immigration',
-    title: 'Immigration & Border Inspection',
-    detail: 'Follow "Exit / Baggage Claim" signs to China Border Inspection. Present Passport with X1 Visa, Admission Notice, and JW202 form.',
-    carryBag: 'Fanny Pack & A4 Folder',
-    isDone: false,
-    isEditable: true,
-  },
-  {
-    id: 'p-10',
-    stage: 'transit-pvg',
-    category: 'Baggage Reclaim',
-    title: 'Collect BOTH Checked Suitcases from Belts',
-    detail: 'CRITICAL: You must collect your 30×40×70cm and 27×41×57cm suitcases from the international baggage carousels. China Eastern does NOT transfer international to domestic automatically!',
-    carryBag: 'International Baggage Belts',
-    isDone: false,
-    isEditable: true,
-  },
-  {
-    id: 'p-11',
-    stage: 'transit-pvg',
-    category: 'Domestic Transfer',
-    title: 'Clear Customs & Domestic Transfer Bag Re-Check',
-    detail: 'Walk through China Customs with your 2 suitcases. Follow signs to Domestic Departures (T1). Re-check both bags at China Eastern domestic transfer counters for MU6381 (departs 10:55).',
-    carryBag: 'T1 Domestic Transfer Counter',
-    isDone: false,
-    isEditable: true,
-  },
-  {
-    id: 'p-12',
-    stage: 'transit-pvg',
-    category: 'Buddy Contact',
-    title: 'Send Transit Status Message to Campus Buddy',
-    detail: 'Use the pre-formatted iMessage template on WeChat to inform Hainan University buddy that you have checked in for MU6381 and will arrive in Haikou at 14:35.',
-    carryBag: 'WeChat on iPhone 17',
-    isDone: false,
-    isEditable: true,
-  },
-
-  // Stage 4: Haikou Meilan (HAK) Domestic Arrival
-  {
-    id: 'p-13',
-    stage: 'flight-hak',
-    category: 'Luggage Reclaim',
-    title: 'Haikou Meilan Arrival & Collect Suitcases',
-    detail: 'Touch down at 14:35 PM. Follow domestic arrival signs directly to baggage carousels. Retrieve both suitcases.',
-    carryBag: 'Domestic Baggage Belts',
-    isDone: false,
-    isEditable: true,
-  },
-  {
-    id: 'p-14',
-    stage: 'flight-hak',
-    category: 'Ground Transit',
-    title: 'Proceed to Official Outdoor Taxi Stand',
-    detail: 'Follow ground signs for "Taxi (出租车)". Never accept private touts inside the terminal. Stand in official outdoor queue.',
-    carryBag: 'Outdoor Taxi Stand',
-    isDone: false,
-    isEditable: true,
-  },
-  {
-    id: 'p-15',
-    stage: 'flight-hak',
-    category: 'Ground Transit',
-    title: 'Show Taxi Destination Pocket Card to Driver',
-    detail: 'Show driver the Chinese address card: 海南大学（海甸校区）南门 (South Gate). Fare is approx 50–80 RMB on the meter. Pay via Alipay or cash.',
-    carryBag: 'Taxi Pocket Card (Mobile/Printed)',
-    isDone: false,
-    isEditable: true,
-  },
-
-  // Stage 5: Hainan University Registration & Early Dorm Check-In
-  {
-    id: 'p-16',
+    id: 'step-1',
     stage: 'arrival-campus',
-    category: 'Campus Entry',
-    title: 'Arrive at Haidian Campus South Gate & Meet Buddy',
-    detail: 'Hainan University Haidian Campus South Gate (No. 58 Renmin Avenue). Meet your assigned student guide / international volunteer.',
-    carryBag: 'Haidian Campus South Gate',
+    category: 'Airport Arrival',
+    title: 'Step 1: Haikou Meilan Airport Arrival',
+    detail: 'Touch down at 14:35. Follow domestic baggage exit signs to collect both rolling suitcases. Proceed directly to the official outdoor metered Taxi Stand (出租车) or meet your student buddy. Show the driver the printed bilingual Taxi Pocket Card (海南大学海甸校区南门). Keep Passport with X1 Visa, Admission Notice #263660001, and JW202 in your chest fanny pack. Do NOT follow private unmetered touts inside the terminal.',
+    carryBag: 'Chest Fanny Pack & Taxi Card',
     isDone: false,
     isEditable: true,
   },
   {
-    id: 'p-17',
+    id: 'step-2',
     stage: 'arrival-campus',
-    category: 'Accommodation',
-    title: 'International Student Dormitory Check-In',
-    detail: 'Proceed to overseas student apartment front desk. Present Passport and Admission Notice. Collect room key, air conditioning remote, and electricity card.',
-    carryBag: 'Overseas Student Building',
+    category: 'Campus Entry & Dorm',
+    title: 'Step 2: Haidian Campus South Gate (No. 58 Renmin Ave) & Dorm Check-in',
+    detail: 'Arrive at Hainan University Haidian Campus South Gate (海南大学海甸校区南门 - 人民大道58号). Report directly to the International Student Dormitory front desk (Overseas Student Apartment). Present Passport and Admission Notice. Collect room key, air conditioning remote, and electricity card. Pay the room deposit in physical RMB cash (approx 300–500 RMB) if local WeChat Pay is not active yet.',
+    carryBag: 'Dorm Front Desk (Cash Deposit)',
     isDone: false,
     isEditable: true,
   },
   {
-    id: 'p-18',
+    id: 'step-3',
     stage: 'arrival-campus',
-    category: 'Registration',
-    title: 'Report to International Students Office (Ms. Sun)',
-    detail: 'Office phone: 0898-66291354. Submit original physical examination forms, blood test slips, and degree certificates. If arriving before official Nov 17 registration, complete early arrival registry.',
+    category: 'Faculty Registration',
+    title: 'Step 3: International Student Office Registration',
+    detail: 'Report to the International Students Office (Ms. Sun, Office Phone: 0898-66291354). Submit: 1) Original Passport with X1 Visa, 2) Official Admission Notice #263660001, 3) JW202 Form, 4) Original Physical Examination Record & Blood Test Slips, and 5) 8 printed matte passport photos (33×48mm). Complete your arrival registry and obtain student orientation handbook.',
     carryBag: 'A4 Waterproof Folder (Backpack)',
     isDone: false,
     isEditable: true,
   },
   {
-    id: 'p-19',
+    id: 'step-4',
     stage: 'arrival-campus',
-    category: 'Settling In',
-    title: 'Purchase Local Essentials & Dorm Supplies',
-    detail: 'Visit campus supermarket (Canteen 1 / South Gate shops) for drinking water, bedding sheets, pillow, bucket, laundry soap, and dining utensils.',
-    carryBag: 'Campus Supermarket',
+    category: 'Banking & Residence Permit',
+    title: 'Step 4: Local Chinese SIM Card & Chinese Bank Account',
+    detail: 'Visit campus China Mobile or China Telecom booth with your passport to activate a local Chinese (+86) phone number. Open a local Chinese bank account on campus (ICBC or Bank of China) with your Admission Notice and Passport to unlock full local WeChat Pay and Alipay functionality. Mandatory: Apply for Foreigner Residence Permit within 30 days of arrival.',
+    carryBag: 'Campus Bank Branch & Telecom Booth',
     isDone: false,
     isEditable: true,
+  },
+];
+
+// Initial Banking Tasks for Friday Morning Bank Run
+export const INITIAL_BANKING_TASKS: BankingTaskItem[] = [
+  // 1. Cash Stash & Currency Conversion
+  {
+    id: 'bank-cash-1',
+    bank: 'General / Cash Stash',
+    title: 'Physical USD & CNY Cash Stash',
+    detail: 'Withdraw and convert physical cash reserve: crisp, uncreased USD $100 bills (2013 series or newer, no stamps/tears) + 1,500 to 3,000 CNY in physical Yuan notes (including 10/20/50 RMB denominations for airport arrival, initial meals, and campus essentials before Chinese bank activation).',
+    isDone: false,
+    priority: 'Critical',
+  },
+  {
+    id: 'bank-cash-2',
+    bank: 'General / Cash Stash',
+    title: 'Passport Foreign Currency Endorsement',
+    detail: 'Have the bank officially endorse the physical passport for foreign currency cash notes issued under the student travel allowance.',
+    isDone: false,
+    priority: 'High',
+  },
+
+  // 2. Bank of Ceylon (BOC)
+  {
+    id: 'bank-boc-1',
+    bank: 'Bank of Ceylon (BOC)',
+    title: 'Foreign Travel & E-Commerce Activation',
+    detail: 'Submit travel notification for China (Nov 2026 – 2029) to whitelist BOC Debit Card (Visa/Mastercard) for international POS and ATM usage so fraud detection does not block it in Haikou.',
+    isDone: false,
+    priority: 'Critical',
+  },
+  {
+    id: 'bank-boc-2',
+    bank: 'Bank of Ceylon (BOC)',
+    title: 'Alipay & WeChat Pay 3DS Whitelisting',
+    detail: 'Request activation for international e-commerce / 3D Secure (3DS) transactions specifically so the BOC card can be bound to Alipay and WeChat Pay as an international bank card.',
+    isDone: false,
+    priority: 'Critical',
+  },
+  {
+    id: 'bank-boc-3',
+    bank: 'Bank of Ceylon (BOC)',
+    title: 'Dialog SMS Roaming OTP Check',
+    detail: 'Confirm primary Sri Lankan Dialog mobile number (on Samsung S20 FE) is linked to receive SMS OTP alerts abroad.',
+    isDone: false,
+    priority: 'High',
+  },
+  {
+    id: 'bank-boc-4',
+    bank: 'Bank of Ceylon (BOC)',
+    title: 'Student File & CBSL Form 1 Inquiry (Optional Backup)',
+    detail: 'Verify if a formal Student File is needed since she is on an English-Taught Full Scholarship (no tuition wire needed), ensuring emergency family remittances are permitted if ever required.',
+    isDone: false,
+    priority: 'Medium',
+  },
+
+  // 3. People's Bank
+  {
+    id: 'bank-pb-1',
+    bank: "People's Bank",
+    title: 'International Debit Card Activation',
+    detail: 'Enable overseas POS/ATM swipe and international online gateway access for China.',
+    isDone: false,
+    priority: 'Critical',
+  },
+  {
+    id: 'bank-pb-2',
+    bank: "People's Bank",
+    title: 'Daily Withdrawal & Spend Limit Check',
+    detail: 'Confirm daily foreign currency ATM withdrawal cap (under Sri Lankan exchange regulations) and POS spend limit in RMB/USD equivalents.',
+    isDone: false,
+    priority: 'High',
+  },
+  {
+    id: 'bank-pb-3',
+    bank: "People's Bank",
+    title: "People's Wave App & SMS Alert Verification",
+    detail: 'Test login credentials and ensure SMS OTP alerts are routed to the Dialog roaming SIM.',
+    isDone: false,
+    priority: 'High',
+  },
+
+  // 4. National Savings Bank (NSB)
+  {
+    id: 'bank-nsb-1',
+    bank: 'National Savings Bank (NSB)',
+    title: 'Card Roaming & Reserve Verification',
+    detail: 'Check if NSB Debit Card supports international POS/ATM usage in China, or designate NSB as the Sri Lankan LKR/FD reserve account linked via online banking.',
+    isDone: false,
+    priority: 'High',
+  },
+  {
+    id: 'bank-nsb-2',
+    bank: 'National Savings Bank (NSB)',
+    title: 'Standing Instructions & Online Access',
+    detail: 'Verify online banking access from overseas and confirm OTP delivery settings.',
+    isDone: false,
+    priority: 'Medium',
+  },
+];
+
+// Initial Gifts & Souvenirs for Hainan University Professors & Buddies
+export const INITIAL_GIFTS: GiftItem[] = [
+  {
+    id: 'gift-1',
+    name: '3x Seashell Gifts',
+    quantity: 3,
+    targetBag: 'Main Large Suitcase (30×40×70cm)',
+    packagingNote: 'Bubble-wrap and cushion carefully in checked luggage to prevent cracking during flight transit.',
+    recipient: 'Friends & Dorm Mates',
+    isPacked: false,
+  },
+  {
+    id: 'gift-2',
+    name: '2x Handmade Wooden Wind-Sail Ships',
+    quantity: 2,
+    targetBag: 'Main Large Suitcase (30×40×70cm)',
+    packagingNote: 'Disassemble sails if detachable or box in rigid cardboard padding so masts and rigging do not snap.',
+    recipient: 'Academic Supervisor & International Office',
+    isPacked: false,
+  },
+  {
+    id: 'gift-3',
+    name: '2x Tiny Souvenir Elephants',
+    quantity: 2,
+    targetBag: 'Medium Suitcase (27×41×57cm)',
+    packagingNote: 'Wrap in decorative tissue or gift paper for professors and campus buddies.',
+    recipient: 'Campus Buddies & Guides',
+    isPacked: false,
+  },
+  {
+    id: 'gift-4',
+    name: 'Gift Wrapping & Protective Cushioning Task',
+    quantity: 1,
+    targetBag: 'Main Large Suitcase (30×40×70cm)',
+    packagingNote: 'Wrap all 7 gift items in protective bubble-wrap packaging and label them before Saturday suitcase lock-up.',
+    recipient: 'Pre-Departure Preparation',
+    isPacked: false,
   },
 ];

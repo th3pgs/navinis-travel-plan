@@ -15,6 +15,8 @@ export interface AppMasterState {
   wardrobe: any[];
   documents: any[];
   procedureSteps: any[];
+  bankingTasks?: any[];
+  gifts?: any[];
   apps: any[];
   milestones: any[];
   buddyMessages?: any[];
