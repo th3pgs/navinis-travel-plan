@@ -98,7 +98,7 @@ export function App() {
     return {
       passportNumber: 'N10385921',
       expiryDate: '2034-08-15',
-      photoUrl: `${import.meta.env.BASE_URL}navini-passport.png`,
+      photoUrl: `${import.meta.env.BASE_URL}navini-passport.jpeg`,
     };
   });
 

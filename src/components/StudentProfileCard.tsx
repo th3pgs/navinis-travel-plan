@@ -23,7 +23,7 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
   const [syncToast, setSyncToast] = useState<string | null>(null);
 
   // Canonical passport photo stored directly in the GitHub repository
-  const defaultPassportPhoto = `${import.meta.env.BASE_URL}navini-passport.png`;
+  const defaultPassportPhoto = `${import.meta.env.BASE_URL}navini-passport.jpeg`;
   const activePhoto = passportInfo.photoUrl || defaultPassportPhoto;
 
   useEffect(() => {
