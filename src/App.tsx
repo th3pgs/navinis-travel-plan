@@ -27,6 +27,7 @@ import { WardrobeManager } from './components/WardrobeManager';
 import { OfflineBackupModal } from './components/OfflineBackupModal';
 import { HardwareOverviewBar } from './components/HardwareOverviewBar';
 import { StageTaskManager } from './components/StageTaskManager';
+import { UniversityBuddyCard } from './components/UniversityBuddyCard';
 
 export function App() {
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
@@ -368,6 +369,10 @@ export function App() {
 
       {/* MAIN CONTAINER */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 space-y-8">
+        {/* DIRECT BUDDY COORDINATION & AIRPORT TAXI QUERY WIDGET */}
+        <section id="buddy-advice">
+          <UniversityBuddyCard />
+        </section>
         {/* ========================================================= */}
         {/* STAGE 1: PREPARATION IN SRI LANKA                         */}
         {/* ========================================================= */}
