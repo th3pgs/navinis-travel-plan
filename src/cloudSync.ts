@@ -26,6 +26,19 @@ export interface AppMasterState {
 
 let syncDebounceTimer: any = null;
 
+// Write-lock: when a local push is in-flight, skip incoming poll results
+// so the poll doesn't overwrite the photo/state we just set locally.
+let _pushInFlight = false;
+let _lastPushTimestamp = 0;
+
+export function isPushInFlight(): boolean {
+  return _pushInFlight;
+}
+
+export function getLastPushTimestamp(): number {
+  return _lastPushTimestamp;
+}
+
 // Compresses and downscales raw camera photos (e.g. 10MB) to ~15KB
 // so they transfer in milliseconds across mobile networks and fit seamlessly in cloud storage.
 export function compressImage(file: File, maxWidth = 260, maxHeight = 340, quality = 0.78): Promise<string> {
@@ -76,6 +89,18 @@ export function compressImage(file: File, maxWidth = 260, maxHeight = 340, quali
 
 // Fetch master state from the remote cloud database
 export async function fetchCloudState(): Promise<AppMasterState | null> {
+  // If a push is currently in-flight or just finished (within last 8 seconds),
+  // return local state to avoid overwriting the data we just pushed.
+  if (_pushInFlight || (Date.now() - _lastPushTimestamp < 8000)) {
+    const localSaved = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (localSaved) {
+      try {
+        return JSON.parse(localSaved) as AppMasterState;
+      } catch (e) {}
+    }
+    return null;
+  }
+
   // 1. First get local state for instant rendering
   const localSaved = localStorage.getItem(LOCAL_STORAGE_KEY);
   let localState: AppMasterState | null = null;
@@ -98,7 +123,16 @@ export async function fetchCloudState(): Promise<AppMasterState | null> {
     if (res.ok) {
       const data = await res.json();
       if (data && data.passportInfo) {
-        // Update local cache
+        // Only accept remote state if it's actually newer than our local state
+        if (localState && localState.lastUpdated && data.lastUpdated) {
+          const localTime = new Date(localState.lastUpdated).getTime();
+          const remoteTime = new Date(data.lastUpdated).getTime();
+          if (localTime > remoteTime) {
+            // Local is newer — keep local, push it to cloud
+            return localState;
+          }
+        }
+        // Update local cache with remote data
         try {
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
         } catch (e) {}
@@ -115,6 +149,8 @@ export async function fetchCloudState(): Promise<AppMasterState | null> {
 // Push master state to the remote cloud database
 export function pushCloudState(state: AppMasterState, immediate = false): Promise<boolean> {
   state.lastUpdated = new Date().toISOString();
+  _pushInFlight = true;
+  _lastPushTimestamp = Date.now();
 
   // 1. Instantly save to local storage (0ms offline safe)
   try {
@@ -123,13 +159,16 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
     console.warn('Local storage write warning', e);
   }
 
-  // 2. Push to cloud database
+  // 2. Push to cloud database with write-lock
   return new Promise((resolve) => {
     if (syncDebounceTimer) {
       clearTimeout(syncDebounceTimer);
     }
 
     const doPush = async () => {
+      _pushInFlight = true;
+      _lastPushTimestamp = Date.now();
+
       try {
         const res = await fetch(SYNC_URL, {
           method: 'PUT',
@@ -141,6 +180,7 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
 
         if (res.ok) {
           console.log('Master state synced to cloud database.');
+          _lastPushTimestamp = Date.now();
           resolve(true);
         } else {
           console.warn('Cloud sync response status:', res.status);
@@ -149,13 +189,15 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
       } catch (err) {
         console.warn('Cloud sync offline. Queued locally.', err);
         resolve(false);
+      } finally {
+        _pushInFlight = false;
       }
     };
 
     if (immediate) {
       doPush();
     } else {
-      syncDebounceTimer = setTimeout(doPush, 300); // 300ms quick debounce
+      syncDebounceTimer = setTimeout(doPush, 300);
     }
   });
 }

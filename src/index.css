@@ -23,33 +23,4 @@
   animation: shake 0.35s ease-in-out;
 }
 
-/* Strict Single-Page Printing Rules for Taxi Card */
-@media print {
-  @page {
-    size: A4 portrait;
-    margin: 10mm;
-  }
 
-  body * {
-    visibility: hidden;
-  }
-
-  #single-page-card, #single-page-card * {
-    visibility: visible;
-  }
-
-  #single-page-card {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    max-width: 170mm !important;
-    margin: 0 auto !important;
-    page-break-after: avoid !important;
-    page-break-inside: avoid !important;
-  }
-
-  .print\:hidden {
-    display: none !important;
-  }
-}

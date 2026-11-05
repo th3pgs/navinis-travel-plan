@@ -1,9 +1,261 @@
 import React, { useState } from 'react';
-import { X, Copy, Check, Printer, Edit2, FileText, Download } from 'lucide-react';
+import { X, Copy, Check, Printer, Edit2, Download } from 'lucide-react';
 
 interface TaxiCardModalProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+// Generates a full standalone HTML document for printing in a new window.
+// This completely bypasses the broken window.print() approach that was
+// hiding/showing elements with CSS visibility — which caused 3 blank pages.
+function generatePrintableHTML(fields: {
+  destinationCn: string;
+  addressCn: string;
+  messageCn: string;
+  phone1: string;
+  phone2: string;
+}) {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>海南大学出租车卡 — Hainan University Taxi Card</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 10mm;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      height: auto;
+      margin: 0;
+      padding: 0;
+      background: #fff;
+    }
+    body {
+      font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", -apple-system, "Segoe UI", sans-serif;
+      color: #1e293b;
+      padding: 8mm 10mm;
+      background: #fff;
+    }
+    .card {
+      border: 3px solid #1e293b;
+      border-radius: 10px;
+      padding: 20px 22px 16px;
+      max-width: 620px;
+      margin: 0 auto;
+      page-break-inside: avoid;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 10px;
+      margin-bottom: 16px;
+    }
+    .header-left {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #64748b;
+    }
+    .header-right {
+      font-size: 10px;
+      font-weight: 600;
+      color: #94a3b8;
+      background: #f1f5f9;
+      padding: 3px 10px;
+      border-radius: 4px;
+      border: 1px solid #e2e8f0;
+    }
+    .subtitle-cn {
+      font-size: 13px;
+      font-weight: 600;
+      color: #475569;
+      margin-top: 2px;
+    }
+    .dest-box {
+      background: #fef2f2;
+      border: 2px solid #fca5a5;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    .dest-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #991b1b;
+      margin-bottom: 4px;
+    }
+    .dest-text {
+      font-size: 28px;
+      font-weight: 900;
+      color: #b91c1c;
+      line-height: 1.25;
+    }
+    .dest-en {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+    .addr-box {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+    }
+    .addr-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #94a3b8;
+      margin-bottom: 3px;
+    }
+    .addr-text {
+      font-size: 17px;
+      font-weight: 700;
+      color: #1e293b;
+      line-height: 1.4;
+    }
+    .addr-en {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 3px;
+    }
+    .msg-box {
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+    }
+    .msg-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #92400e;
+      margin-bottom: 4px;
+    }
+    .msg-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: #1e293b;
+      line-height: 1.6;
+    }
+    .phones-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .phone-card {
+      flex: 1;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #f8fafc;
+    }
+    .phone-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+    .phone-number {
+      font-size: 16px;
+      font-weight: 800;
+      font-family: "SF Mono", "Menlo", "Consolas", monospace;
+      color: #1e293b;
+      margin-top: 2px;
+    }
+    .footer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 10px;
+      font-size: 11px;
+      color: #64748b;
+    }
+    .footer-row strong {
+      color: #1e293b;
+      font-family: "SF Mono", "Menlo", "Consolas", monospace;
+    }
+    .student-bar {
+      margin-top: 18px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 6px;
+      padding: 8px 12px;
+      text-align: center;
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+    .student-bar strong {
+      color: #1e293b;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div>
+        <div class="header-left">Hainan University Arrival Pocket Card</div>
+        <div class="subtitle-cn">出示给出租车司机师傅看 (Show directly to Driver)</div>
+      </div>
+      <div class="header-right">1-Page Pocket Pass</div>
+    </div>
+
+    <div class="dest-box">
+      <div class="dest-label">Destination / 目的地:</div>
+      <div class="dest-text">${fields.destinationCn}</div>
+      <div class="dest-en">(Please take me to: Hainan University — Haidian Campus)</div>
+    </div>
+
+    <div class="addr-box">
+      <div class="addr-label">Detailed Address / 详细地址:</div>
+      <div class="addr-text">${fields.addressCn}</div>
+      <div class="addr-en">No. 58 Renmin Avenue, Meilan District, Haikou (School of International Education / Dormitory)</div>
+    </div>
+
+    <div class="msg-box">
+      <div class="msg-label">Message for Driver / 司机师傅说明:</div>
+      <div class="msg-text">${fields.messageCn}</div>
+    </div>
+
+    <div class="phones-row">
+      <div class="phone-card">
+        <div class="phone-label">孙老师 (Ms. Sun 1)</div>
+        <div class="phone-number">${fields.phone1}</div>
+      </div>
+      <div class="phone-card">
+        <div class="phone-label">孙老师 (Ms. Sun 2)</div>
+        <div class="phone-number">${fields.phone2}</div>
+      </div>
+    </div>
+
+    <div class="footer-row">
+      <div>WeChat: <strong>sun_admission</strong></div>
+      <div>Metered Taxi Fare: approx. <strong>50–80 RMB</strong></div>
+    </div>
+  </div>
+
+  <div class="student-bar">
+    Student: <strong>Parana Gamage Navini Ravishka Priyantha</strong> •
+    Admission No: <strong>263660001</strong> •
+    Hainan University (Haidian Campus) • Food Science & Engineering (2026–2029)
+  </div>
+</body>
+</html>`;
 }
 
 export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose }) => {
@@ -27,78 +279,84 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
     setTimeout(() => setCopied(null), 2000);
   };
 
+  // Uses a clean isolated iframe to print strictly 1 page without any app chrome or blank sheets.
+  // Falls back to window.open if iframe printing is restricted.
   const handlePrint = () => {
-    window.print();
+    const html = generatePrintableHTML({
+      destinationCn,
+      addressCn,
+      messageCn,
+      phone1,
+      phone2,
+    });
+
+    try {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+
+      const frameDoc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (frameDoc && iframe.contentWindow) {
+        frameDoc.open();
+        frameDoc.write(html);
+        frameDoc.close();
+        setTimeout(() => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          setTimeout(() => {
+            try {
+              document.body.removeChild(iframe);
+            } catch (e) {}
+          }, 60000);
+        }, 300);
+        return;
+      }
+    } catch (e) {
+      console.warn('Iframe print error, falling back to window.open', e);
+    }
+
+    // Fallback: window.open
+    const printWindow = window.open('', '_blank', 'width=800,height=1000');
+    if (printWindow) {
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.onload = () => {
+        printWindow.print();
+      };
+    }
   };
 
-  const exportAsHTML = () => {
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Hainan University Taxi Card</title>
-  <style>
-    @page { size: A4 portrait; margin: 15mm; }
-    body { font-family: -apple-system, sans-serif; color: #000; padding: 20px; }
-    .card { border: 3px solid #000; padding: 24px; border-radius: 8px; max-width: 580px; margin: 0 auto; }
-    .dest { font-size: 28px; font-weight: 900; color: #b91c1c; margin: 12px 0; }
-    .addr { font-size: 18px; font-weight: bold; margin: 8px 0; }
-    .msg { font-size: 14px; margin: 12px 0; line-height: 1.5; }
-    .phones { background: #f3f4f6; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 16px; font-weight: bold; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div style="font-size: 12px; font-weight: bold; text-transform: uppercase;">Show directly to Taxi Driver / 出示给出租车司机看:</div>
-    <div class="dest">${destinationCn}</div>
-    <div class="addr">详细地址：${addressCn}</div>
-    <div class="msg">${messageCn}</div>
-    <div class="phones">
-      孙老师 (Ms. Sun 1): ${phone1}<br>
-      孙老师 (Ms. Sun 2): ${phone2}<br>
-      WeChat: sun_admission
-    </div>
-  </div>
-</body>
-</html>`;
-    const blob = new Blob([html], { type: 'text/html' });
+  // Downloads a standalone HTML file that can be opened locally and printed,
+  // works everywhere — no Google Docs, no cloud dependency.
+  const handleDownloadHTML = () => {
+    const html = generatePrintableHTML({
+      destinationCn,
+      addressCn,
+      messageCn,
+      phone1,
+      phone2,
+    });
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'Hainan_University_Taxi_Pocket_Card.html';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const exportForGoogleDocs = () => {
-    const docContent = `<html>
-<head><meta charset="utf-8"><title>Hainan University Taxi Card</title></head>
-<body>
-  <h2>HAINAN UNIVERSITY - TAXI POCKET CARD</h2>
-  <hr/>
-  <h1 style="color:#b91c1c;">${destinationCn}</h1>
-  <p><strong>详细地址 / Detailed Address:</strong> ${addressCn}</p>
-  <p><strong>司机师傅您好：</strong> ${messageCn}</p>
-  <p><strong>孙老师 (Ms. Sun 1):</strong> ${phone1}</p>
-  <p><strong>孙老师 (Ms. Sun 2):</strong> ${phone2}</p>
-  <p><strong>WeChat ID:</strong> sun_admission</p>
-  <p><strong>Estimated Metered Fare:</strong> 50 - 80 RMB</p>
-</body>
-</html>`;
-    const blob = new Blob([docContent], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'Hainan_University_Taxi_Card_for_Google_Docs.doc';
+    a.download = 'Hainan_University_Taxi_Card.html';
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-white border border-slate-300 rounded-xl shadow-xl overflow-hidden my-auto print:border-none print:shadow-none">
+      <div className="relative w-full max-w-xl bg-white border border-slate-300 rounded-xl shadow-xl overflow-hidden my-auto">
         {/* Modal Top Bar */}
-        <div className="bg-[#003580] text-white px-5 py-3.5 flex flex-wrap items-center justify-between gap-2 print:hidden">
+        <div className="bg-[#003580] text-white px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-sm font-bold tracking-tight">Haikou Taxi Destination Pocket Card</h2>
             <p className="text-[11px] text-blue-200">1-Page compact pocket format for print shops or wallet</p>
@@ -112,20 +370,12 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
               <span>{isEditing ? 'Done' : 'Edit'}</span>
             </button>
             <button
-              onClick={exportAsHTML}
+              onClick={handleDownloadHTML}
               className="px-2 py-1 text-xs rounded bg-white/10 hover:bg-white/20 text-white flex items-center gap-1 transition-colors"
-              title="Save as single HTML/PDF"
+              title="Download as standalone HTML file"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>HTML</span>
-            </button>
-            <button
-              onClick={exportForGoogleDocs}
-              className="px-2 py-1 text-xs rounded bg-white/10 hover:bg-white/20 text-white flex items-center gap-1 transition-colors"
-              title="Download editable doc for Google Docs"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Google Docs</span>
+              <span>Save HTML</span>
             </button>
             <button
               onClick={handlePrint}
@@ -143,8 +393,8 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
           </div>
         </div>
 
-        {/* Printable Card Area Strictly Locked to Exactly 1 Page */}
-        <div className="p-4 sm:p-5 space-y-3 print:p-0 print:m-0" id="single-page-card">
+        {/* Live Preview of the Card */}
+        <div className="p-4 sm:p-5 space-y-3">
           <div className="border-2 border-slate-900 p-4 rounded-lg bg-white space-y-3">
             {/* Header */}
             <div className="border-b border-slate-300 pb-1.5 flex items-center justify-between">
@@ -162,8 +412,8 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
             </div>
 
             {/* Destination in High Contrast Chinese */}
-            <div className="bg-slate-50 border border-slate-200 p-3 rounded">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
+            <div className="bg-red-50 border border-red-200 p-3 rounded">
+              <span className="text-[10px] uppercase font-bold text-red-800 block mb-0.5">
                 Destination / 目的地:
               </span>
               {isEditing ? (
@@ -242,9 +492,13 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
                 </div>
                 <button
                   onClick={() => copyText(phone1)}
-                  className="px-2 py-0.5 text-[10px] border border-slate-300 rounded bg-white hover:bg-slate-100 print:hidden"
+                  className="px-2 py-0.5 text-[10px] border border-slate-300 rounded bg-white hover:bg-slate-100"
                 >
-                  {copied === phone1 ? 'Copied' : 'Copy'}
+                  {copied === phone1 ? (
+                    <span className="flex items-center gap-0.5 text-emerald-700"><Check className="w-3 h-3" />Done</span>
+                  ) : (
+                    <span className="flex items-center gap-0.5"><Copy className="w-3 h-3" />Copy</span>
+                  )}
                 </button>
               </div>
 
@@ -264,9 +518,13 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
                 </div>
                 <button
                   onClick={() => copyText(phone2)}
-                  className="px-2 py-0.5 text-[10px] border border-slate-300 rounded bg-white hover:bg-slate-100 print:hidden"
+                  className="px-2 py-0.5 text-[10px] border border-slate-300 rounded bg-white hover:bg-slate-100"
                 >
-                  {copied === phone2 ? 'Copied' : 'Copy'}
+                  {copied === phone2 ? (
+                    <span className="flex items-center gap-0.5 text-emerald-700"><Check className="w-3 h-3" />Done</span>
+                  ) : (
+                    <span className="flex items-center gap-0.5"><Copy className="w-3 h-3" />Copy</span>
+                  )}
                 </button>
               </div>
             </div>
@@ -284,9 +542,9 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
         </div>
 
         {/* Footer info */}
-        <div className="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-between items-center print:hidden">
+        <div className="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-between items-center">
           <span className="text-[11px] text-slate-500">
-            Locked to a single 1-page pocket printout.
+            Print opens a clean page with only the card — no app chrome.
           </span>
           <button
             onClick={onClose}

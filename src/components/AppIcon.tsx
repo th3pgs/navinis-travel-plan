@@ -7,12 +7,11 @@ interface AppIconProps {
 
 export const AppIcon: React.FC<AppIconProps> = ({ name, className = 'w-5 h-5' }) => {
   switch (name?.toLowerCase()) {
-    // Official China Eastern Airlines Emblem (Red & Blue stylized bird wings)
+    // Official China Eastern Airlines Emblem (Red & Blue stylized bird wings — transparent background)
     case 'china-eastern':
     case 'ce-air':
       return (
         <svg viewBox="0 0 100 100" className={className} fill="none">
-          <circle cx="50" cy="50" r="48" fill="#FFFFFF" stroke="#003580" strokeWidth="2"/>
           {/* Upper Red Swallow Wing */}
           <path d="M18 52 C32 30, 68 25, 84 35 C70 42, 52 45, 38 48 Z" fill="#E60012" />
           {/* Lower Blue Wing Body */}

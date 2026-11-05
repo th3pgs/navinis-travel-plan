@@ -186,10 +186,24 @@ export function App() {
       const remoteState = await fetchCloudState();
       if (remoteState) {
         if (remoteState.passportInfo) {
-          setPassportInfo(remoteState.passportInfo);
-          try {
-            localStorage.setItem('navini_passport_profile_v5', JSON.stringify(remoteState.passportInfo));
-          } catch (e) {}
+          setPassportInfo((prev) => {
+            // If remote doesn't have a photoUrl, but local already has one,
+            // preserve local photoUrl to prevent accidental wipe from race condition.
+            const mergedPhoto = remoteState.passportInfo.photoUrl !== undefined && remoteState.passportInfo.photoUrl !== ''
+              ? remoteState.passportInfo.photoUrl
+              : (prev.photoUrl || remoteState.passportInfo.photoUrl);
+
+            const updated = {
+              ...remoteState.passportInfo,
+              photoUrl: mergedPhoto,
+            };
+
+            try {
+              localStorage.setItem('navini_passport_profile_v5', JSON.stringify(updated));
+            } catch (e) {}
+
+            return updated;
+          });
         }
         if (Array.isArray(remoteState.bags) && remoteState.bags.length > 0) {
           setBags(remoteState.bags);
