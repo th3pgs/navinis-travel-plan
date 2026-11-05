@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Printer, FileJson, X } from 'lucide-react';
+import { Download, Printer, FileJson } from 'lucide-react';
 import { ChecklistItem, WardrobeItem } from '../data';
 
 interface OfflineBackupModalProps {
@@ -166,73 +166,74 @@ export const OfflineBackupModal: React.FC<OfflineBackupModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-white border border-slate-300 rounded-lg shadow-xl p-6 text-slate-800 my-auto">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-          <h3 className="text-base font-bold text-slate-900">Offline Backup & Export</h3>
-          <button
-            onClick={onClose}
-            className="p-1 rounded text-slate-400 hover:text-slate-700 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#F2F2F7]">
+      {/* Sticky iOS Top Navigation Bar */}
+      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-black/10 px-4 h-12 sm:h-14 flex items-center justify-between shrink-0">
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-[#007AFF] text-base font-semibold active:opacity-60 transition-opacity"
+        >
+          Done
+        </button>
 
-        <div className="py-4 space-y-4">
-          <p className="text-xs text-slate-600 leading-relaxed">
-            Mainland China network environments can be restrictive. Save an offline snapshot so you have guaranteed access without internet.
+        <h2 className="font-semibold text-sm sm:text-base text-slate-900 text-center">
+          Offline Backup & Export
+        </h2>
+
+        <div className="w-12" />
+      </header>
+
+      {/* Touch-Scrollable Body */}
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-xl mx-auto w-full space-y-4">
+        <p className="text-xs text-[#8E8E93] leading-relaxed">
+          Mainland China network environments can be restrictive. Save an offline snapshot so you have guaranteed access without internet.
+        </p>
+
+        {/* Offline HTML Card */}
+        <div className="ios-card p-4 sm:p-5 space-y-2.5">
+          <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <Printer className="w-4 h-4 text-[#007AFF]" />
+            <span>Standalone Offline HTML Document</span>
+          </div>
+          <p className="text-xs text-[#8E8E93] leading-relaxed">
+            Downloads a standalone HTML file containing all flight details, Chinese taxi cards, and your inventory. Can be opened in any phone browser or saved as PDF.
           </p>
-
-          <div className="p-4 rounded border border-slate-200 bg-slate-50 space-y-2">
-            <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Printer className="w-4 h-4 text-slate-600" />
-              <span>Standalone Offline HTML Document</span>
-            </div>
-            <p className="text-xs text-slate-500">
-              Downloads a standalone HTML file containing all flight details, Chinese taxi cards, and your inventory. Can be opened in any phone browser or saved as PDF.
-            </p>
-            <button
-              onClick={downloadPrintableHTML}
-              className="mt-2 py-2 px-3 rounded bg-[#003580] hover:bg-[#00224f] text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              <span>Download Offline File</span>
-            </button>
-          </div>
-
-          <div className="p-4 rounded border border-slate-200 bg-slate-50 space-y-2">
-            <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <FileJson className="w-4 h-4 text-slate-600" />
-              <span>JSON State File</span>
-            </div>
-            <p className="text-xs text-slate-500">
-              Export your current checkbox progress to a backup file, or restore on another device.
-            </p>
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <button
-                onClick={exportJSON}
-                className="py-2 px-3 rounded border border-slate-300 bg-white hover:bg-slate-100 font-medium text-xs flex items-center justify-center gap-1.5 transition-colors text-slate-700"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export JSON</span>
-              </button>
-              <label className="py-2 px-3 rounded border border-slate-300 bg-white hover:bg-slate-100 font-medium text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors text-slate-700 text-center">
-                <span>Import JSON</span>
-                <input type="file" accept=".json" onChange={handleJsonUpload} className="hidden" />
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div className="pt-3 border-t border-slate-200 flex justify-end">
           <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium"
+            type="button"
+            onClick={downloadPrintableHTML}
+            className="w-full sm:w-auto mt-2 py-2.5 px-4 rounded-xl bg-[#007AFF] hover:bg-blue-600 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors shadow-2xs"
           >
-            Close
+            <Download className="w-4 h-4" />
+            <span>Download Offline File</span>
           </button>
         </div>
-      </div>
+
+        {/* JSON State Card */}
+        <div className="ios-card p-4 sm:p-5 space-y-2.5">
+          <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <FileJson className="w-4 h-4 text-[#007AFF]" />
+            <span>JSON State File</span>
+          </div>
+          <p className="text-xs text-[#8E8E93] leading-relaxed">
+            Export your current checkbox progress to a backup file, or restore on another device.
+          </p>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <button
+              type="button"
+              onClick={exportJSON}
+              className="py-2.5 px-3 rounded-xl border border-black/10 bg-[#F2F2F7] hover:bg-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors text-slate-700"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export JSON</span>
+            </button>
+            <label className="py-2.5 px-3 rounded-xl border border-black/10 bg-[#F2F2F7] hover:bg-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors text-slate-700 text-center">
+              <span>Import JSON</span>
+              <input type="file" accept=".json" onChange={handleJsonUpload} className="hidden" />
+            </label>
+          </div>
+        </div>
+      </main>
     </div>
   );
 };

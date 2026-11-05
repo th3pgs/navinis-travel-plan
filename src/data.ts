@@ -373,7 +373,7 @@ export const INITIAL_APPS: AppConfigItem[] = [
     role: 'AI research assistant for Master\'s thesis literature reviews (routes via proxy).',
     isInstalled: true,
     isConfigured: true,
-    appIcon: 'doc',
+    appIcon: 'chatgpt',
   },
   {
     id: 'app-gemini',
@@ -383,7 +383,7 @@ export const INITIAL_APPS: AppConfigItem[] = [
     role: 'Multimodal AI research tool for Food Science and Engineering problem solving.',
     isInstalled: true,
     isConfigured: true,
-    appIcon: 'doc',
+    appIcon: 'gemini',
   },
   {
     id: 'app-gsuite',
@@ -393,7 +393,7 @@ export const INITIAL_APPS: AppConfigItem[] = [
     role: 'Academic paper repositories and university file synchronization.',
     isInstalled: true,
     isConfigured: true,
-    appIcon: 'doc',
+    appIcon: 'google',
   },
   {
     id: 'app-deepl',
@@ -403,7 +403,7 @@ export const INITIAL_APPS: AppConfigItem[] = [
     role: 'High accuracy academic document translation.',
     isInstalled: true,
     isConfigured: true,
-    appIcon: 'pleco',
+    appIcon: 'deepl',
   },
 
   // Essential Mainland Chinese Ecosystem
@@ -445,7 +445,7 @@ export const INITIAL_APPS: AppConfigItem[] = [
     role: 'Accurate campus gate GPS walking routes in China.',
     isInstalled: true,
     isConfigured: true,
-    appIcon: 'didi',
+    appIcon: 'baidu',
   },
   {
     id: 'app-metro',
@@ -455,7 +455,7 @@ export const INITIAL_APPS: AppConfigItem[] = [
     role: 'Offline national metro transit network maps with transfer calculators.',
     isInstalled: true,
     isConfigured: true,
-    appIcon: 'trip',
+    appIcon: 'metroman',
   },
   {
     id: 'app-pleco',
@@ -475,7 +475,7 @@ export const INITIAL_APPS: AppConfigItem[] = [
     role: 'Campus food delivery, bottled water replenishment, and Haikou essentials.',
     isInstalled: true,
     isConfigured: true,
-    appIcon: 'didi',
+    appIcon: 'meituan',
   },
 ];
 

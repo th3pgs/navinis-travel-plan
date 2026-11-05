@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
 import { DocumentItem, ProcedureStep } from '../data';
 import {
-  ArrowLeft,
+  ChevronLeft,
   Plus,
-  Trash2,
+  Minus,
   Edit3,
   Check,
-  X,
-  FileText,
-  AlertCircle,
   FolderCheck,
   ListTodo,
   Info,
@@ -45,6 +42,7 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'vault' | 'procedures'>('vault');
   const [selectedStage, setSelectedStage] = useState<string>('all');
+  const [isSectionEditMode, setIsSectionEditMode] = useState(false);
   const [infoPopupDoc, setInfoPopupDoc] = useState<DocumentItem | null>(null);
 
   // New Document State
@@ -168,346 +166,307 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
     setShowAddStep(false);
   };
 
+  const handleToggleDoc = (doc: DocumentItem) => {
+    if (!doc.isPacked) {
+      if (!doc.isReady) onToggleDocReady(doc.id);
+      onToggleDocPacked(doc.id);
+    } else {
+      onToggleDocPacked(doc.id);
+    }
+  };
+
   const filteredSteps = procedureSteps.filter(
     (step) => selectedStage === 'all' || step.stage === selectedStage
   );
 
-  const readyDocsCount = documents.filter((d) => d.isReady).length;
   const packedDocsCount = documents.filter((d) => d.isPacked).length;
   const doneStepsCount = procedureSteps.filter((s) => s.isDone).length;
+  const docProgress = Math.round((packedDocsCount / (documents.length || 1)) * 100);
+  const stepProgress = Math.round((doneStepsCount / (procedureSteps.length || 1)) * 100);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
-      {/* iOS Styled Back Navigation Bar */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+    <div className="space-y-4 animate-in fade-in duration-200 pb-16">
+      {/* 1. iOS STICKY NAVIGATION BAR */}
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-black/10 -mx-4 sm:-mx-6 px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between">
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold shadow-2xs transition-colors"
+          className="text-[#007AFF] text-base font-medium flex items-center gap-0.5 active:opacity-60 transition-opacity"
         >
-          <ArrowLeft className="w-4 h-4 text-[#003580]" />
-          <span>Back to Overview</span>
+          <ChevronLeft className="w-5 h-5 -ml-1.5" />
+          <span>Overview</span>
         </button>
 
-        <div className="text-right">
-          <span className="text-xs font-mono font-bold text-slate-500 block">
-            Documents & Campus Steps
-          </span>
-          <span className="text-[11px] font-semibold text-[#003580]">
-            {packedDocsCount}/{documents.length} Docs Packed • {doneStepsCount}/{procedureSteps.length} Steps Done
-          </span>
-        </div>
-      </div>
+        <h1 className="font-semibold text-sm sm:text-base text-slate-900 truncate px-2 text-center">
+          Documents & Steps
+        </h1>
 
-      {/* Segmented Controls (Apple Style) */}
-      <div className="flex p-1 bg-slate-200/80 rounded-2xl max-w-md mx-auto text-xs font-semibold">
+        <button
+          type="button"
+          onClick={() => setIsSectionEditMode(!isSectionEditMode)}
+          className="text-[#007AFF] text-sm sm:text-base font-semibold active:opacity-60 transition-opacity"
+        >
+          {isSectionEditMode ? 'Done' : 'Edit'}
+        </button>
+      </header>
+
+      {/* 2. iOS SEGMENTED CONTROL */}
+      <div className="ios-segmented">
         <button
           type="button"
           onClick={() => setActiveTab('vault')}
-          className={`flex-1 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-            activeTab === 'vault'
-              ? 'bg-white text-slate-900 shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
+          className={`ios-segmented-item ${activeTab === 'vault' ? 'active' : ''}`}
         >
-          <FolderCheck className="w-4 h-4 text-amber-600" />
+          <FolderCheck className="w-3.5 h-3.5" />
           <span>Document Vault ({documents.length})</span>
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('procedures')}
-          className={`flex-1 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-            activeTab === 'procedures'
-              ? 'bg-white text-slate-900 shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
-          }`}
+          className={`ios-segmented-item ${activeTab === 'procedures' ? 'active' : ''}`}
         >
-          <ListTodo className="w-4 h-4 text-[#003580]" />
-          <span>Steps Editor ({doneStepsCount}/{procedureSteps.length})</span>
+          <ListTodo className="w-3.5 h-3.5" />
+          <span>Campus Steps ({doneStepsCount}/{procedureSteps.length})</span>
         </button>
       </div>
 
       {/* TAB 1: CREDENTIAL VAULT */}
       {activeTab === 'vault' && (
         <div className="space-y-4">
-          <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          {/* iOS Summary Progress Card (0-100% Math) */}
+          <div className="ios-card p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-base text-slate-900">
-                  Legal Documents & Certificates
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Keep in A4 waterproof folder and fanny pack • Never place original certificates in checked bags
-                </p>
+                <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider block">
+                  Document Readiness
+                </span>
+                <span className="text-xl font-bold text-slate-900">
+                  {packedDocsCount} of {documents.length} Documents Packed & Ready
+                </span>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setShowAddDoc(!showAddDoc)}
-                className="px-3.5 py-1.5 rounded-xl bg-[#003580] text-white text-xs font-bold hover:bg-[#00224f] transition-colors flex items-center gap-1 shadow-2xs self-start sm:self-auto"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Document</span>
-              </button>
+              <div className="text-right">
+                <span className="text-2xl font-bold text-[#007AFF]">{docProgress}%</span>
+              </div>
             </div>
 
-            {/* Add Document Form */}
-            {showAddDoc && (
-              <form onSubmit={handleAddDocSubmit} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 text-xs">
-                <div className="font-bold text-slate-900">Add New Document</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Document Title</label>
+            {/* Progress Bar */}
+            <div className="w-full bg-[#E5E5EA] h-2 rounded-full overflow-hidden">
+              <div
+                className="bg-[#007AFF] h-full rounded-full transition-all duration-300"
+                style={{ width: `${docProgress}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-[#8E8E93] pt-1">
+              <span>Carry in A4 waterproof folder & fanny pack only</span>
+              {isSectionEditMode && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddDoc(true)}
+                  className="text-[#007AFF] font-semibold flex items-center gap-1 active:opacity-60"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Document</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Document Inset List */}
+          <div className="ios-card divide-y divide-black/5 overflow-hidden">
+            {documents.map((doc) => {
+              const isEditing = editingDocId === doc.id;
+
+              if (isEditing) {
+                return (
+                  <div key={doc.id} className="p-3.5 bg-blue-50/40 space-y-2 text-xs">
+                    <span className="font-semibold text-slate-900 block">Edit Document</span>
                     <input
                       type="text"
-                      placeholder="e.g. Police Clearance Certificate"
-                      value={newDocTitle}
-                      onChange={(e) => setNewDocTitle(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
-                      required
+                      value={editDocTitle}
+                      onChange={(e) => setEditDocTitle(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-black/10 rounded-lg bg-white"
+                      placeholder="Document title"
                     />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Issuing Authority</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Sri Lanka Police HQ"
-                      value={newDocIssuer}
-                      onChange={(e) => setNewDocIssuer(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Target Placement</label>
-                    <select
-                      value={newDocLocation}
-                      onChange={(e) => setNewDocLocation(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
-                    >
-                      <option value="Fanny Pack (Worn on Chest)">Fanny Pack (Worn on Chest)</option>
-                      <option value="A4 Waterproof Folder (Cabin Backpack)">A4 Waterproof Folder (Cabin Backpack)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Priority</label>
-                    <select
-                      value={newDocPriority}
-                      onChange={(e) => setNewDocPriority(e.target.value as any)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
-                    >
-                      <option value="Critical">Critical (Immigration / Border)</option>
-                      <option value="High">High (University Registration)</option>
-                      <option value="Medium">Medium (General)</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddDoc(false)}
-                    className="px-3 py-1.5 border border-slate-300 rounded-xl bg-white text-slate-600"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 bg-[#003580] text-white rounded-xl font-bold"
-                  >
-                    Save Document
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Document Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {documents.map((doc) => {
-                const isEditing = editingDocId === doc.id;
-
-                if (isEditing) {
-                  return (
-                    <div key={doc.id} className="p-4 bg-blue-50/60 border border-blue-400 rounded-2xl space-y-2 text-xs">
-                      <div className="font-bold text-slate-900">Edit Document</div>
-                      <input
-                        type="text"
-                        value={editDocTitle}
-                        onChange={(e) => setEditDocTitle(e.target.value)}
-                        className="w-full px-2.5 py-1.5 border border-blue-300 rounded-xl bg-white font-bold"
-                      />
+                    <div className="grid grid-cols-2 gap-2">
                       <input
                         type="text"
                         placeholder="Issuer"
                         value={editDocIssuer}
                         onChange={(e) => setEditDocIssuer(e.target.value)}
-                        className="w-full px-2.5 py-1.5 border border-blue-300 rounded-xl bg-white"
+                        className="w-full px-2 py-1.5 border border-black/10 rounded-lg bg-white"
                       />
                       <input
                         type="text"
-                        placeholder="Carry location"
+                        placeholder="Placement"
                         value={editDocLocation}
                         onChange={(e) => setEditDocLocation(e.target.value)}
-                        className="w-full px-2.5 py-1.5 border border-blue-300 rounded-xl bg-white"
+                        className="w-full px-2 py-1.5 border border-black/10 rounded-lg bg-white"
                       />
-                      <div className="flex justify-end gap-1.5 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setEditingDocId(null)}
-                          className="px-2.5 py-1 border rounded-xl bg-white text-slate-600"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSaveDocEdit(doc.id)}
-                          className="px-3.5 py-1 rounded-xl bg-[#003580] text-white font-bold"
-                        >
-                          Save
-                        </button>
-                      </div>
                     </div>
-                  );
-                }
+                    <div className="flex justify-end gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setEditingDocId(null)}
+                        className="px-2.5 py-1 rounded-lg bg-white border border-black/10 text-slate-600"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveDocEdit(doc.id)}
+                        className="px-3 py-1 rounded-lg bg-[#007AFF] text-white font-semibold"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
 
-                return (
-                  <div
-                    key={doc.id}
-                    className={`p-4 rounded-3xl border transition-all flex flex-col justify-between ${
-                      doc.isPacked
-                        ? 'border-emerald-200 bg-emerald-50/20'
-                        : 'border-slate-200 bg-white hover:border-slate-300 shadow-xs'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
+              return (
+                <div
+                  key={doc.id}
+                  className="p-3 sm:p-3.5 flex items-center justify-between gap-3 bg-white hover:bg-slate-50/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    {/* Delete badge in edit mode */}
+                    {isSectionEditMode && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteDoc(doc.id)}
+                        className="w-5 h-5 rounded-full bg-[#FF3B30] text-white flex items-center justify-center shrink-0 active:opacity-60 transition-opacity"
+                        title="Delete document"
+                      >
+                        <Minus className="w-3 h-3 stroke-[3]" />
+                      </button>
+                    )}
+
+                    {/* Scannable Document Information */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span
-                          className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                          className={`text-xs sm:text-sm font-semibold truncate ${
+                            doc.isPacked ? 'text-[#8E8E93] line-through' : 'text-slate-900'
+                          }`}
+                        >
+                          {doc.title}
+                        </span>
+                        <span
+                          className={`text-[9px] font-semibold px-1.5 py-0.2 rounded-md uppercase tracking-wider shrink-0 ${
                             doc.priority === 'Critical'
-                              ? 'bg-red-100 text-red-800 border border-red-200'
+                              ? 'bg-red-50 text-red-700 border border-red-200'
                               : doc.priority === 'High'
-                              ? 'bg-amber-100 text-amber-900 border border-amber-200'
-                              : 'bg-slate-100 text-slate-700'
+                              ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                              : 'bg-[#F2F2F7] text-slate-600'
                           }`}
                         >
                           {doc.priority}
                         </span>
-
-                        <div className="flex items-center gap-1">
-                          {/* Corner Info Icon for uncluttered reading */}
-                          <button
-                            type="button"
-                            onClick={() => setInfoPopupDoc(doc)}
-                            className="w-7 h-7 rounded-full border border-slate-200 bg-slate-50 hover:bg-blue-50 text-slate-500 hover:text-[#003580] flex items-center justify-center transition-colors shadow-2xs"
-                            title="View document guidelines"
-                          >
-                            <Info className="w-3.5 h-3.5" />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleStartEditDoc(doc)}
-                            className="p-1 text-slate-400 hover:text-[#003580]"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onDeleteDoc(doc.id)}
-                            className="p-1 text-slate-400 hover:text-red-600"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
                       </div>
 
-                      <h4 className={`text-sm font-bold mt-2 ${doc.isPacked ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
-                        {doc.title}
-                      </h4>
-
-                      <div className="text-xs text-[#003580] font-semibold mt-2 bg-blue-50/60 p-2 rounded-xl truncate">
-                        📍 {doc.carryLocation}
+                      {/* Scannable Key-Value Row */}
+                      <div className="flex items-center gap-2 mt-1 text-[11px] text-[#8E8E93] flex-wrap">
+                        <span>📍 {doc.carryLocation}</span>
+                        <span>•</span>
+                        <span>🏛️ {doc.issuer}</span>
                       </div>
-                    </div>
-
-                    {/* Front Dots for Verification & Packed */}
-                    <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <button
-                          type="button"
-                          onClick={() => onToggleDocReady(doc.id)}
-                          className={`w-4 h-4 rounded-full transition-all flex items-center justify-center ${
-                            doc.isReady
-                              ? 'bg-emerald-500 ring-2 ring-emerald-200'
-                              : 'border-2 border-slate-300 hover:border-emerald-500 bg-white'
-                          }`}
-                        >
-                          {doc.isReady && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                        </button>
-                        <span className={`text-[11px] ${doc.isReady ? 'text-emerald-700 font-bold' : 'text-slate-600'}`}>
-                          {doc.isReady ? 'Verified' : 'Pending Check'}
-                        </span>
-                      </label>
-
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <button
-                          type="button"
-                          onClick={() => onToggleDocPacked(doc.id)}
-                          className={`w-4 h-4 rounded-full transition-all flex items-center justify-center ${
-                            doc.isPacked
-                              ? 'bg-[#003580] ring-2 ring-blue-200'
-                              : 'border-2 border-slate-300 hover:border-[#003580] bg-white'
-                          }`}
-                        >
-                          {doc.isPacked && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                        </button>
-                        <span className={`text-[11px] font-bold ${doc.isPacked ? 'text-[#003580]' : 'text-slate-400'}`}>
-                          {doc.isPacked ? 'Packed' : 'Unpacked'}
-                        </span>
-                      </label>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+
+                  {/* Actions & Single Circular iOS Checkmark Circle */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setInfoPopupDoc(doc)}
+                      className="w-6 h-6 rounded-full bg-[#F2F2F7] text-slate-500 hover:text-[#007AFF] flex items-center justify-center transition-colors"
+                      title="View guidelines"
+                    >
+                      <Info className="w-3.5 h-3.5" />
+                    </button>
+
+                    {isSectionEditMode && (
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditDoc(doc)}
+                        className="text-[#007AFF] text-xs font-semibold px-1 active:opacity-60"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleDoc(doc)}
+                      title={doc.isPacked ? 'Packed (Tap to unmark)' : 'Unpacked (Tap to mark packed)'}
+                      className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                        doc.isPacked
+                          ? 'bg-[#007AFF] text-white shadow-xs'
+                          : 'border-2 border-slate-300 hover:border-[#007AFF] bg-white'
+                      }`}
+                    >
+                      {doc.isPacked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* TAB 2: PROCEDURES & STEPS EDITOR */}
+      {/* TAB 2: PROCEDURES & STEPS */}
       {activeTab === 'procedures' && (
-        <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-            <div>
-              <h3 className="font-bold text-base text-slate-900">
-                Customs, Transit & University Steps
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Full ability to alter, edit, add, or remove steps as plans adjust
-              </p>
+        <div className="space-y-4">
+          {/* Summary Progress Card */}
+          <div className="ios-card p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider block">
+                  Campus & Transit Steps
+                </span>
+                <span className="text-xl font-bold text-slate-900">
+                  {doneStepsCount} of {procedureSteps.length} Steps Completed
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-2xl font-bold text-[#007AFF]">{stepProgress}%</span>
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowAddStep(!showAddStep)}
-              className="px-3.5 py-1.5 rounded-xl bg-[#003580] text-white text-xs font-bold hover:bg-[#00224f] transition-colors flex items-center gap-1 shadow-2xs self-start sm:self-auto"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Custom Step</span>
-            </button>
+            <div className="w-full bg-[#E5E5EA] h-2 rounded-full overflow-hidden">
+              <div
+                className="bg-[#007AFF] h-full rounded-full transition-all duration-300"
+                style={{ width: `${stepProgress}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-[#8E8E93] pt-1">
+              <span>Follow in sequence during transit and arrival</span>
+              {isSectionEditMode && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddStep(true)}
+                  className="text-[#007AFF] font-semibold flex items-center gap-1 active:opacity-60"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Step</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Stage Filter Buttons */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+          {/* Stage Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             {stages.map((st) => (
               <button
                 key={st.id}
                 type="button"
                 onClick={() => setSelectedStage(st.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors border ${
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                   selectedStage === st.id
-                    ? 'bg-[#003580] text-white border-[#003580]'
-                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    ? 'bg-[#007AFF] text-white shadow-xs'
+                    : 'bg-white text-slate-700 border border-black/5 hover:bg-slate-50'
                 }`}
               >
                 {st.name}
@@ -515,108 +474,41 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
             ))}
           </div>
 
-          {/* Add Step Form */}
-          {showAddStep && (
-            <form onSubmit={handleAddStepSubmit} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 text-xs">
-              <div className="font-bold text-slate-900">Add Procedure Step</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Target Stage</label>
-                  <select
-                    value={newStepStage}
-                    onChange={(e) => setNewStepStage(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
-                  >
-                    <option value="prep-srilanka">1. Sri Lanka Prep</option>
-                    <option value="airport-cmb">2. Colombo CMB Airport</option>
-                    <option value="transit-pvg">3. Shanghai PVG Layover</option>
-                    <option value="flight-hak">4. Haikou HAK Arrival</option>
-                    <option value="arrival-campus">5. University & Dorm Setup</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Category / Tag</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Dorm Setup, SIM Card"
-                    value={newStepCategory}
-                    onChange={(e) => setNewStepCategory(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Step Title</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Pick up electricity card from dorm supervisor"
-                  value={newStepTitle}
-                  onChange={(e) => setNewStepTitle(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Instructions / Details</label>
-                <textarea
-                  rows={2}
-                  placeholder="Details, location, or notes..."
-                  value={newStepDetail}
-                  onChange={(e) => setNewStepDetail(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowAddStep(false)}
-                  className="px-3 py-1.5 border border-slate-300 rounded-xl bg-white text-slate-600"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 bg-[#003580] text-white rounded-xl font-bold"
-                >
-                  Save Step
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* Procedure Steps List */}
-          <div className="space-y-3 pt-1">
+          {/* Steps List */}
+          <div className="ios-card divide-y divide-black/5 overflow-hidden">
             {filteredSteps.map((step) => {
               const isEditing = editingStepId === step.id;
 
               if (isEditing) {
                 return (
-                  <div key={step.id} className="p-4 bg-blue-50/60 border border-blue-400 rounded-2xl space-y-2 text-xs">
-                    <div className="font-bold text-slate-900">Edit / Alter Step</div>
+                  <div key={step.id} className="p-3.5 bg-blue-50/40 space-y-2 text-xs">
+                    <span className="font-semibold text-slate-900 block">Edit Procedure Step</span>
                     <input
                       type="text"
                       value={editStepTitle}
                       onChange={(e) => setEditStepTitle(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border border-blue-300 rounded-xl bg-white font-bold"
+                      className="w-full px-2.5 py-1.5 border border-black/10 rounded-lg bg-white"
+                      placeholder="Step title"
                     />
                     <textarea
                       rows={2}
                       value={editStepDetail}
                       onChange={(e) => setEditStepDetail(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border border-blue-300 rounded-xl bg-white"
+                      className="w-full px-2.5 py-1.5 border border-black/10 rounded-lg bg-white"
+                      placeholder="Instructions..."
                     />
                     <div className="flex justify-end gap-1.5 pt-1">
                       <button
                         type="button"
                         onClick={() => setEditingStepId(null)}
-                        className="px-2.5 py-1 border rounded-xl bg-white text-slate-600"
+                        className="px-2.5 py-1 rounded-lg bg-white border border-black/10 text-slate-600"
                       >
                         Cancel
                       </button>
                       <button
                         type="button"
                         onClick={() => handleSaveStepEdit(step.id)}
-                        className="px-3.5 py-1 rounded-xl bg-[#003580] text-white font-bold"
+                        className="px-3 py-1 rounded-lg bg-[#007AFF] text-white font-semibold"
                       >
                         Save
                       </button>
@@ -628,40 +520,53 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
               return (
                 <div
                   key={step.id}
-                  className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-start justify-between gap-3 transition-all ${
-                    step.isDone
-                      ? 'border-emerald-200 bg-emerald-50/20'
-                      : 'border-slate-200 bg-white hover:border-slate-300 shadow-2xs'
-                  }`}
+                  className="p-3 sm:p-3.5 flex items-start justify-between gap-3 bg-white hover:bg-slate-50/50 transition-colors"
                 >
                   <div className="flex items-start gap-3 min-w-0 flex-1">
+                    {/* Delete badge in edit mode */}
+                    {isSectionEditMode && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteStep(step.id)}
+                        className="mt-0.5 w-5 h-5 rounded-full bg-[#FF3B30] text-white flex items-center justify-center shrink-0 active:opacity-60 transition-opacity"
+                        title="Delete step"
+                      >
+                        <Minus className="w-3 h-3 stroke-[3]" />
+                      </button>
+                    )}
+
+                    {/* Step Checkbox */}
                     <button
                       type="button"
                       onClick={() => onToggleStepDone(step.id)}
-                      className={`mt-0.5 w-5 h-5 rounded-full transition-all flex items-center justify-center shrink-0 ${
+                      className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-all ${
                         step.isDone
-                          ? 'bg-emerald-500 ring-2 ring-emerald-200'
-                          : 'border-2 border-slate-300 hover:border-emerald-500 bg-white'
+                          ? 'bg-[#007AFF] text-white shadow-xs'
+                          : 'border-2 border-slate-300 hover:border-[#007AFF] bg-white'
                       }`}
                     >
-                      {step.isDone && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
+                      {step.isDone && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                     </button>
 
+                    {/* Step Details with Scannable Key-Value formatting */}
                     <div className="min-w-0 flex-1 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className={`text-xs sm:text-sm font-semibold ${
+                            step.isDone ? 'text-[#8E8E93] line-through' : 'text-slate-900'
+                          }`}
+                        >
+                          {step.title}
+                        </span>
+                        <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-[#F2F2F7] text-slate-600 border border-black/5">
                           {step.category}
                         </span>
                         {step.carryBag && (
-                          <span className="text-[10px] font-semibold text-[#003580] bg-blue-50 px-2 py-0.5 rounded-full">
+                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-blue-50 text-[#007AFF] border border-blue-100">
                             📍 {step.carryBag}
                           </span>
                         )}
                       </div>
-
-                      <h4 className={`text-sm font-bold ${step.isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
-                        {step.title}
-                      </h4>
 
                       <p className="text-xs text-slate-600 leading-relaxed">
                         {step.detail}
@@ -669,24 +574,15 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0 self-end sm:self-start">
+                  {isSectionEditMode && (
                     <button
                       type="button"
                       onClick={() => handleStartEditStep(step)}
-                      className="p-1.5 text-slate-400 hover:text-[#003580] rounded-xl hover:bg-slate-100"
-                      title="Edit this step"
+                      className="text-[#007AFF] text-xs font-semibold p-1 shrink-0 active:opacity-60"
                     >
-                      <Edit3 className="w-4 h-4" />
+                      <Edit3 className="w-3.5 h-3.5" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteStep(step.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-xl hover:bg-red-50"
-                      title="Delete this step"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  )}
                 </div>
               );
             })}
@@ -694,44 +590,209 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
         </div>
       )}
 
-      {/* Document Info Clean Popup */}
-      {infoPopupDoc && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-[#003580]" />
-                <h3 className="font-bold text-base text-slate-900">{infoPopupDoc.title}</h3>
-              </div>
+      {/* iOS Modal Sheet: Add Document */}
+      {showAddDoc && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end sm:justify-center sm:p-4 animate-in fade-in duration-200">
+          <form
+            onSubmit={handleAddDocSubmit}
+            className="bg-[#F2F2F7] rounded-t-3xl sm:rounded-3xl max-w-md w-full mx-auto overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+          >
+            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-md px-4 py-3 border-b border-black/10 flex items-center justify-between">
               <button
                 type="button"
-                onClick={() => setInfoPopupDoc(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600"
+                onClick={() => setShowAddDoc(false)}
+                className="text-[#007AFF] text-sm font-medium"
               >
-                <X className="w-4 h-4" />
+                Cancel
               </button>
-            </div>
-
-            <div className="space-y-2.5 text-xs text-slate-700 leading-relaxed">
-              <div><strong>Issuer:</strong> {infoPopupDoc.issuer}</div>
-              <div><strong>Carry Location:</strong> <span className="font-semibold text-[#003580]">{infoPopupDoc.carryLocation}</span></div>
-              <div><strong>Priority:</strong> {infoPopupDoc.priority}</div>
-              {infoPopupDoc.notes && (
-                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900">
-                  <strong>Special Guideline:</strong><br />
-                  {infoPopupDoc.notes}
-                </div>
-              )}
-            </div>
-
-            <div className="pt-2 flex justify-end">
+              <h3 className="font-semibold text-sm text-slate-900">Add Document</h3>
               <button
-                type="button"
-                onClick={() => setInfoPopupDoc(null)}
-                className="px-5 py-2 rounded-xl bg-[#003580] text-white text-xs font-bold"
+                type="submit"
+                className="text-[#007AFF] text-sm font-bold"
               >
                 Done
               </button>
+            </div>
+
+            <div className="p-4 space-y-3 overflow-y-auto flex-1">
+              <div className="ios-card p-3 space-y-3 text-xs">
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                    Document Title
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Police Clearance Certificate"
+                    value={newDocTitle}
+                    onChange={(e) => setNewDocTitle(e.target.value)}
+                    className="w-full px-3 py-2 border border-black/10 rounded-xl bg-[#F2F2F7] focus:bg-white focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                      Issuer
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Police HQ"
+                      value={newDocIssuer}
+                      onChange={(e) => setNewDocIssuer(e.target.value)}
+                      className="w-full px-2 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                      Priority
+                    </label>
+                    <select
+                      value={newDocPriority}
+                      onChange={(e) => setNewDocPriority(e.target.value as any)}
+                      className="w-full px-2 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
+                    >
+                      <option value="Critical">Critical</option>
+                      <option value="High">High</option>
+                      <option value="Medium">Medium</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                    Placement
+                  </label>
+                  <select
+                    value={newDocLocation}
+                    onChange={(e) => setNewDocLocation(e.target.value)}
+                    className="w-full px-2 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
+                  >
+                    <option value="Fanny Pack (Worn on Chest)">Fanny Pack (Worn on Chest)</option>
+                    <option value="A4 Waterproof Folder (Cabin Backpack)">A4 Waterproof Folder (Cabin Backpack)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* iOS Modal Sheet: Add Step */}
+      {showAddStep && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end sm:justify-center sm:p-4 animate-in fade-in duration-200">
+          <form
+            onSubmit={handleAddStepSubmit}
+            className="bg-[#F2F2F7] rounded-t-3xl sm:rounded-3xl max-w-md w-full mx-auto overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+          >
+            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-md px-4 py-3 border-b border-black/10 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setShowAddStep(false)}
+                className="text-[#007AFF] text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <h3 className="font-semibold text-sm text-slate-900">Add Procedure Step</h3>
+              <button
+                type="submit"
+                className="text-[#007AFF] text-sm font-bold"
+              >
+                Done
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3 overflow-y-auto flex-1">
+              <div className="ios-card p-3 space-y-3 text-xs">
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                    Stage
+                  </label>
+                  <select
+                    value={newStepStage}
+                    onChange={(e) => setNewStepStage(e.target.value as any)}
+                    className="w-full px-2 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
+                  >
+                    <option value="prep-srilanka">1. Sri Lanka Prep</option>
+                    <option value="airport-cmb">2. Colombo CMB Airport</option>
+                    <option value="transit-pvg">3. Shanghai PVG Layover</option>
+                    <option value="flight-hak">4. Haikou HAK Arrival</option>
+                    <option value="arrival-campus">5. University & Dorm Setup</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                    Step Title
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Register at International Student Office"
+                    value={newStepTitle}
+                    onChange={(e) => setNewStepTitle(e.target.value)}
+                    className="w-full px-3 py-2 border border-black/10 rounded-xl bg-[#F2F2F7] focus:bg-white focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                    Instructions & Details
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Location, requirements, timing..."
+                    value={newStepDetail}
+                    onChange={(e) => setNewStepDetail(e.target.value)}
+                    className="w-full px-3 py-2 border border-black/10 rounded-xl bg-[#F2F2F7] focus:bg-white focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* iOS Modal Sheet: Document Guidelines Popup */}
+      {infoPopupDoc && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end sm:justify-center sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-[#F2F2F7] rounded-t-3xl sm:rounded-3xl max-w-md w-full mx-auto overflow-hidden shadow-2xl flex flex-col">
+            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-md px-4 py-3 border-b border-black/10 flex items-center justify-between">
+              <h3 className="font-semibold text-sm text-slate-900 truncate pr-2">
+                {infoPopupDoc.title}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setInfoPopupDoc(null)}
+                className="text-[#007AFF] text-sm font-bold"
+              >
+                Done
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <div className="ios-card p-4 space-y-2 text-xs">
+                <div className="flex items-center justify-between border-b border-black/5 pb-2">
+                  <span className="text-[#8E8E93]">Issuing Authority</span>
+                  <span className="font-semibold text-slate-900">{infoPopupDoc.issuer}</span>
+                </div>
+                <div className="flex items-center justify-between border-b border-black/5 pb-2">
+                  <span className="text-[#8E8E93]">Carry Location</span>
+                  <span className="font-semibold text-[#007AFF]">{infoPopupDoc.carryLocation}</span>
+                </div>
+                <div className="flex items-center justify-between border-b border-black/5 pb-2">
+                  <span className="text-[#8E8E93]">Priority Status</span>
+                  <span className="font-semibold text-slate-900">{infoPopupDoc.priority}</span>
+                </div>
+                {infoPopupDoc.notes && (
+                  <div className="pt-1 text-slate-700 leading-relaxed">
+                    <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider block mb-0.5">
+                      Special Guideline
+                    </span>
+                    {infoPopupDoc.notes}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

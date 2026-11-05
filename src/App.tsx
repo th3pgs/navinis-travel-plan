@@ -367,19 +367,13 @@ export function App() {
   }
 
   // Inventory stats
+  // Inventory stats - Standard 0-100% Math (Requirement #4)
   const totalPhysicalItems = bags.length + devices.length + wardrobe.length;
-  const totalAcquiredItems =
-    bags.filter((b) => b.isBought).length +
-    devices.filter((d) => d.isBought).length +
-    wardrobe.filter((w) => w.isBought).length;
   const totalPackedItems =
     bags.filter((b) => b.isPacked).length +
     devices.filter((d) => d.isPacked).length +
     wardrobe.filter((w) => w.isPacked).length;
-
-  const acquiredPercent = Math.round((totalAcquiredItems / (totalPhysicalItems || 1)) * 100);
-  const packedPercent = Math.round((totalPackedItems / (totalPhysicalItems || 1)) * 100);
-  const dualTotalPercent = acquiredPercent + packedPercent; // out of 200%
+  const physicalPercent = Math.round((totalPackedItems / (totalPhysicalItems || 1)) * 100);
 
   const unboughtCount =
     bags.filter((b) => !b.isBought).length +
@@ -387,28 +381,31 @@ export function App() {
     wardrobe.filter((w) => !w.isBought).length;
 
   const packedDocs = documents.filter((d) => d.isPacked).length;
+  const docPercent = Math.round((packedDocs / (documents.length || 1)) * 100);
   const doneSteps = procedureSteps.filter((s) => s.isDone).length;
+
   const configuredApps = apps.filter((a) => a.isConfigured).length;
+  const appPercent = Math.round((configuredApps / (apps.length || 1)) * 100);
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 pb-20 font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-[#F2F2F7] text-slate-900 pb-20 font-sans overflow-x-hidden">
       {/* 1. APPLE STYLE TRANSLUCENT TOP NAVIGATION BAR */}
-      <header className="bg-white/85 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 w-full transition-all">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+      <header className="bg-white/90 backdrop-blur-md border-b border-black/10 sticky top-0 z-40 w-full transition-all">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between gap-3">
           {/* Logo & Brand */}
           <button
             type="button"
             onClick={() => navigateToView('overview')}
             className="flex items-center gap-2.5 text-left group"
           >
-            <div className="w-8 h-8 rounded-xl bg-[#003580] text-white flex items-center justify-center font-black text-xs shadow-xs">
+            <div className="w-7 h-7 rounded-lg bg-[#007AFF] text-white flex items-center justify-center font-bold text-xs shadow-2xs">
               NP
             </div>
             <div>
-              <span className="font-extrabold text-sm sm:text-base tracking-tight text-slate-900 block leading-tight">
+              <span className="font-bold text-sm sm:text-base tracking-tight text-slate-900 block leading-tight">
                 Navini's Travel Plan
               </span>
-              <span className="text-[10px] text-slate-500 hidden sm:block">
+              <span className="text-[10px] text-[#8E8E93] hidden sm:block">
                 Colombo &rarr; Shanghai &rarr; Haikou
               </span>
             </div>
@@ -421,37 +418,37 @@ export function App() {
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold"
               title="All checklists and records are safely preserved"
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="hidden sm:inline">Active & Saved</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="hidden sm:inline">Active</span>
             </div>
 
             <button
               type="button"
               onClick={() => setShowTaxiModal(true)}
-              className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs transition-colors shadow-2xs"
+              className="px-3 py-1.5 rounded-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-semibold text-xs transition-colors shadow-2xs"
             >
-              Taxi Pocket Card
+              🚕 Taxi Card
             </button>
 
             {/* Hamburger Button for Apple Sidebar */}
             <button
               type="button"
               onClick={() => setIsSidebarOpen(true)}
-              className="w-9 h-9 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center transition-colors shadow-2xs"
+              className="w-8 h-8 rounded-full border border-black/10 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center transition-colors shadow-2xs"
               title="Open menu"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-4 h-4" />
             </button>
           </div>
         </div>
       </header>
 
       {/* 2. MAIN WORKSPACE CONTAINER */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-5">
         {/* OVERVIEW VIEW */}
         {currentView === 'overview' && (
-          <div className="space-y-6 animate-in fade-in duration-200">
-            {/* SECTION 1: MODERN STUDENT PROFILE CARD (Separate, No Frame) */}
+          <div className="space-y-5 animate-in fade-in duration-200">
+            {/* SECTION 1: MODERN STUDENT PROFILE CARD */}
             <section>
               <StudentProfileCard
                 passportInfo={passportInfo}
@@ -464,41 +461,41 @@ export function App() {
               <FlightItineraryCard />
             </section>
 
-            {/* SECTION 3: THREE CLEAN SQUARE HUB CARDS */}
+            {/* SECTION 3: THREE CLEAN SQUARE HUB CARDS (0-100% Math, Requirement #4) */}
             <section>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                 {/* Hub 1: Physical Gear & Wardrobe */}
                 <button
                   type="button"
                   onClick={() => navigateToView('physical')}
-                  className="p-6 rounded-3xl border border-slate-200/90 bg-white hover:border-[#003580] hover:shadow-md transition-all text-left flex flex-col justify-between group"
+                  className="ios-card p-4 sm:p-5 text-left flex flex-col justify-between hover:border-[#007AFF]/40 active:opacity-90 transition-all group"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#003580] flex items-center justify-center font-bold shadow-2xs group-hover:bg-[#003580] group-hover:text-white transition-colors">
-                        <Luggage className="w-6 h-6" />
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#007AFF] flex items-center justify-center font-bold shadow-2xs group-hover:bg-[#007AFF] group-hover:text-white transition-colors">
+                        <Luggage className="w-5 h-5" />
                       </div>
-                      <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-[#003580] transition-colors" />
+                      <span className="text-xl font-bold text-[#007AFF]">{physicalPercent}%</span>
                     </div>
 
-                    <h3 className="text-base font-bold text-slate-900 group-hover:text-[#003580] transition-colors">
-                      Luggage, Clothes & Tech
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#007AFF] transition-colors">
+                      Luggage & Wardrobe
                     </h3>
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                      4 bags allocation, clothing wardrobe studio, and connected electronics.
+                    <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
+                      4 bags allocation, visual wardrobe emoji grid, and electronics.
                     </p>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <span className="font-mono text-slate-600 font-semibold">
-                      Readiness: <strong>{dualTotalPercent}/200%</strong>
+                  <div className="mt-3.5 pt-2.5 border-t border-black/5 flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700">
+                      {totalPackedItems}/{totalPhysicalItems} Packed
                     </span>
                     {unboughtCount > 0 ? (
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 border border-red-200">
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-800">
                         {unboughtCount} To Buy
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                         All Owned
                       </span>
                     )}
@@ -509,29 +506,29 @@ export function App() {
                 <button
                   type="button"
                   onClick={() => navigateToView('documents')}
-                  className="p-6 rounded-3xl border border-slate-200/90 bg-white hover:border-[#003580] hover:shadow-md transition-all text-left flex flex-col justify-between group"
+                  className="ios-card p-4 sm:p-5 text-left flex flex-col justify-between hover:border-[#007AFF]/40 active:opacity-90 transition-all group"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold shadow-2xs group-hover:bg-[#003580] group-hover:text-white transition-colors">
-                        <FileText className="w-6 h-6" />
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold shadow-2xs group-hover:bg-[#007AFF] group-hover:text-white transition-colors">
+                        <FileText className="w-5 h-5" />
                       </div>
-                      <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-[#003580] transition-colors" />
+                      <span className="text-xl font-bold text-[#007AFF]">{docPercent}%</span>
                     </div>
 
-                    <h3 className="text-base font-bold text-slate-900 group-hover:text-[#003580] transition-colors">
-                      Documents & Campus Steps
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#007AFF] transition-colors">
+                      Documents & Steps
                     </h3>
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                    <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
                       Original credentials, physical exam forms, and alterable early registration steps.
                     </p>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <span className="font-mono text-slate-600 font-semibold">
+                  <div className="mt-3.5 pt-2.5 border-t border-black/5 flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700">
                       {packedDocs}/{documents.length} Docs Packed
                     </span>
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
                       {doneSteps}/{procedureSteps.length} Steps Done
                     </span>
                   </div>
@@ -541,29 +538,29 @@ export function App() {
                 <button
                   type="button"
                   onClick={() => navigateToView('connectivity')}
-                  className="p-6 rounded-3xl border border-slate-200/90 bg-white hover:border-[#003580] hover:shadow-md transition-all text-left flex flex-col justify-between group"
+                  className="ios-card p-4 sm:p-5 text-left flex flex-col justify-between hover:border-[#007AFF]/40 active:opacity-90 transition-all group"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold shadow-2xs group-hover:bg-[#003580] group-hover:text-white transition-colors">
-                        <Globe2 className="w-6 h-6" />
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold shadow-2xs group-hover:bg-[#007AFF] group-hover:text-white transition-colors">
+                        <Globe2 className="w-5 h-5" />
                       </div>
-                      <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-[#003580] transition-colors" />
+                      <span className="text-xl font-bold text-[#007AFF]">{appPercent}%</span>
                     </div>
 
-                    <h3 className="text-base font-bold text-slate-900 group-hover:text-[#003580] transition-colors">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#007AFF] transition-colors">
                       Internet, Apps & Chat
                     </h3>
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                    <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
                       Bypass proxies, stock academic AI apps, and pre-written WeChat templates.
                     </p>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <span className="font-mono text-slate-600 font-semibold">
+                  <div className="mt-3.5 pt-2.5 border-t border-black/5 flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700">
                       {configuredApps}/{apps.length} Apps Ready
                     </span>
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                       WeChat Ready
                     </span>
                   </div>
