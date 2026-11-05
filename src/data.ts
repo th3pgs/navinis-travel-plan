@@ -9,26 +9,47 @@ export interface ChecklistItem {
 
 export interface TaskItem {
   id: string;
-  stage: 'prep-srilanka' | 'airport-cmb' | 'transit-pvg' | 'flight-hak' | 'arrival-campus';
+  stage: string;
   category: string;
   title: string;
   detail?: string;
   location?: string;
   status?: string;
-  isReady: boolean;   // Line 1: Ready / Bought / Verified at Home
-  isPacked: boolean;  // Line 2: Physically Packed / In Hand
+  isReady: boolean;
+  isPacked: boolean;
   isEditable?: boolean;
-  appIcon?: string;   // Brand SVG identifier: wechat, alipay, didi, shadowrocket, v2rayng, clash, pleco, baidu, deepl, meituan, trip, bank, doc
+  appIcon?: string;
+}
+
+export interface TimelineEvent {
+  id: string;
+  dayBadge: string;
+  dateStr: string;
+  title: string;
+  subtitle: string;
+  status: 'upcoming' | 'current' | 'future';
+  isReady: boolean;
+  isPacked: boolean;
+  items: {
+    id: string;
+    label: string;
+    detail?: string;
+    isDone: boolean;
+    appIcon?: string;
+    targetBag?: string;
+    mustContactBuddy?: boolean;
+  }[];
 }
 
 export interface WardrobeItem {
   id: string;
   name: string;
-  category: string;
+  category: any;
   quantity: number;
-  targetBag: string;
+  targetBag: any;
   isBought: boolean;
   isPacked: boolean;
+  colorHex?: string;
   notes?: string;
 }
 
@@ -39,7 +60,7 @@ export interface DeviceAsset {
   role: string;
   carrierOrOs: string;
   carryLocation: string;
-  isBought: boolean;  // Red if unbought, Green if bought
+  isBought: boolean;
   isPacked: boolean;
   type: 'phone-ios' | 'phone-android' | 'laptop' | 'tablet' | 'earbuds' | 'powerbank';
 }
@@ -52,9 +73,20 @@ export interface BagAsset {
   weightLimit: string;
   targetBag: string;
   recommendedContents: string;
-  isBought: boolean;  // Red if unbought, Green if bought
+  isBought: boolean;
   isPacked: boolean;
   kind: 'rolling-large' | 'rolling-medium' | 'backpack' | 'fannypack';
+}
+
+export interface InternetAppItem {
+  id: string;
+  platform: 'iOS' | 'Android' | 'Windows';
+  name: string;
+  category: 'Firewall Bypass' | 'Essential Daily' | 'AI & Academic' | 'Transit & Maps';
+  role: string;
+  isInstalled: boolean;
+  isConfigured: boolean;
+  appIcon: string;
 }
 
 export const INITIAL_BAGS: BagAsset[] = [
@@ -63,9 +95,9 @@ export const INITIAL_BAGS: BagAsset[] = [
     name: 'Main Large Rolling Suitcase',
     type: 'Checked Bag 1',
     dimensions: '30 × 40 × 70 cm',
-    weightLimit: '23 kg Included (China Eastern)',
+    weightLimit: '23 kg (China Eastern)',
     targetBag: 'Checked at Colombo',
-    recommendedContents: 'Heavy clothes, dresses, winter wear, full-size liquids (>100ml), flattened 43cm school bag. Strict rule: NO lithium batteries or original documents.',
+    recommendedContents: 'Heavy clothes, dresses, winter wear, full-size liquids (>100ml), flattened blue school bag. NO batteries or original certificates!',
     isBought: true,
     isPacked: false,
     kind: 'rolling-large',
@@ -75,7 +107,7 @@ export const INITIAL_BAGS: BagAsset[] = [
     name: 'Medium Rolling Suitcase',
     type: 'Checked Bag 2',
     dimensions: '27 × 41 × 57 cm',
-    weightLimit: '23 kg Included (China Eastern)',
+    weightLimit: '23 kg (China Eastern)',
     targetBag: 'Checked at Colombo',
     recommendedContents: 'Secondary wardrobe, jackets, lab footwear, dorm bathroom slippers (top layer), Sri Lankan spices, emergency clothing set. Check this bag in.',
     isBought: true,
@@ -87,10 +119,10 @@ export const INITIAL_BAGS: BagAsset[] = [
     name: 'Structured Tech Laptop Backpack',
     type: 'Carry-On Backpack',
     dimensions: '~45 cm (25–30L Structured)',
-    weightLimit: 'Cabin Carry-On (With Passenger)',
+    weightLimit: 'Cabin Carry-On (With passenger)',
     targetBag: 'Primary Cabin Carry-On',
-    recommendedContents: 'Dell Latitude 5410, Apple iPad 11, Soundcore Earbuds, CCC Power Bank (10,000mAh+), universal adapter, cables, A4 waterproof folder, 1 sweater.',
-    isBought: false, // NOT BOUGHT YET -> Shows Red badge until marked bought!
+    recommendedContents: 'Dell Latitude 5410, Apple iPad 11, Anker Soundcore Earbuds, CCC Power Bank (10,000mAh+), universal adapter, cables, A4 waterproof folder, 1 sweater.',
+    isBought: false, // Highlighted Red until marked bought
     isPacked: false,
     kind: 'backpack',
   },
@@ -114,7 +146,7 @@ export const INITIAL_DEVICES: DeviceAsset[] = [
     name: 'iPhone 17',
     model: 'Primary Daily Phone',
     role: 'Saily/Airalo Travel eSIM + Shadowrocket + Alipay & WeChat Pay',
-    carrierOrOs: 'iOS 20 • Travel eSIM',
+    carrierOrOs: 'iOS 20 • Saily eSIM',
     carryLocation: 'Fanny Pack (Chest)',
     isBought: true,
     isPacked: false,
@@ -167,384 +199,434 @@ export const INITIAL_DEVICES: DeviceAsset[] = [
   {
     id: 'dev-6',
     name: '10,000mAh+ CCC Power Bank',
-    model: 'Safety Certified Battery',
-    role: 'Aviation Rule: MUST carry in cabin backpack. Confiscated if placed in checked luggage!',
+    model: 'Certified External Battery',
+    role: 'Aviation Rule: MUST carry in cabin backpack. Confiscated if checked!',
     carrierOrOs: 'CCC / CE Certified Mark',
-    carryLocation: 'Cabin Carry-On Backpack',
-    isBought: false, // NOT BOUGHT YET -> Shows Red badge until marked bought!
+    carryLocation: 'Backpack (NEVER Checked)',
+    isBought: false, // Highlighted Red until marked bought
     isPacked: false,
     type: 'powerbank',
   },
 ];
 
-export const INITIAL_TASKS: TaskItem[] = [
-  // --- 1. PREPARATION IN SRI LANKA ---
+export const INITIAL_TIMELINE: TimelineEvent[] = [
   {
-    id: 'task-doc-passport',
-    stage: 'prep-srilanka',
-    category: 'Essential Documents',
-    title: 'Original Passport with Valid Chinese X1 Visa',
-    detail: 'Double check passport is undamaged with entry visa intact. Carry 4 printed passport photos matching the visa.',
-    location: 'Fanny Pack (Chest)',
-    isReady: true,
-    isPacked: false,
-    appIcon: 'doc',
-  },
-  {
-    id: 'task-doc-notice',
-    stage: 'prep-srilanka',
-    category: 'Essential Documents',
-    title: 'Admission Notice #263660001 & JW202 Form',
-    detail: 'Printed Chinese stamped original Page 1 + English Page 2, and official JW202 visa approval form.',
-    location: 'A4 Waterproof Folder (Backpack)',
-    isReady: true,
-    isPacked: false,
-    appIcon: 'doc',
-  },
-  {
-    id: 'task-doc-med',
-    stage: 'prep-srilanka',
-    category: 'Essential Documents',
-    title: 'ORIGINAL Physical Exam Form & Blood Test Reports',
-    detail: 'Hospital stamped Foreigner Physical Examination form and blood test laboratory slips. Required for campus health check.',
-    location: 'A4 Waterproof Folder (Backpack)',
-    isReady: true,
-    isPacked: false,
-    appIcon: 'doc',
-  },
-  {
-    id: 'task-doc-deg',
-    stage: 'prep-srilanka',
-    category: 'Essential Documents',
-    title: 'Original Bachelor Degree Certificate & Transcripts',
-    detail: 'Original degree diploma plus certified English translations / notarized copies.',
-    location: 'A4 Waterproof Folder (Backpack)',
-    isReady: true,
-    isPacked: false,
-    appIcon: 'doc',
-  },
-  {
-    id: 'task-buy-backpack',
-    stage: 'prep-srilanka',
-    category: 'Purchases & Gear',
-    title: 'Buy Structured 25–30L Travel Backpack (~45cm)',
-    detail: 'Must feature padded laptop sleeve for Dell 5410 & iPad 11, A4 document compartment, and luggage handle pass-through strap.',
-    location: 'To Buy in Colombo',
+    id: 'time-fri-nov6',
+    dayBadge: 'Tomorrow • Friday',
+    dateStr: 'November 6, 2026',
+    title: 'Financial Deadlines & Sri Lanka Banking Close',
+    subtitle: 'Branches close for the weekend this afternoon. Lock in international unlocks before 3:00 PM.',
+    status: 'current',
     isReady: false,
     isPacked: false,
-    appIcon: 'bag',
+    items: [
+      {
+        id: 't-fri-1',
+        label: 'Visit BOC, People\'s Bank & NSB Branches',
+        detail: 'Submit formal Foreign Study Declaration (Nov 2026 – July 2029) with Admission Notice copy.',
+        isDone: false,
+        appIcon: 'bank',
+      },
+      {
+        id: 't-fri-2',
+        label: 'Unlock International E-Commerce & POS/ATM on All Cards',
+        detail: 'Explicitly request international authorization so Chinese IP transactions are not frozen.',
+        isDone: false,
+        appIcon: 'bank',
+      },
+      {
+        id: 't-fri-3',
+        label: 'Exchange 1,000–2,000 Physical RMB Cash',
+        detail: 'Obtain smaller 50 & 100 RMB notes for Haikou airport taxi and campus deposits.',
+        isDone: false,
+        appIcon: 'bank',
+        targetBag: 'Fanny Pack',
+      },
+      {
+        id: 't-fri-4',
+        label: 'Buy Structured Carry-On Backpack (~45cm) & CCC Power Bank',
+        detail: 'Check for clearly marked 10,000mAh+ capacity and factory CCC/CE safety logo.',
+        isDone: false,
+        appIcon: 'battery',
+      },
+      {
+        id: 't-fri-5',
+        label: 'WeChat Touchpoint: Message Student Support Buddy & Ms. Sun',
+        detail: 'Confirm arrival date/flight MU6381 and ask about campus gate and airport taxi queue.',
+        isDone: false,
+        appIcon: 'wechat',
+        mustContactBuddy: true,
+      },
+    ],
   },
   {
-    id: 'task-buy-powerbank',
-    stage: 'prep-srilanka',
-    category: 'Purchases & Gear',
-    title: 'Buy 10,000mAh+ CCC Certified Power Bank',
-    detail: 'Factory markings and CCC/CE logo must be clearly printed. Confiscated at Shanghai security if faded or missing.',
-    location: 'To Buy in Colombo',
+    id: 'time-sat-nov7',
+    dayBadge: 'Saturday',
+    dateStr: 'November 7, 2026',
+    title: 'Dry Run, Packing Audit & Digital Test Drill',
+    subtitle: 'Full operational drill: weigh suitcases, test VPN configs on Wi-Fi, verify OTP receipt.',
+    status: 'upcoming',
     isReady: false,
     isPacked: false,
-    appIcon: 'battery',
+    items: [
+      {
+        id: 't-sat-1',
+        label: 'Digital Test Run: Test OTP on Samsung S20 FE',
+        detail: 'Test Dialog SMS roaming while in Colombo. Ensure Mobile Data & Data Roaming are permanently OFF.',
+        isDone: false,
+        appIcon: 'dialog',
+      },
+      {
+        id: 't-sat-2',
+        label: 'Proxy Subscriptions Verified on All 4 Devices',
+        detail: 'Test Shadowrocket (iPhone/iPad), v2rayNG (Samsung), and Clash Verge Rev (Dell).',
+        isDone: false,
+        appIcon: 'shadowrocket',
+      },
+      {
+        id: 't-sat-3',
+        label: 'Pack & Weigh Suitcase 1 (30×40×70cm) — Max 23kg',
+        detail: 'Heavy clothes, dresses, winter jacket, flattened school bag. No batteries or papers!',
+        isDone: false,
+        appIcon: 'bag',
+        targetBag: 'Large Suitcase',
+      },
+      {
+        id: 't-sat-4',
+        label: 'Pack & Weigh Suitcase 2 (27×41×57cm) — Max 23kg',
+        detail: 'Secondary clothes, slippers on top layer, umbrella, Sri Lankan snacks. Lock both bags.',
+        isDone: false,
+        appIcon: 'bag',
+        targetBag: 'Medium Suitcase',
+      },
+      {
+        id: 't-sat-5',
+        label: 'A4 Waterproof Folder Sealed Inside Laptop Backpack',
+        detail: 'Original Medical Exam Form with hospital stamps, Blood Test Report, JW202, Degree Certificate.',
+        isDone: false,
+        appIcon: 'doc',
+        targetBag: 'Laptop Backpack',
+      },
+      {
+        id: 't-sat-6',
+        label: 'Charge All 6 Devices & 10,000mAh Power Bank to 100%',
+        detail: 'iPhone 17, Samsung S20 FE, Dell 5410, iPad 11, Soundcore Earbuds, Power Bank.',
+        isDone: false,
+        appIcon: 'battery',
+      },
+    ],
   },
   {
-    id: 'task-bank-declare',
-    stage: 'prep-srilanka',
-    category: 'Banking & Currency',
-    title: 'Foreign Study Declaration (BOC, People\'s Bank, NSB)',
-    detail: 'Submit formal notice that you are studying in China (Nov 2026 – July 2029) to prevent account fraud freezing.',
-    location: 'Branch visit before Friday close',
+    id: 'time-sun-nov8',
+    dayBadge: 'Departure Day • Sunday',
+    dateStr: 'November 8, 2026 (17:20 CMB & 20:50 Takeoff)',
+    title: 'Colombo Airport Departure (Flight MU6018)',
+    subtitle: 'Arrive at Bandaranaike International Airport 3.5 hours before flight. Keep lifeline fanny pack on body.',
+    status: 'future',
     isReady: false,
     isPacked: false,
-    appIcon: 'bank',
+    items: [
+      {
+        id: 't-sun-1',
+        label: '17:20 — Arrive at Colombo CMB International Terminal',
+        detail: 'Have passport with X1 Visa, E-Ticket #7812903731438, and PNR JKZ2YN ready in Fanny Pack.',
+        isDone: false,
+        appIcon: 'doc',
+      },
+      {
+        id: 't-sun-2',
+        label: 'Check in Both Suitcases (30×40×70cm & 27×41×57cm)',
+        detail: 'Confirm baggage tags show transfer via Shanghai PVG. Keep carry-on backpack on back.',
+        isDone: false,
+        appIcon: 'trip',
+      },
+      {
+        id: 't-sun-3',
+        label: 'Security Scan: Laptop, iPad & Power Bank in Carry-On',
+        detail: 'Place Dell 5410, iPad 11, and CCC power bank in inspection trays. NEVER check power banks.',
+        isDone: false,
+        appIcon: 'battery',
+      },
+      {
+        id: 't-sun-4',
+        label: '20:50 — China Eastern Flight MU6018 Takes Off to Shanghai',
+        detail: 'Airbus A330-200. Wear comfortable joggers and cushioned sneakers. Keep jacket handy.',
+        isDone: false,
+        appIcon: 'trip',
+      },
+    ],
   },
   {
-    id: 'task-bank-unlock',
-    stage: 'prep-srilanka',
-    category: 'Banking & Currency',
-    title: 'Unlock International E-Commerce & ATM POS',
-    detail: 'Instruct all 3 banks to permit recurring international transactions and online charges from Chinese IPs.',
-    location: 'Card Management / Phone Banking',
+    id: 'time-mon-pvg',
+    dayBadge: 'Transit Day • Monday Morning',
+    dateStr: 'November 9, 2026 (06:05 – 10:55 Shanghai PVG T1)',
+    title: 'Shanghai Pudong Transfer (4h 50m Layover)',
+    subtitle: 'International-to-Domestic transfer protocol. Chinese border clearance and mandatory bag re-check.',
+    status: 'future',
     isReady: false,
     isPacked: false,
-    appIcon: 'bank',
+    items: [
+      {
+        id: 't-pvg-1',
+        label: '06:05 — Touchdown Shanghai PVG T1: Switch to eSIM',
+        detail: 'Toggle Saily/Airalo China eSIM line ON on iPhone 17. Verify data connectivity immediately.',
+        isDone: false,
+        appIcon: 'dialog',
+      },
+      {
+        id: 't-pvg-2',
+        label: 'Clear Chinese Immigration & Border Control',
+        detail: 'Complete blue arrival card. Present Passport with X1 Visa & Admission Notice #263660001.',
+        isDone: false,
+        appIcon: 'doc',
+      },
+      {
+        id: 't-pvg-3',
+        label: 'MANDATORY: Collect BOTH Checked Suitcases at Baggage Belts',
+        detail: 'Retrieve the 30×40×70cm and 27×41×57cm suitcases from International Baggage Claim.',
+        isDone: false,
+        appIcon: 'bag',
+      },
+      {
+        id: 't-pvg-4',
+        label: 'Clear Customs & Drop Bags at China Eastern Domestic Transfer Desk',
+        detail: 'Re-check both suitcases for Flight MU6381 to Haikou (departs at 10:55).',
+        isDone: false,
+        appIcon: 'bag',
+      },
+      {
+        id: 't-pvg-5',
+        label: 'WeChat Touchpoint: Message Ms. Sun & Student Support Buddy',
+        detail: 'Confirm successful transit through Shanghai customs and boarding gate for MU6381.',
+        isDone: false,
+        appIcon: 'wechat',
+        mustContactBuddy: true,
+      },
+      {
+        id: 't-pvg-6',
+        label: '10:55 — Board Flight MU6381 to Haikou Meilan (HAK)',
+        detail: 'Boeing 737-800 domestic flight to Hainan Island (~3 hours 40 minutes).',
+        isDone: false,
+        appIcon: 'trip',
+      },
+    ],
   },
   {
-    id: 'task-bank-cash',
-    stage: 'prep-srilanka',
-    category: 'Banking & Currency',
-    title: 'Physical RMB Cash (1,000 – 2,000 RMB)',
-    detail: 'Carry 50 & 100 RMB banknotes for Haikou airport metered taxi and initial campus security deposits.',
-    location: 'Fanny Pack (Zippered pocket)',
+    id: 'time-mon-hak',
+    dayBadge: 'Arrival Day • Monday Afternoon',
+    dateStr: 'November 9, 2026 (14:35 HAK & Campus Setup)',
+    title: 'Haikou Landing & Hainan University Arrival',
+    subtitle: 'Domestic arrival. Outdoor taxi queue directly to Haidian campus before afternoon office close.',
+    status: 'future',
     isReady: false,
     isPacked: false,
-    appIcon: 'bank',
+    items: [
+      {
+        id: 't-hak-1',
+        label: '14:35 — Land at Haikou Meilan Airport (HAK) Terminal 1',
+        detail: '100% domestic arrival. No immigration or customs in Haikou! Follow Baggage Claim signs.',
+        isDone: false,
+        appIcon: 'trip',
+      },
+      {
+        id: 't-hak-2',
+        label: 'Collect Both Suitcases from Luggage Carousel',
+        detail: 'Load 30×40×70cm & 27×41×57cm suitcases onto free airport luggage cart.',
+        isDone: false,
+        appIcon: 'bag',
+      },
+      {
+        id: 't-hak-3',
+        label: 'Join Official Outdoor Taxi Queue & Show Destination Pocket Card',
+        detail: 'Follow overhead Taxi signs. Hand the Chinese Driver Card to dispatcher and driver (~50–80 RMB).',
+        isDone: false,
+        appIcon: 'didi',
+      },
+      {
+        id: 't-hak-4',
+        label: 'WeChat Touchpoint: Share Live Location & Taxi Plate with Buddy',
+        detail: 'Turn on WeChat live location so your buddy can meet you at Haidian campus gate in 35–45 mins.',
+        isDone: false,
+        appIcon: 'wechat',
+        mustContactBuddy: true,
+      },
+      {
+        id: 't-hak-5',
+        label: 'Meet Buddy at Campus Gate (人民大道58号) & Dorm Check-in',
+        detail: 'Receive dormitory room key card, test air conditioning, and unpack essentials.',
+        isDone: false,
+        appIcon: 'doc',
+      },
+      {
+        id: 't-hak-6',
+        label: 'School of International Education Registration (Ms. Sun)',
+        detail: 'Submit Page 1 stamped Admission Notice, JW202, degree certificates, and confirm full scholarship.',
+        isDone: false,
+        appIcon: 'doc',
+      },
+    ],
   },
+];
+
+export const INITIAL_INTERNET_APPS: InternetAppItem[] = [
+  // FireWall Bypass & Proxy
   {
-    id: 'task-sim-dialog',
-    stage: 'prep-srilanka',
-    category: 'Phone & SIM',
-    title: 'Dialog SMS Roaming Active on Samsung S20 FE',
-    detail: 'Confirm incoming SMS works. Ensure Mobile Data and Data Roaming are permanently OFF in Samsung settings.',
-    location: 'Samsung S20 FE Settings',
-    isReady: false,
-    isPacked: false,
-    appIcon: 'dialog',
-  },
-  {
-    id: 'task-apps-wechat',
-    stage: 'prep-srilanka',
-    category: 'WeChat Ecosystem',
-    title: 'WeChat Real-Name Passport Verification & Bank Binding',
-    detail: 'Verify passport details in WeChat Wallet. Add Ms. Sun (sun_admission) and your student support buddy.',
-    location: 'iPhone 17 & iPad 11',
-    isReady: false,
-    isPacked: false,
-    appIcon: 'wechat',
-  },
-  {
-    id: 'task-apps-alipay',
-    stage: 'prep-srilanka',
-    category: 'Alipay Ecosystem',
-    title: 'Alipay Real-Name Verification & Bind Sri Lankan Cards',
-    detail: 'Upload passport bio page. Add BOC/People\'s Bank Visa/Mastercard. Open DiDi Travel mini-program once.',
-    location: 'iPhone 17',
-    isReady: false,
-    isPacked: false,
-    appIcon: 'alipay',
-  },
-  {
-    id: 'task-apps-vpn',
-    stage: 'prep-srilanka',
-    category: 'Proxy & Connectivity',
-    title: 'Shadowrocket, v2rayNG & Clash Verge Rev Subscriptions',
-    detail: 'Load active Ji Chang node subscription on iPhone 17, iPad 11, Samsung S20 FE, and Dell laptop before flight.',
-    location: 'All 4 Devices',
-    isReady: false,
-    isPacked: false,
+    id: 'app-shadowrocket',
+    platform: 'iOS',
+    name: 'Shadowrocket',
+    category: 'Firewall Bypass',
+    role: 'Primary iOS rule-based proxy client with Ji Chang subscription imported.',
+    isInstalled: true,
+    isConfigured: true,
     appIcon: 'shadowrocket',
   },
   {
-    id: 'task-apps-didi',
-    stage: 'prep-srilanka',
-    category: 'Ride-Hailing & Navigation',
-    title: 'DiDi English & Baidu Maps / MetroMan',
-    detail: 'Install standalone DiDi English app and download offline transit map packs inside MetroMan.',
-    location: 'iPhone 17',
-    isReady: false,
-    isPacked: false,
+    id: 'app-v2rayng',
+    platform: 'Android',
+    name: 'v2rayNG',
+    category: 'Firewall Bypass',
+    role: 'Android proxy client for Samsung S20 FE with backup Ji Chang nodes.',
+    isInstalled: true,
+    isConfigured: true,
+    appIcon: 'shadowrocket',
+  },
+  {
+    id: 'app-clash',
+    platform: 'Windows',
+    name: 'Clash Verge Rev',
+    category: 'Firewall Bypass',
+    role: 'Windows Research research proxy with System Proxy & TUN Mode on Dell Latitude 5410.',
+    isInstalled: true,
+    isConfigured: true,
+    appIcon: 'shadowrocket',
+  },
+
+  // Essential Chinese Ecosystem
+  {
+    id: 'app-wechat',
+    platform: 'iOS',
+    name: 'WeChat (微信)',
+    category: 'Essential Daily',
+    role: 'Daily campus lifeline, faculty messaging with Ms. Sun, and student buddy voice calls.',
+    isInstalled: true,
+    isConfigured: true,
+    appIcon: 'wechat',
+  },
+  {
+    id: 'app-alipay',
+    platform: 'iOS',
+    name: 'Alipay (支付宝)',
+    category: 'Essential Daily',
+    role: 'Primary QR mobile payment bound to Sri Lankan Visa/Mastercards + DiDi Mini-program.',
+    isInstalled: true,
+    isConfigured: true,
+    appIcon: 'alipay',
+  },
+  {
+    id: 'app-didi',
+    platform: 'iOS',
+    name: 'DiDi English',
+    category: 'Transit & Maps',
+    role: 'English ride-hailing app with automatic driver chat translation and cashless billing.',
+    isInstalled: true,
+    isConfigured: true,
     appIcon: 'didi',
   },
   {
-    id: 'task-apps-translate',
-    stage: 'prep-srilanka',
-    category: 'Language & Food Apps',
-    title: 'Pleco, DeepL & Meituan (Campus Food/Grocery)',
-    detail: 'Download Pleco offline Chinese-English dictionary database and offline camera translation packs.',
-    location: 'iPhone 17 & iPad 11',
-    isReady: false,
-    isPacked: false,
-    appIcon: 'pleco',
+    id: 'app-baidu-maps',
+    platform: 'iOS',
+    name: 'Baidu Maps (百度地图)',
+    category: 'Transit & Maps',
+    role: 'Pinpoint GPS campus gate navigation inside mainland China.',
+    isInstalled: true,
+    isConfigured: true,
+    appIcon: 'didi',
   },
-
-  // --- 2. COLOMBO AIRPORT (CMB) PROCEDURE ---
   {
-    id: 'task-cmb-checkin',
-    stage: 'airport-cmb',
-    category: 'Colombo Departure',
-    title: 'China Eastern Check-in for Flight MU6018 (Departs 20:50)',
-    detail: 'Arrive at CMB 3.5 hours early (17:20). Present passport, X1 Visa, and E-Ticket #7812903731438.',
-    location: 'CMB International Departures Hall',
-    isReady: false,
-    isPacked: false,
+    id: 'app-metroman',
+    platform: 'iOS',
+    name: 'MetroMan (地铁通)',
+    category: 'Transit & Maps',
+    role: 'Offline Shanghai and national metro maps with transfer calculators.',
+    isInstalled: true,
+    isConfigured: true,
     appIcon: 'trip',
   },
-  {
-    id: 'task-cmb-bags',
-    stage: 'airport-cmb',
-    category: 'Colombo Departure',
-    title: 'Check-in Both Rolling Suitcases (30×40×70cm & 27×41×57cm)',
-    detail: 'Verify both luggage tags read PVG (Shanghai). Keep your structured backpack and fanny pack on you.',
-    location: 'China Eastern Baggage Drop Counter',
-    isReady: false,
-    isPacked: false,
-    appIcon: 'bag',
-  },
-  {
-    id: 'task-cmb-powerbank',
-    stage: 'airport-cmb',
-    category: 'Colombo Departure',
-    title: 'Verify Power Bank & Electronics in Backpack',
-    detail: 'Security check: Dell laptop, iPad 11, and 10,000mAh+ CCC power bank must be in cabin carry-on for security scan.',
-    location: 'CMB Security Gate',
-    isReady: false,
-    isPacked: false,
-    appIcon: 'battery',
-  },
 
-  // --- 3. SHANGHAI PVG TRANSIT PROCEDURE ---
+  // AI & Academic Research
   {
-    id: 'task-pvg-esim',
-    stage: 'transit-pvg',
-    category: 'Shanghai Layover (4h 50m)',
-    title: 'Landing at Shanghai PVG T1 (06:05) & Switch to eSIM',
-    detail: 'Turn on Saily/Airalo travel eSIM data line on iPhone 17. Keep Dialog SIM on Samsung S20 FE in Airplane mode or Data OFF.',
-    location: 'PVG Terminal 1 Gate',
-    isReady: false,
-    isPacked: false,
-    appIcon: 'dialog',
-  },
-  {
-    id: 'task-pvg-immigration',
-    stage: 'transit-pvg',
-    category: 'Shanghai Layover (4h 50m)',
-    title: 'Clear Chinese Border Immigration',
-    detail: 'Fill out blue Arrival Card. Present Passport, X1 Visa, and Admission Notice. State destination is Hainan University Master\'s program.',
-    location: 'PVG Terminal 1 Immigration Hall',
-    isReady: false,
-    isPacked: false,
+    id: 'app-chatgpt',
+    platform: 'iOS',
+    name: 'ChatGPT',
+    category: 'AI & Academic',
+    role: 'AI research assistant for Master\'s thesis and technical query drafting (routes via proxy).',
+    isInstalled: true,
+    isConfigured: true,
     appIcon: 'doc',
   },
   {
-    id: 'task-pvg-bags',
-    stage: 'transit-pvg',
-    category: 'Shanghai Layover (4h 50m)',
-    title: 'Mandatory Baggage Claim: Collect Both Checked Suitcases',
-    detail: 'International-to-Domestic transfer requires physical baggage collection at International Baggage Claim belts.',
-    location: 'PVG Terminal 1 Baggage Claim',
-    isReady: false,
-    isPacked: false,
-    appIcon: 'bag',
+    id: 'app-gemini',
+    platform: 'iOS',
+    name: 'Google Gemini',
+    category: 'AI & Academic',
+    role: 'Multimodal AI research tool for Food Science and Engineering literature analysis.',
+    isInstalled: true,
+    isConfigured: true,
+    appIcon: 'doc',
   },
   {
-    id: 'task-pvg-recheck',
-    stage: 'transit-pvg',
-    category: 'Shanghai Layover (4h 50m)',
-    title: 'Clear Customs & Re-Check Bags for Domestic Flight MU6381',
-    detail: 'Pass customs inspection and immediately drop both suitcases at China Eastern Domestic Transfer Counter (departs 10:55).',
-    location: 'PVG T1 Domestic Transfer Counter',
-    isReady: false,
-    isPacked: false,
-    appIcon: 'bag',
+    id: 'app-google-suite',
+    platform: 'iOS',
+    name: 'Google Suite (Gmail, Drive, Scholar)',
+    category: 'AI & Academic',
+    role: 'Essential global academic services routed through Shadowrocket proxy.',
+    isInstalled: true,
+    isConfigured: true,
+    appIcon: 'doc',
   },
   {
-    id: 'task-pvg-message',
-    stage: 'transit-pvg',
-    category: 'Shanghai Layover (4h 50m)',
-    title: 'Message Ms. Sun & University Support Buddy on WeChat',
-    detail: 'Inform them you cleared Shanghai customs on time and are waiting at the domestic gate for MU6381 to Haikou.',
-    location: 'PVG Domestic Gate Area',
-    isReady: false,
-    isPacked: false,
-    appIcon: 'wechat',
-  },
-
-  // --- 4. HAIKOU AIRPORT (HAK) ARRIVAL ---
-  {
-    id: 'task-hak-collect',
-    stage: 'flight-hak',
-    category: 'Haikou Meilan Airport',
-    title: 'Land at Haikou Meilan T1 (14:35) & Collect 2 Suitcases',
-    detail: 'Pure domestic arrival! No customs or passport control. Collect both suitcases from domestic baggage carousel.',
-    location: 'HAK Terminal 1 Baggage Hall',
-    isReady: false,
-    isPacked: false,
-    appIcon: 'bag',
+    id: 'app-pleco',
+    platform: 'iOS',
+    name: 'Pleco Chinese Dictionary',
+    category: 'Essential Daily',
+    role: 'Offline Chinese-English dictionary with optical OCR camera character scanner.',
+    isInstalled: true,
+    isConfigured: true,
+    appIcon: 'pleco',
   },
   {
-    id: 'task-hak-taxi',
-    stage: 'flight-hak',
-    category: 'Haikou Meilan Airport',
-    title: 'Join Official Outdoor Taxi Queue & Show Destination Card',
-    detail: 'Follow overhead Taxi (出租车) signs. Show the Chinese Destination Card to queue dispatcher and driver. Pay approx 50–80 RMB.',
-    location: 'HAK T1 Outdoor Taxi Stand',
-    isReady: false,
-    isPacked: false,
+    id: 'app-deepl',
+    platform: 'iOS',
+    name: 'DeepL Translate',
+    category: 'AI & Academic',
+    role: 'High accuracy document and paper translation for academic coursework.',
+    isInstalled: true,
+    isConfigured: true,
+    appIcon: 'pleco',
+  },
+  {
+    id: 'app-meituan',
+    platform: 'iOS',
+    name: 'Meituan (美团)',
+    category: 'Essential Daily',
+    role: 'Campus food delivery, water jug replenishment, and grocery deliveries in Haikou.',
+    isInstalled: true,
+    isConfigured: true,
     appIcon: 'didi',
-  },
-  {
-    id: 'task-hak-location',
-    stage: 'flight-hak',
-    category: 'Haikou Meilan Airport',
-    title: 'Send Taxi Plate Photo & WeChat Live Location to Buddy',
-    detail: 'Share your live ride status so your university buddy can meet you at the Haidian campus gate in 35–45 minutes.',
-    location: 'Inside Airport Taxi',
-    isReady: false,
-    isPacked: false,
-    appIcon: 'wechat',
-  },
-
-  // --- 5. CAMPUS & UNIVERSITY PROCEDURES (EDITABLE) ---
-  {
-    id: 'task-uni-buddy',
-    stage: 'arrival-campus',
-    category: 'Campus Coordination',
-    title: 'Meet Support Buddy at Haidian Campus Gate (人民大道58号)',
-    detail: 'Coordinate which gate to enter (East Gate / Main Gate) and move 2 suitcases with buddy assistance.',
-    location: 'Hainan University Haidian Campus',
-    isReady: false,
-    isPacked: false,
-    isEditable: true,
-    appIcon: 'wechat',
-  },
-  {
-    id: 'task-uni-dorm',
-    stage: 'arrival-campus',
-    category: 'Dormitory Check-in',
-    title: 'International Student Dormitory Room Access & Key Card',
-    detail: 'Check into assigned room, test air conditioning, power points, and inspect furniture. Note any maintenance requests.',
-    location: 'International Student Dormitory Building',
-    isReady: false,
-    isPacked: false,
-    isEditable: true,
-    appIcon: 'doc',
-  },
-  {
-    id: 'task-uni-reg',
-    stage: 'arrival-campus',
-    category: 'Registration & Verification',
-    title: 'School of International Education Registration (Ms. Sun)',
-    detail: 'Submit Admission Notice Page 1 (stamped full scholarship), JW202, Bachelor diploma, and photo. Verify scholarship status.',
-    location: 'School of International Education Office',
-    isReady: false,
-    isPacked: false,
-    isEditable: true,
-    appIcon: 'doc',
-  },
-  {
-    id: 'task-uni-sim',
-    stage: 'arrival-campus',
-    category: 'Campus Logistics',
-    title: 'Get Local Chinese SIM Card (China Mobile / Unicom)',
-    detail: 'Obtain local mainland phone number with passport identity registration for campus Wi-Fi and courier deliveries.',
-    location: 'Campus Telecom Shop',
-    isReady: false,
-    isPacked: false,
-    isEditable: true,
-    appIcon: 'dialog',
-  },
-  {
-    id: 'task-uni-residence',
-    stage: 'arrival-campus',
-    category: 'Legal Compliance',
-    title: '30-Day Residence Permit Police Registration',
-    detail: 'Convert X1 visa to a Multi-Entry Residence Permit within 30 days of arrival at Haikou Public Security Bureau (PSB).',
-    location: 'Haikou Exit-Entry Administration (PSB)',
-    isReady: false,
-    isPacked: false,
-    isEditable: true,
-    appIcon: 'doc',
   },
 ];
 
 export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
-  // Dresses
+  // Dresses (Interactive dress-up catalog)
   {
     id: 'w-1',
     name: 'Casual Cotton/Linen Day Frocks',
     category: 'Dresses',
     quantity: 4,
-    targetBag: 'Main Suitcase (30×40×70cm)',
+    targetBag: 'Main Large Suitcase (30×40×70cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#38bdf8',
     notes: 'Breathable lightweight fabrics for tropical island weather',
   },
   {
@@ -555,6 +637,7 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     targetBag: 'Medium Suitcase (27×41×57cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#a855f7',
     notes: 'For Welcome Ceremony / Faculty presentations',
   },
   {
@@ -562,9 +645,10 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     name: 'Lightweight Tropical Sundresses',
     category: 'Dresses',
     quantity: 3,
-    targetBag: 'Main Suitcase (30×40×70cm)',
+    targetBag: 'Main Large Suitcase (30×40×70cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#f43f5e',
     notes: 'Warm weather campus wear',
   },
 
@@ -574,9 +658,10 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     name: 'Breathable Cotton T-Shirts',
     category: 'Tops',
     quantity: 6,
-    targetBag: 'Main Suitcase (30×40×70cm)',
+    targetBag: 'Main Large Suitcase (30×40×70cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#10b981',
     notes: 'Daily campus rotation',
   },
   {
@@ -587,6 +672,7 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     targetBag: 'Medium Suitcase (27×41×57cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#6366f1',
     notes: 'Meeting professors & academic supervisors',
   },
   {
@@ -597,6 +683,7 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     targetBag: 'Cabin Laptop Backpack',
     isBought: true,
     isPacked: false,
+    colorHex: '#eab308',
     notes: 'Emergency outfit change during long transit',
   },
 
@@ -606,9 +693,10 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     name: 'Full-Length Jeans / Trousers',
     category: 'Bottoms',
     quantity: 3,
-    targetBag: 'Main Suitcase (30×40×70cm)',
+    targetBag: 'Main Large Suitcase (30×40×70cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#1e3a8a',
     notes: 'Mandatory Food Science laboratory safety wear',
   },
   {
@@ -619,6 +707,7 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     targetBag: 'Medium Suitcase (27×41×57cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#64748b',
     notes: 'Comfortable classroom lecture wear',
   },
   {
@@ -626,9 +715,10 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     name: 'Casual Skirts / Shorts',
     category: 'Bottoms',
     quantity: 3,
-    targetBag: 'Main Suitcase (30×40×70cm)',
+    targetBag: 'Main Large Suitcase (30×40×70cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#ec4899',
     notes: 'Dorm & casual wear',
   },
   {
@@ -639,6 +729,7 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     targetBag: 'Wear on Flight',
     isBought: true,
     isPacked: false,
+    colorHex: '#0f172a',
     notes: 'Comfortable clothing for 10+ hours transit',
   },
 
@@ -648,9 +739,10 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     name: 'Light Zip-Up Hoodie / Cardigan',
     category: 'Outerwear',
     quantity: 2,
-    targetBag: '1 in Backpack, 1 in Medium Bag',
+    targetBag: 'Medium Suitcase (27×41×57cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#475569',
     notes: 'Cold airplane cabin & heavily air-conditioned labs',
   },
   {
@@ -661,6 +753,7 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     targetBag: 'Cabin Laptop Backpack',
     isBought: true,
     isPacked: false,
+    colorHex: '#0284c7',
     notes: 'Shanghai transit & cooler Haikou winter evenings',
   },
   {
@@ -671,6 +764,7 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     targetBag: 'Medium Suitcase (27×41×57cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#059669',
     notes: 'Haikou tropical downpours',
   },
 
@@ -683,6 +777,7 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     targetBag: 'Wear on Flight',
     isBought: true,
     isPacked: false,
+    colorHex: '#ffffff',
     notes: 'Required for Food Science labs and long transit walks',
   },
   {
@@ -693,6 +788,7 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     targetBag: 'Medium Suitcase (27×41×57cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#f1f5f9',
     notes: 'Alternate walking pair',
   },
   {
@@ -700,9 +796,10 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     name: 'Comfortable Walking Sandals',
     category: 'Footwear',
     quantity: 1,
-    targetBag: 'Main Suitcase (30×40×70cm)',
+    targetBag: 'Main Large Suitcase (30×40×70cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#d97706',
     notes: 'Warm campus days',
   },
   {
@@ -710,9 +807,10 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     name: 'Waterproof Bathroom Slippers',
     category: 'Footwear',
     quantity: 1,
-    targetBag: 'Medium Suitcase (Top Layer)',
+    targetBag: 'Medium Suitcase (27×41×57cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#06b6d4',
     notes: 'Essential immediately upon dorm check-in',
   },
   {
@@ -723,6 +821,7 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     targetBag: 'Medium Suitcase (27×41×57cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#e2e8f0',
     notes: 'Breathable cotton',
   },
 
@@ -735,6 +834,7 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     targetBag: 'Medium Suitcase (27×41×57cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#fbcfe8',
     notes: 'Light breathable cotton',
   },
   {
@@ -745,6 +845,7 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     targetBag: 'Medium Suitcase (27×41×57cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#cbd5e1',
     notes: '2-week supply packed in mesh laundry bags',
   },
   {
@@ -752,9 +853,10 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     name: 'Microfiber Quick-Dry Towels',
     category: 'Essentials',
     quantity: 2,
-    targetBag: 'Main Suitcase (30×40×70cm)',
+    targetBag: 'Main Large Suitcase (30×40×70cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#67e8f9',
     notes: 'Fast drying travel towels',
   },
 
@@ -764,9 +866,10 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     name: 'Structured Tech Laptop Backpack (~45cm)',
     category: 'Luggage',
     quantity: 1,
-    targetBag: 'Primary Cabin Carry-On',
+    targetBag: 'Cabin Laptop Backpack',
     isBought: false, // NOT BOUGHT YET -> Highlighted Red
     isPacked: false,
+    colorHex: '#b45309',
     notes: 'Holds Dell 5410, iPad 11, Soundcore Earbuds & A4 Folder',
   },
   {
@@ -774,9 +877,10 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     name: 'Compact Fanny Pack / Crossbody',
     category: 'Luggage',
     quantity: 1,
-    targetBag: 'Worn on Body',
+    targetBag: 'Fanny Pack',
     isBought: true,
     isPacked: false,
+    colorHex: '#881337',
     notes: 'Passport, iPhone 17, S20 FE, Bank Cards, Cash',
   },
   {
@@ -784,9 +888,10 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     name: 'Blue 43cm School Backpack (Packed Flat)',
     category: 'Luggage',
     quantity: 1,
-    targetBag: 'Inside Main Suitcase',
+    targetBag: 'Main Large Suitcase (30×40×70cm)',
     isBought: true,
     isPacked: false,
+    colorHex: '#2563eb',
     notes: 'For lightweight daily classes on campus',
   },
   {
@@ -794,9 +899,10 @@ export const INITIAL_WARDROBE_ITEMS: WardrobeItem[] = [
     name: 'A4 Waterproof Zippered Document Folder',
     category: 'Luggage',
     quantity: 1,
-    targetBag: 'Inside Laptop Backpack',
+    targetBag: 'Cabin Laptop Backpack',
     isBought: true,
     isPacked: false,
+    colorHex: '#475569',
     notes: 'Original medical and degree certificates',
   },
 ];
