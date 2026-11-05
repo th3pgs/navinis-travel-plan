@@ -58,8 +58,8 @@ export const WardrobeManager: React.FC<WardrobeManagerProps> = ({
     if (!editName.trim()) return;
     onUpdateItem(id, {
       name: editName.trim(),
-      category: editCategory,
-      targetBag: editTargetBag,
+      category: editCategory as WardrobeItem['category'],
+      targetBag: editTargetBag as WardrobeItem['targetBag'],
       quantity: Math.max(1, editQuantity),
       notes: editNotes.trim() || undefined,
     });
@@ -76,9 +76,9 @@ export const WardrobeManager: React.FC<WardrobeManagerProps> = ({
 
     onAddItem({
       name: name.trim(),
-      category,
+      category: category as WardrobeItem['category'],
       quantity: Math.max(1, quantity),
-      targetBag,
+      targetBag: targetBag as WardrobeItem['targetBag'],
       isBought: true,
       isPacked: false,
       notes: notes.trim() || undefined,
