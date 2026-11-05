@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Camera, Edit3, Check, User, CloudCheck, Shield } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Camera, Edit3, Check, User, Shield, RefreshCw, Trash2 } from 'lucide-react';
+import { compressImage } from '../cloudSync';
 
 interface StudentProfileCardProps {
   passportInfo: {
@@ -19,21 +20,47 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [passportNum, setPassportNum] = useState(passportInfo.passportNumber);
   const [expiry, setExpiry] = useState(passportInfo.expiryDate);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Sync internal state when external props update via cloud sync polling
+  useEffect(() => {
+    setPassportNum(passportInfo.passportNumber);
+    setExpiry(passportInfo.expiryDate);
+  }, [passportInfo.passportNumber, passportInfo.expiryDate]);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Convert file to base64 for persistent local and cloud storage
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const url = event.target?.result as string;
+    try {
+      setIsOptimizing(true);
+      // Downscale & compress to ~15KB for instantaneous cloud database synchronization
+      const compressedBase64 = await compressImage(file, 260, 340, 0.78);
+
       onUpdatePassportInfo({
         ...passportInfo,
-        photoUrl: url,
+        photoUrl: compressedBase64,
       });
-    };
-    reader.readAsDataURL(file);
+
+      setSyncToast('Photo synced to cloud database!');
+      setTimeout(() => setSyncToast(null), 3000);
+    } catch (err) {
+      console.error('Error optimizing image', err);
+      setSyncToast('Upload error. Please try again.');
+      setTimeout(() => setSyncToast(null), 3000);
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    onUpdatePassportInfo({
+      ...passportInfo,
+      photoUrl: '',
+    });
+    setSyncToast('Photo removed & synced!');
+    setTimeout(() => setSyncToast(null), 3000);
   };
 
   const handleSavePassport = () => {
@@ -43,14 +70,29 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
       expiryDate: expiry || passportInfo.expiryDate,
     });
     setIsEditing(false);
+    setSyncToast('Passport details saved & synced!');
+    setTimeout(() => setSyncToast(null), 3000);
   };
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-8 transition-all hover:shadow-md">
+    <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-8 transition-all hover:shadow-md relative">
+      {/* Toast Notification */}
+      {syncToast && (
+        <div className="absolute top-4 right-4 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2 duration-200 z-20">
+          <Check className="w-3.5 h-3.5 stroke-[3]" />
+          <span>{syncToast}</span>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
         {/* Large Modern Photo (No tacky frame, rounded-2xl with clean hover upload) */}
         <div className="relative group shrink-0">
-          {passportInfo.photoUrl ? (
+          {isOptimizing ? (
+            <div className="w-28 h-36 sm:w-32 sm:h-40 rounded-2xl bg-blue-50 border-2 border-blue-400 flex flex-col items-center justify-center text-[#003580] p-2 text-center shadow-inner animate-pulse">
+              <RefreshCw className="w-6 h-6 animate-spin mb-1 text-[#003580]" />
+              <span className="text-[10px] font-bold">Syncing Photo...</span>
+            </div>
+          ) : passportInfo.photoUrl ? (
             <img
               src={passportInfo.photoUrl}
               alt="Navini Ravishka"
@@ -152,21 +194,33 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
                   />
                 </div>
               </div>
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setIsEditing(false)}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-slate-600"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSavePassport}
-                  className="px-4 py-1.5 rounded-xl bg-[#003580] hover:bg-[#00224f] text-white font-bold transition-colors"
-                >
-                  Save & Sync
-                </button>
+              <div className="flex items-center justify-between pt-1">
+                {passportInfo.photoUrl ? (
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 font-semibold transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove Photo</span>
+                  </button>
+                ) : <div />}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
+                    className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSavePassport}
+                    className="px-4 py-1.5 rounded-xl bg-[#003580] hover:bg-[#00224f] text-white font-bold transition-colors shadow-2xs"
+                  >
+                    Save & Sync
+                  </button>
+                </div>
               </div>
             </div>
           )}

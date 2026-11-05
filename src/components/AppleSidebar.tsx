@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ShieldCheck,
   User,
+  RefreshCw,
 } from 'lucide-react';
 
 interface AppleSidebarProps {
@@ -19,6 +20,8 @@ interface AppleSidebarProps {
   onNavigate: (view: 'overview' | 'physical' | 'documents' | 'connectivity') => void;
   onOpenTaxi: () => void;
   onOpenBackup: () => void;
+  onSyncNow?: () => void;
+  isSyncing?: boolean;
   passportInfo: {
     passportNumber: string;
     expiryDate: string;
@@ -33,6 +36,8 @@ export const AppleSidebar: React.FC<AppleSidebarProps> = ({
   onNavigate,
   onOpenTaxi,
   onOpenBackup,
+  onSyncNow,
+  isSyncing,
   passportInfo,
 }) => {
   if (!isOpen) return null;
@@ -190,6 +195,20 @@ export const AppleSidebar: React.FC<AppleSidebarProps> = ({
               </div>
               <ChevronRight className="w-4 h-4 opacity-60" />
             </button>
+
+            {onSyncNow && (
+              <button
+                type="button"
+                onClick={onSyncNow}
+                className="w-full p-3 rounded-2xl flex items-center justify-between text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <RefreshCw className={`w-4 h-4 text-emerald-600 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isSyncing ? 'Synchronizing State...' : 'Sync Cloud Database Now'}</span>
+                </div>
+                <ChevronRight className="w-4 h-4 opacity-60" />
+              </button>
+            )}
           </div>
 
           {/* Footer info */}

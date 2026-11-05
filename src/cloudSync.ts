@@ -1,10 +1,9 @@
 // Cloud Database Sync Service
-// Provides local-first instant offline storage + automatic cloud database synchronization
-// so changes made by one person (profile picture, passport, milestones, gear, apps)
-// are automatically available to anyone viewing on GitHub Pages.
+// Provides real-time synchronization across all logged-in devices viewing on GitHub Pages,
+// plus local-first instant offline storage so Navini has access even without internet.
 
-const CLOUD_SYNC_ENDPOINT = 'https://api.jsonbin.io/v3/b';
-const PUBLIC_SYNC_BIN_ID = '674b3e8fad19ca34f8d228f4'; // Shared cloud synchronization bin fallback
+const EXTENDSCLASS_BIN_ID = 'bbebcfe';
+const SYNC_URL = `https://extendsclass.com/api/json-storage/bin/${EXTENDSCLASS_BIN_ID}`;
 const LOCAL_STORAGE_KEY = 'navini_master_state_v5';
 
 export interface AppMasterState {
@@ -25,11 +24,59 @@ export interface AppMasterState {
   buddyMessages?: any[];
 }
 
-// In-memory debounce timer for cloud pushes
 let syncDebounceTimer: any = null;
 
+// Compresses and downscales raw camera photos (e.g. 10MB) to ~15KB
+// so they transfer in milliseconds across mobile networks and fit seamlessly in cloud storage.
+export function compressImage(file: File, maxWidth = 260, maxHeight = 340, quality = 0.78): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.src = e.target?.result as string;
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Maintain aspect ratio while fitting within maxWidth x maxHeight
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(e.target?.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', quality);
+          resolve(compressed);
+        } catch (err) {
+          resolve(e.target?.result as string);
+        }
+      };
+      img.onerror = () => resolve(e.target?.result as string);
+    };
+    reader.onerror = () => resolve('');
+  });
+}
+
+// Fetch master state from the remote cloud database
 export async function fetchCloudState(): Promise<AppMasterState | null> {
-  // 1. First check local storage for instant offline access
+  // 1. First get local state for instant rendering
   const localSaved = localStorage.getItem(LOCAL_STORAGE_KEY);
   let localState: AppMasterState | null = null;
   if (localSaved) {
@@ -38,53 +85,77 @@ export async function fetchCloudState(): Promise<AppMasterState | null> {
     } catch (e) {}
   }
 
-  // 2. Fetch from remote cloud database (if online)
+  // 2. Fetch from cloud database
   try {
-    const res = await fetch(`https://api.npoint.io/46efb702ec94d8cb87c2`, {
+    const res = await fetch(SYNC_URL, {
       method: 'GET',
-      headers: { 'Accept': 'application/json' },
+      headers: {
+        'Accept': 'application/json',
+      },
       cache: 'no-store',
     });
 
     if (res.ok) {
       const data = await res.json();
       if (data && data.passportInfo) {
-        // If remote state is newer or valid, merge and update local storage
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+        // Update local cache
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+        } catch (e) {}
         return data as AppMasterState;
       }
     }
   } catch (err) {
-    // Silent network fallback for offline mode
-    console.warn('Offline mode or remote sync unreachable, using local storage.');
+    console.warn('Network offline or sync unreachable, using cached state.', err);
   }
 
   return localState;
 }
 
-export function pushCloudState(state: AppMasterState): void {
-  // 1. Immediately write to local storage (0ms latency & offline resilient)
+// Push master state to the remote cloud database
+export function pushCloudState(state: AppMasterState, immediate = false): Promise<boolean> {
   state.lastUpdated = new Date().toISOString();
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
 
-  // 2. Debounce cloud sync write to prevent network thrashing
-  if (syncDebounceTimer) {
-    clearTimeout(syncDebounceTimer);
+  // 1. Instantly save to local storage (0ms offline safe)
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn('Local storage write warning', e);
   }
 
-  syncDebounceTimer = setTimeout(async () => {
-    try {
-      // Push state to cloud JSON database
-      await fetch(`https://api.npoint.io/46efb702ec94d8cb87c2`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(state),
-      });
-      console.log('Successfully synchronized changes to cloud database.');
-    } catch (e) {
-      console.warn('Cloud sync queued locally. Will retry when connection restores.');
+  // 2. Push to cloud database
+  return new Promise((resolve) => {
+    if (syncDebounceTimer) {
+      clearTimeout(syncDebounceTimer);
     }
-  }, 1000);
+
+    const doPush = async () => {
+      try {
+        const res = await fetch(SYNC_URL, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(state),
+        });
+
+        if (res.ok) {
+          console.log('Master state synced to cloud database.');
+          resolve(true);
+        } else {
+          console.warn('Cloud sync response status:', res.status);
+          resolve(false);
+        }
+      } catch (err) {
+        console.warn('Cloud sync offline. Queued locally.', err);
+        resolve(false);
+      }
+    };
+
+    if (immediate) {
+      doPush();
+    } else {
+      syncDebounceTimer = setTimeout(doPush, 300); // 300ms quick debounce
+    }
+  });
 }
