@@ -1,9 +1,5 @@
-// Cloud Database Sync Service
-// Provides real-time synchronization across all logged-in devices viewing on GitHub Pages,
-// plus local-first instant offline storage so Navini has access even without internet.
+import { supabase, STORAGE_BUCKET, STATE_TABLE, STATE_ROW_ID } from './supabase';
 
-const EXTENDSCLASS_BIN_ID = 'bbebcfe';
-const SYNC_URL = `https://extendsclass.com/api/json-storage/bin/${EXTENDSCLASS_BIN_ID}`;
 const LOCAL_STORAGE_KEY = 'navini_master_state_v5';
 
 export interface AppMasterState {
@@ -22,12 +18,11 @@ export interface AppMasterState {
   apps: any[];
   milestones: any[];
   buddyMessages?: any[];
+  confirmedCampusChat?: boolean;
+  confirmedChatTopics?: Record<string, boolean>;
 }
 
 let syncDebounceTimer: any = null;
-
-// Write-lock: when a local push is in-flight, skip incoming poll results
-// so the poll doesn't overwrite the photo/state we just set locally.
 let _pushInFlight = false;
 let _lastPushTimestamp = 0;
 
@@ -39,10 +34,16 @@ export function getLastPushTimestamp(): number {
   return _lastPushTimestamp;
 }
 
-// Compresses and downscales raw camera photos (e.g. 10MB) to ~15KB
-// so they transfer in milliseconds across mobile networks and fit seamlessly in cloud storage.
-export function compressImage(file: File, maxWidth = 260, maxHeight = 340, quality = 0.78): Promise<string> {
-  return new Promise((resolve) => {
+/**
+ * Compresses an image client-side to max width ~800px JPEG for fast mobile loading
+ */
+export function compressImage(
+  file: File | Blob,
+  maxWidth = 800,
+  maxHeight = 1000,
+  quality = 0.82
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (e) => {
@@ -54,7 +55,6 @@ export function compressImage(file: File, maxWidth = 260, maxHeight = 340, quali
           let width = img.width;
           let height = img.height;
 
-          // Maintain aspect ratio while fitting within maxWidth x maxHeight
           if (width > height) {
             if (width > maxWidth) {
               height = Math.round((height * maxWidth) / width);
@@ -71,37 +71,67 @@ export function compressImage(file: File, maxWidth = 260, maxHeight = 340, quali
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           if (!ctx) {
-            resolve(e.target?.result as string);
+            resolve(file as Blob);
             return;
           }
           ctx.drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL('image/jpeg', quality);
-          resolve(compressed);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(blob);
+              } else {
+                resolve(file as Blob);
+              }
+            },
+            'image/jpeg',
+            quality
+          );
         } catch (err) {
-          resolve(e.target?.result as string);
+          resolve(file as Blob);
         }
       };
-      img.onerror = () => resolve(e.target?.result as string);
+      img.onerror = () => reject(new Error('Failed to load image for compression'));
     };
-    reader.onerror = () => resolve('');
+    reader.onerror = (err) => reject(err);
   });
 }
 
-// Fetch master state from the remote cloud database
-export async function fetchCloudState(): Promise<AppMasterState | null> {
-  // If a push is currently in-flight or just finished (within last 8 seconds),
-  // return local state to avoid overwriting the data we just pushed.
-  if (_pushInFlight || (Date.now() - _lastPushTimestamp < 8000)) {
-    const localSaved = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (localSaved) {
-      try {
-        return JSON.parse(localSaved) as AppMasterState;
-      } catch (e) {}
-    }
-    return null;
+/**
+ * Upload a compressed camera photo or file directly to Supabase `travel-media` bucket
+ * and return the public CDN URL.
+ */
+export async function uploadPhotoToSupabase(
+  file: File | Blob,
+  folder = 'wardrobe'
+): Promise<string> {
+  const compressedBlob = await compressImage(file, 800, 1000, 0.82);
+  const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 8)}.jpg`;
+
+  const { data, error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(fileName, compressedBlob, {
+      contentType: 'image/jpeg',
+      upsert: true,
+    });
+
+  if (error) {
+    console.error('Supabase upload error:', error);
+    throw error;
   }
 
-  // 1. First get local state for instant rendering
+  const { data: urlData } = supabase.storage
+    .from(STORAGE_BUCKET)
+    .getPublicUrl(data.path);
+
+  return urlData.publicUrl;
+}
+
+/**
+ * Fetch the master plan state from Supabase `app_state` (row `id = 'main_plan'`)
+ * with instant local cache fallback.
+ */
+export async function fetchCloudState(): Promise<AppMasterState | null> {
   const localSaved = localStorage.getItem(LOCAL_STORAGE_KEY);
   let localState: AppMasterState | null = null;
   if (localSaved) {
@@ -110,56 +140,54 @@ export async function fetchCloudState(): Promise<AppMasterState | null> {
     } catch (e) {}
   }
 
-  // 2. Fetch from cloud database
   try {
-    const res = await fetch(SYNC_URL, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-      cache: 'no-store',
-    });
+    const { data, error } = await supabase
+      .from(STATE_TABLE)
+      .select('payload, updated_at')
+      .eq('id', STATE_ROW_ID)
+      .maybeSingle();
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.passportInfo) {
-        // Only accept remote state if it's actually newer than our local state
-        if (localState && localState.lastUpdated && data.lastUpdated) {
-          const localTime = new Date(localState.lastUpdated).getTime();
-          const remoteTime = new Date(data.lastUpdated).getTime();
-          if (localTime > remoteTime) {
-            // Local is newer — keep local, push it to cloud
-            return localState;
-          }
-        }
-        // Update local cache with remote data
+    if (!error && data && data.payload) {
+      const remote = data.payload as AppMasterState;
+      // Accept remote if it has passportInfo or newer
+      if (remote.passportInfo) {
         try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(remote));
         } catch (e) {}
-        return data as AppMasterState;
+        return remote;
       }
     }
   } catch (err) {
-    console.warn('Network offline or sync unreachable, using cached state.', err);
+    console.warn('Supabase fetch failed, using local cache:', err);
   }
 
   return localState;
 }
 
-// Push master state to the remote cloud database
+/**
+ * Push master state to Supabase `app_state` (row `id = 'main_plan'`)
+ * with instant local storage write and debounced cloud upsert.
+ */
 export function pushCloudState(state: AppMasterState, immediate = false): Promise<boolean> {
   state.lastUpdated = new Date().toISOString();
   _pushInFlight = true;
   _lastPushTimestamp = Date.now();
 
-  // 1. Instantly save to local storage (0ms offline safe)
+  // 1. Instantly save locally (0ms offline safe)
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem('navini_passport_profile_v5', JSON.stringify(state.passportInfo));
+    localStorage.setItem('navini_bags_v5', JSON.stringify(state.bags));
+    localStorage.setItem('navini_devices_v5', JSON.stringify(state.devices));
+    localStorage.setItem('navini_wardrobe_v5', JSON.stringify(state.wardrobe));
+    localStorage.setItem('navini_docs_v5', JSON.stringify(state.documents));
+    localStorage.setItem('navini_procedure_steps_v5', JSON.stringify(state.procedureSteps));
+    localStorage.setItem('navini_apps_v5', JSON.stringify(state.apps));
+    localStorage.setItem('navini_milestones_v5', JSON.stringify(state.milestones));
   } catch (e) {
     console.warn('Local storage write warning', e);
   }
 
-  // 2. Push to cloud database with write-lock
   return new Promise((resolve) => {
     if (syncDebounceTimer) {
       clearTimeout(syncDebounceTimer);
@@ -170,24 +198,23 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
       _lastPushTimestamp = Date.now();
 
       try {
-        const res = await fetch(SYNC_URL, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(state),
-        });
+        const { error } = await supabase
+          .from(STATE_TABLE)
+          .upsert({
+            id: STATE_ROW_ID,
+            payload: state,
+            updated_at: new Date().toISOString(),
+          });
 
-        if (res.ok) {
-          console.log('Master state synced to cloud database.');
+        if (!error) {
           _lastPushTimestamp = Date.now();
           resolve(true);
         } else {
-          console.warn('Cloud sync response status:', res.status);
+          console.warn('Supabase upsert warning:', error);
           resolve(false);
         }
       } catch (err) {
-        console.warn('Cloud sync offline. Queued locally.', err);
+        console.warn('Supabase upsert failed, queued locally:', err);
         resolve(false);
       } finally {
         _pushInFlight = false;
@@ -197,7 +224,57 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
     if (immediate) {
       doPush();
     } else {
-      syncDebounceTimer = setTimeout(doPush, 300);
+      syncDebounceTimer = setTimeout(doPush, 400);
     }
   });
+}
+
+/**
+ * Subscribe to realtime state updates from Supabase
+ */
+export function subscribeToCloudState(
+  onUpdate: (newState: AppMasterState) => void
+) {
+  const channel = supabase
+    .channel('app_state_live_sync')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: STATE_TABLE,
+        filter: `id=eq.${STATE_ROW_ID}`,
+      },
+      (payload) => {
+        if (payload.new && (payload.new as any).payload) {
+          // If a local push just occurred within 4 seconds, ignore to prevent echo race
+          if (Date.now() - _lastPushTimestamp < 4000) return;
+          const remoteState = (payload.new as any).payload as AppMasterState;
+          if (remoteState && remoteState.passportInfo) {
+            onUpdate(remoteState);
+          }
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * Ping Supabase to verify connection health
+ */
+export async function checkSupabaseConnection(): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from(STATE_TABLE)
+      .select('id')
+      .eq('id', STATE_ROW_ID)
+      .limit(1);
+    return !error;
+  } catch {
+    return false;
+  }
 }

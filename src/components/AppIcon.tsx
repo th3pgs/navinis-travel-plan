@@ -95,27 +95,56 @@ export const AppIcon: React.FC<AppIconProps> = ({ name = '', className = 'w-5 h-
     );
   }
 
-  // 9. Shadowrocket / Clash / v2ray / Proxy
-  if (key.includes('shadowrocket') || key.includes('clash') || key.includes('v2ray') || key.includes('proxy')) {
+  // 9. Shadowrocket
+  if (key.includes('shadowrocket')) {
     return (
       <svg viewBox="0 0 24 24" className={`${className} text-[#007AFF]`} fill="currentColor">
-        <path d="M13.13 2.05c-.32-.05-.65.11-.79.41L9.2 8.44 3.73 10.3c-.34.12-.55.45-.52.81.03.35.29.63.64.69l4.58.76 2.22 4.44c.16.31.48.5.83.47.34-.03.63-.26.73-.59l1.76-5.87 5.76-3.2c.3-.17.46-.5.41-.84-.06-.34-.29-.61-.62-.68l-5.41-1.24L13.13 2.05zM20 20l-4-4 1.5-1.5 4 4L20 20z"/>
+        <path d="M12 2.5c-2.8 0-5.1 1.7-6 4.1-.3.8-.1 1.7.5 2.3l2.8 2.8c.2.2.3.5.3.8v2c0 .3.1.5.3.7l2 2c.2.2.5.3.7.3h2c.3 0 .6-.1.8-.3l2.8-2.8c.6-.6 1.5-.8 2.3-.5 2.4-.9 4.1-3.2 4.1-6 0-3.6-2.9-6.4-6.4-6.4H12zm2.5 5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5zM7 16l-4 4 1.5 1.5L8.5 17.5 7 16zm10 0l1.5 1.5L22.5 13.5 21 12 17 16z" />
       </svg>
     );
   }
 
-  // 10. Pleco
+  // 10. v2rayNG
+  if (key.includes('v2ray')) {
+    return (
+      <svg viewBox="0 0 24 24" className={`${className} text-[#1A56DB]`} fill="currentColor">
+        <path d="M4 4h4l4 12 4-12h4L14 20h-4L4 4z"/>
+      </svg>
+    );
+  }
+
+  // 11. Clash Verge Rev
+  if (key.includes('clash')) {
+    return (
+      <svg viewBox="0 0 24 24" className={`${className} text-[#5856D6]`} fill="currentColor">
+        <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3zm0 4a3 3 0 110 6 3 3 0 010-6zm0 13c-2.3 0-4.3-1.1-5.5-2.8.1-1.8 3.7-2.8 5.5-2.8s5.4 1 5.5 2.8c-1.2 1.7-3.2 2.8-5.5 2.8z"/>
+      </svg>
+    );
+  }
+
+  // 12. Trip.com
+  if (key.includes('trip')) {
+    return (
+      <svg viewBox="0 0 24 24" className={`${className}`} fill="none">
+        <rect width="24" height="24" rx="6" fill="#0066FF"/>
+        <path d="M5 8.5h14v2H5v-2zm0 5h10v2H5v-2z" fill="#FFFFFF"/>
+        <circle cx="17" cy="15.5" r="2.5" fill="#FF7700"/>
+      </svg>
+    );
+  }
+
+  // 13. Pleco
   if (key.includes('pleco') || key.includes('dictionary') || key.includes('鱼')) {
     return (
       <svg viewBox="0 0 24 24" className={`${className} text-[#DC2626]`} fill="currentColor">
-        <path d="M4 6H20V8H4V6ZM4 11H20V13H4V11ZM4 16H20V18H4V16Z" fill="#DC2626"/>
-        <circle cx="12" cy="12" r="9" stroke="#DC2626" strokeWidth="2" fill="none" />
+        <rect width="24" height="24" rx="5" fill="#DC2626"/>
+        <text x="12" y="17" textAnchor="middle" fill="#FFFFFF" fontSize="13" fontWeight="bold" fontFamily="sans-serif">鱼</text>
       </svg>
     );
   }
 
-  // 11. Baidu Maps
-  if (key.includes('baidu') || key.includes('百度')) {
+  // 14. Baidu Maps / Amap
+  if (key.includes('baidu') || key.includes('百度') || key.includes('amap') || key.includes('高德')) {
     return (
       <svg viewBox="0 0 24 24" className={`${className} text-[#2932E1]`} fill="currentColor">
         <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/>
@@ -123,7 +152,7 @@ export const AppIcon: React.FC<AppIconProps> = ({ name = '', className = 'w-5 h-
     );
   }
 
-  // 12. MetroMan Transit
+  // 15. MetroMan Transit
   if (key.includes('metro') || key.includes('subway') || key.includes('transit')) {
     return (
       <svg viewBox="0 0 24 24" className={`${className} text-[#0086F6]`} fill="currentColor">
@@ -132,12 +161,12 @@ export const AppIcon: React.FC<AppIconProps> = ({ name = '', className = 'w-5 h-
     );
   }
 
-  // 13. Meituan
+  // 16. Meituan
   if (key.includes('meituan') || key.includes('美团')) {
     return (
-      <svg viewBox="0 0 24 24" className={`${className} text-[#FFC300]`} fill="currentColor">
-        <circle cx="12" cy="12" r="10" fill="#FFC300"/>
-        <path d="M8 12l3 3 5-5" stroke="#FFFFFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      <svg viewBox="0 0 24 24" className={`${className}`} fill="none">
+        <rect width="24" height="24" rx="5" fill="#FFC300"/>
+        <path d="M7 13c1.5-3.5 5.5-4 10-4-.5 4.5-2.5 7.5-6 8-2 .3-4-1.5-4-4z" fill="#222222"/>
       </svg>
     );
   }

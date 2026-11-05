@@ -1,17 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Download,
   Menu,
-  X,
   Luggage,
   FileText,
   Globe2,
   ChevronRight,
-  Printer,
-  CloudCheck,
-  Check,
-  AlertCircle,
-  RefreshCw,
 } from 'lucide-react';
 
 import {
@@ -31,7 +24,14 @@ import {
   INITIAL_PROCEDURE_STEPS,
 } from './data';
 
-import { AppMasterState } from './cloudSync';
+import {
+  AppMasterState,
+  fetchCloudState,
+  pushCloudState,
+  subscribeToCloudState,
+  checkSupabaseConnection,
+} from './cloudSync';
+
 import { AuthGate } from './components/AuthGate';
 import { StudentProfileCard } from './components/StudentProfileCard';
 import { FlightItineraryCard } from './components/FlightItineraryCard';
@@ -62,6 +62,8 @@ export function App() {
   const [showTaxiModal, setShowTaxiModal] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
 
+  // Live Supabase Status (Requirement #1)
+  const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false);
 
   // Synchronize hash with currentView
   useEffect(() => {
@@ -179,10 +181,70 @@ export function App() {
     return INITIAL_MILESTONES;
   });
 
-  // Instant local-first persistence (100% stable, zero network race conditions)
+  const [confirmedCampusChat, setConfirmedCampusChat] = useState<boolean>(() => {
+    return localStorage.getItem('navini_campus_chat_confirmed') === 'true';
+  });
+
+  // Live Supabase Lifecycle: Fetch initial + Realtime Subscribe + Periodic Ping
+  useEffect(() => {
+    let isMounted = true;
+
+    const initSupabase = async () => {
+      const isAlive = await checkSupabaseConnection();
+      if (isMounted) setIsSupabaseConnected(isAlive);
+
+      const remote = await fetchCloudState();
+      if (remote && isMounted) {
+        if (remote.passportInfo) setPassportInfo(remote.passportInfo);
+        if (remote.bags?.length) setBags(remote.bags);
+        if (remote.devices?.length) setDevices(remote.devices);
+        if (remote.wardrobe?.length) setWardrobe(remote.wardrobe);
+        if (remote.documents?.length) setDocuments(remote.documents);
+        if (remote.procedureSteps?.length) setProcedureSteps(remote.procedureSteps);
+        if (remote.apps?.length) setApps(remote.apps);
+        if (remote.milestones?.length) setMilestones(remote.milestones);
+        if (typeof remote.confirmedCampusChat === 'boolean') {
+          setConfirmedCampusChat(remote.confirmedCampusChat);
+        }
+      }
+    };
+
+    initSupabase();
+
+    // Subscribe to realtime changes on `app_state` (row `id = 'main_plan'`)
+    const unsubscribe = subscribeToCloudState((incoming) => {
+      if (!isMounted) return;
+      setIsSupabaseConnected(true);
+      if (incoming.passportInfo) setPassportInfo(incoming.passportInfo);
+      if (incoming.bags?.length) setBags(incoming.bags);
+      if (incoming.devices?.length) setDevices(incoming.devices);
+      if (incoming.wardrobe?.length) setWardrobe(incoming.wardrobe);
+      if (incoming.documents?.length) setDocuments(incoming.documents);
+      if (incoming.procedureSteps?.length) setProcedureSteps(incoming.procedureSteps);
+      if (incoming.apps?.length) setApps(incoming.apps);
+      if (incoming.milestones?.length) setMilestones(incoming.milestones);
+      if (typeof incoming.confirmedCampusChat === 'boolean') {
+        setConfirmedCampusChat(incoming.confirmedCampusChat);
+      }
+    });
+
+    // Check connection health every 12 seconds
+    const pingTimer = setInterval(async () => {
+      const isAlive = await checkSupabaseConnection();
+      if (isMounted) setIsSupabaseConnected(isAlive);
+    }, 12000);
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+      clearInterval(pingTimer);
+    };
+  }, []);
+
+  // Sync state to local storage & push to Supabase
   const syncAllState = (overrides?: Partial<AppMasterState>) => {
     const masterState: AppMasterState = {
-      version: '5.1',
+      version: '5.2',
       lastUpdated: new Date().toISOString(),
       passportInfo: overrides?.passportInfo || passportInfo,
       bags: overrides?.bags || bags,
@@ -192,22 +254,10 @@ export function App() {
       procedureSteps: overrides?.procedureSteps || procedureSteps,
       apps: overrides?.apps || apps,
       milestones: overrides?.milestones || milestones,
+      confirmedCampusChat: overrides?.confirmedCampusChat ?? confirmedCampusChat,
     };
 
-    // Save locally with zero latency (instant and offline safe)
-    try {
-      localStorage.setItem('navini_passport_profile_v5', JSON.stringify(masterState.passportInfo));
-      localStorage.setItem('navini_bags_v5', JSON.stringify(masterState.bags));
-      localStorage.setItem('navini_devices_v5', JSON.stringify(masterState.devices));
-      localStorage.setItem('navini_wardrobe_v5', JSON.stringify(masterState.wardrobe));
-      localStorage.setItem('navini_docs_v5', JSON.stringify(masterState.documents));
-      localStorage.setItem('navini_procedure_steps_v5', JSON.stringify(masterState.procedureSteps));
-      localStorage.setItem('navini_apps_v5', JSON.stringify(masterState.apps));
-      localStorage.setItem('navini_milestones_v5', JSON.stringify(masterState.milestones));
-      localStorage.setItem('navini_master_state_v5', JSON.stringify(masterState));
-    } catch (e) {
-      console.warn('Local storage write warning', e);
-    }
+    pushCloudState(masterState);
   };
 
   // Profile Update Handler (Synced to database)
@@ -355,18 +405,25 @@ export function App() {
     syncAllState({ apps: updated });
   };
 
-  // Milestone Completion (Synced to database)
+  // Milestone Completion
   const toggleMilestone = (id: string) => {
     const updated = milestones.map((m) => (m.id === id ? { ...m, isCompleted: !m.isCompleted } : m));
     setMilestones(updated);
     syncAllState({ milestones: updated });
   };
 
+  // Toggle master campus chat confirmed
+  const toggleCampusChatMaster = () => {
+    const next = !confirmedCampusChat;
+    setConfirmedCampusChat(next);
+    localStorage.setItem('navini_campus_chat_confirmed', String(next));
+    syncAllState({ confirmedCampusChat: next });
+  };
+
   if (!isUnlocked) {
     return <AuthGate onUnlock={() => setIsUnlocked(true)} />;
   }
 
-  // Inventory stats
   // Inventory stats - Standard 0-100% Math (Requirement #4)
   const totalPhysicalItems = bags.length + devices.length + wardrobe.length;
   const totalPackedItems =
@@ -389,22 +446,33 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] text-slate-900 pb-20 font-sans overflow-x-hidden">
-      {/* 1. APPLE STYLE TRANSLUCENT TOP NAVIGATION BAR */}
+      {/* 1. TOP HEADER (Chinese Flag Branding & Live Supabase Rippling Indicator, Requirement #1) */}
       <header className="bg-white/90 backdrop-blur-md border-b border-black/10 sticky top-0 z-40 w-full transition-all">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between gap-3">
-          {/* Logo & Brand */}
+          {/* Logo & Brand with Chinese Flag */}
           <button
             type="button"
             onClick={() => navigateToView('overview')}
-            className="flex items-center gap-2.5 text-left group"
+            className="flex items-center gap-2.5 text-left group cursor-pointer"
           >
-            <div className="w-7 h-7 rounded-lg bg-[#007AFF] text-white flex items-center justify-center font-bold text-xs shadow-2xs">
-              NP
+            {/* Crisp Rounded-Square Chinese Flag Icon (Requirement #1) */}
+            <div className="w-8 h-8 rounded-xl bg-[#DE2910] text-white flex items-center justify-center font-bold text-base shadow-2xs overflow-hidden shrink-0">
+              🇨🇳
             </div>
             <div>
-              <span className="font-bold text-sm sm:text-base tracking-tight text-slate-900 block leading-tight">
-                Navini's Travel Plan
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm sm:text-base tracking-tight text-slate-900 block leading-tight">
+                  Navini's Travel Plan
+                </span>
+
+                {/* Live Supabase Rippling Green Indicator (Requirement #1) */}
+                {isSupabaseConnected && (
+                  <span
+                    className="ripple-green-dot shrink-0"
+                    title="Live Supabase Sync Active"
+                  />
+                )}
+              </div>
               <span className="text-[10px] text-[#8E8E93] hidden sm:block">
                 Colombo &rarr; Shanghai &rarr; Haikou
               </span>
@@ -413,19 +481,10 @@ export function App() {
 
           {/* Quick Action Pills + Hamburger Menu */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Status indicator */}
-            <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold"
-              title="All checklists and records are safely preserved"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              <span className="hidden sm:inline">Active</span>
-            </div>
-
             <button
               type="button"
               onClick={() => setShowTaxiModal(true)}
-              className="px-3 py-1.5 rounded-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-semibold text-xs transition-colors shadow-2xs"
+              className="px-3 py-1.5 rounded-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-semibold text-xs transition-colors shadow-2xs cursor-pointer"
             >
               🚕 Taxi Card
             </button>
@@ -434,7 +493,7 @@ export function App() {
             <button
               type="button"
               onClick={() => setIsSidebarOpen(true)}
-              className="w-8 h-8 rounded-full border border-black/10 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center transition-colors shadow-2xs"
+              className="w-8 h-8 rounded-full border border-black/10 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center transition-colors shadow-2xs cursor-pointer"
               title="Open menu"
             >
               <Menu className="w-4 h-4" />
@@ -448,34 +507,44 @@ export function App() {
         {/* OVERVIEW VIEW */}
         {currentView === 'overview' && (
           <div className="space-y-5 animate-in fade-in duration-200">
-            {/* SECTION 1: MODERN STUDENT PROFILE CARD */}
+            {/* SECTION 1: MODERN SCHOLAR PROFILE CARD */}
             <section>
               <StudentProfileCard
                 passportInfo={passportInfo}
                 onUpdatePassportInfo={handleUpdatePassportInfo}
+                isCloudSynced={isSupabaseConnected}
               />
             </section>
 
-            {/* SECTION 2: TRIP.COM FLIGHT CARD IN THE MIDDLE */}
+            {/* SECTION 2: TRIP.COM FLIGHT CARD (Collapsible Accordion, Requirement #3) */}
             <section>
               <FlightItineraryCard />
             </section>
 
-            {/* SECTION 3: THREE CLEAN SQUARE HUB CARDS (0-100% Math, Requirement #4) */}
-            <section>
+            {/* SECTION 3: THREE MAIN INTERACTIVE PORTALS (Requirement #4) */}
+            <section className="space-y-2">
+              <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider px-1 block">
+                Main Interactive Portals
+              </span>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                {/* Hub 1: Physical Gear & Wardrobe */}
+                {/* Portal 1: Physical Gear & Wardrobe */}
                 <button
                   type="button"
                   onClick={() => navigateToView('physical')}
-                  className="ios-card p-4 sm:p-5 text-left flex flex-col justify-between hover:border-[#007AFF]/40 active:opacity-90 transition-all group"
+                  className="ios-card p-4 sm:p-5 text-left flex flex-col justify-between hover:border-[#007AFF]/60 active:scale-[0.98] transition-all group border-l-4 border-l-[#007AFF] shadow-xs cursor-pointer"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#007AFF] flex items-center justify-center font-bold shadow-2xs group-hover:bg-[#007AFF] group-hover:text-white transition-colors">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#007AFF] flex items-center justify-center font-bold shadow-2xs group-hover:scale-105 transition-transform">
                         <Luggage className="w-5 h-5" />
                       </div>
-                      <span className="text-xl font-bold text-[#007AFF]">{physicalPercent}%</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xl font-bold text-[#007AFF]">{physicalPercent}%</span>
+                        <div className="w-6 h-6 rounded-full bg-[#F2F2F7] flex items-center justify-center text-slate-400 group-hover:bg-[#007AFF] group-hover:text-white transition-colors">
+                          <ChevronRight className="w-4 h-4" />
+                        </div>
+                      </div>
                     </div>
 
                     <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#007AFF] transition-colors">
@@ -502,21 +571,26 @@ export function App() {
                   </div>
                 </button>
 
-                {/* Hub 2: Documents & Campus Steps */}
+                {/* Portal 2: Documents & Campus Steps */}
                 <button
                   type="button"
                   onClick={() => navigateToView('documents')}
-                  className="ios-card p-4 sm:p-5 text-left flex flex-col justify-between hover:border-[#007AFF]/40 active:opacity-90 transition-all group"
+                  className="ios-card p-4 sm:p-5 text-left flex flex-col justify-between hover:border-[#F59E0B]/60 active:scale-[0.98] transition-all group border-l-4 border-l-[#F59E0B] shadow-xs cursor-pointer"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
-                      <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold shadow-2xs group-hover:bg-[#007AFF] group-hover:text-white transition-colors">
+                      <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold shadow-2xs group-hover:scale-105 transition-transform">
                         <FileText className="w-5 h-5" />
                       </div>
-                      <span className="text-xl font-bold text-[#007AFF]">{docPercent}%</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xl font-bold text-[#F59E0B]">{docPercent}%</span>
+                        <div className="w-6 h-6 rounded-full bg-[#F2F2F7] flex items-center justify-center text-slate-400 group-hover:bg-[#F59E0B] group-hover:text-white transition-colors">
+                          <ChevronRight className="w-4 h-4" />
+                        </div>
+                      </div>
                     </div>
 
-                    <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#007AFF] transition-colors">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#F59E0B] transition-colors">
                       Documents & Steps
                     </h3>
                     <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
@@ -534,21 +608,26 @@ export function App() {
                   </div>
                 </button>
 
-                {/* Hub 3: Internet, Apps & Buddy Chat */}
+                {/* Portal 3: Internet, Apps & Buddy Chat */}
                 <button
                   type="button"
                   onClick={() => navigateToView('connectivity')}
-                  className="ios-card p-4 sm:p-5 text-left flex flex-col justify-between hover:border-[#007AFF]/40 active:opacity-90 transition-all group"
+                  className="ios-card p-4 sm:p-5 text-left flex flex-col justify-between hover:border-[#10B981]/60 active:scale-[0.98] transition-all group border-l-4 border-l-[#10B981] shadow-xs cursor-pointer"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-2.5">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold shadow-2xs group-hover:bg-[#007AFF] group-hover:text-white transition-colors">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold shadow-2xs group-hover:scale-105 transition-transform">
                         <Globe2 className="w-5 h-5" />
                       </div>
-                      <span className="text-xl font-bold text-[#007AFF]">{appPercent}%</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xl font-bold text-[#10B981]">{appPercent}%</span>
+                        <div className="w-6 h-6 rounded-full bg-[#F2F2F7] flex items-center justify-center text-slate-400 group-hover:bg-[#10B981] group-hover:text-white transition-colors">
+                          <ChevronRight className="w-4 h-4" />
+                        </div>
+                      </div>
                     </div>
 
-                    <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#007AFF] transition-colors">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#10B981] transition-colors">
                       Internet, Apps & Chat
                     </h3>
                     <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
@@ -560,15 +639,15 @@ export function App() {
                     <span className="font-semibold text-slate-700">
                       {configuredApps}/{apps.length} Apps Ready
                     </span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                      WeChat Ready
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${confirmedCampusChat ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                      {confirmedCampusChat ? 'Chat Confirmed ✓' : 'WeChat Ready'}
                     </span>
                   </div>
                 </button>
               </div>
             </section>
 
-            {/* SECTION 4: SCHEDULE & TRAVEL STEPS */}
+            {/* SECTION 4: SCHEDULE & TRAVEL STEPS (Collapsible by Default, Requirement #4) */}
             <section>
               <TimelineOverview
                 milestones={milestones}
@@ -626,12 +705,14 @@ export function App() {
             onAddApp={handleAddApp}
             onDeleteApp={handleDeleteApp}
             onOpenTaxiModal={() => setShowTaxiModal(true)}
+            confirmedCampusChat={confirmedCampusChat}
+            onToggleCampusChatMaster={toggleCampusChatMaster}
           />
         )}
       </main>
 
       {/* FOOTER */}
-      <footer className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-6 text-center text-xs text-slate-400 border-t border-slate-200 mt-12">
+      <footer className="max-w-5xl mx-auto px-4 sm:px-6 pt-12 pb-6 text-center text-xs text-[#8E8E93] border-t border-black/5 mt-12">
         <div>Hainan University (Haidian Campus) • School of Food Science and Engineering (2026–2029)</div>
         <div className="mt-1">
           Student: Parana Gamage Navini Ravishka Priyantha • E-Ticket: 7812903731438 • Admission: 263660001
@@ -646,7 +727,6 @@ export function App() {
         onNavigate={navigateToView}
         onOpenTaxi={() => setShowTaxiModal(true)}
         onOpenBackup={() => setShowBackupModal(true)}
-
         passportInfo={passportInfo}
       />
 

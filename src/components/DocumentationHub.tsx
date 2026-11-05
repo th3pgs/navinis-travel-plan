@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { DocumentItem, ProcedureStep } from '../data';
 import {
   ChevronLeft,
+  ChevronRight,
   Plus,
   Minus,
   Edit3,
@@ -9,6 +10,8 @@ import {
   FolderCheck,
   ListTodo,
   Info,
+  Shield,
+  FileCheck,
 } from 'lucide-react';
 
 interface DocumentationHubProps {
@@ -40,7 +43,8 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
   onUpdateStep,
   onDeleteStep,
 }) => {
-  const [activeTab, setActiveTab] = useState<'vault' | 'procedures'>('vault');
+  // Navigation: 'overview' (2-widget entry) | 'vault' (full view) | 'steps' (full view) (Requirement #10)
+  const [currentSubView, setCurrentSubView] = useState<'overview' | 'vault' | 'steps'>('overview');
   const [selectedStage, setSelectedStage] = useState<string>('all');
   const [isSectionEditMode, setIsSectionEditMode] = useState(false);
   const [infoPopupDoc, setInfoPopupDoc] = useState<DocumentItem | null>(null);
@@ -77,7 +81,6 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
   const [editStepDetail, setEditStepDetail] = useState('');
   const [editStepCarryBag, setEditStepCarryBag] = useState('');
 
-  // Stages configuration
   const stages = [
     { id: 'all', name: 'All Stages' },
     { id: 'prep-srilanka', name: '1. Sri Lanka Prep' },
@@ -87,7 +90,6 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
     { id: 'arrival-campus', name: '5. University & Dorm Setup' },
   ];
 
-  // Document Handlers
   const handleStartEditDoc = (doc: DocumentItem) => {
     setEditingDocId(doc.id);
     setEditDocTitle(doc.title);
@@ -127,7 +129,6 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
     setShowAddDoc(false);
   };
 
-  // Step Handlers
   const handleStartEditStep = (step: ProcedureStep) => {
     setEditingStepId(step.id);
     setEditStepStage(step.stage);
@@ -180,6 +181,7 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
   );
 
   const packedDocsCount = documents.filter((d) => d.isPacked).length;
+  const criticalDocsCount = documents.filter((d) => d.priority === 'Critical').length;
   const doneStepsCount = procedureSteps.filter((s) => s.isDone).length;
   const docProgress = Math.round((packedDocsCount / (documents.length || 1)) * 100);
   const stepProgress = Math.round((doneStepsCount / (procedureSteps.length || 1)) * 100);
@@ -190,55 +192,157 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-black/10 -mx-4 sm:-mx-6 px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between">
         <button
           type="button"
-          onClick={onBack}
-          className="text-[#007AFF] text-base font-medium flex items-center gap-0.5 active:opacity-60 transition-opacity"
+          onClick={() => {
+            if (currentSubView === 'overview') {
+              onBack();
+            } else {
+              setCurrentSubView('overview');
+            }
+          }}
+          className="text-[#007AFF] text-base font-medium flex items-center gap-0.5 active:opacity-60 transition-opacity cursor-pointer"
         >
           <ChevronLeft className="w-5 h-5 -ml-1.5" />
-          <span>Overview</span>
+          <span>{currentSubView === 'overview' ? 'Overview' : 'Documents & Steps'}</span>
         </button>
 
         <h1 className="font-semibold text-sm sm:text-base text-slate-900 truncate px-2 text-center">
-          Documents & Steps
+          {currentSubView === 'overview' && 'Documents & Steps'}
+          {currentSubView === 'vault' && 'Document Vault'}
+          {currentSubView === 'steps' && 'Registration Steps'}
         </h1>
 
-        <button
-          type="button"
-          onClick={() => setIsSectionEditMode(!isSectionEditMode)}
-          className="text-[#007AFF] text-sm sm:text-base font-semibold active:opacity-60 transition-opacity"
-        >
-          {isSectionEditMode ? 'Done' : 'Edit'}
-        </button>
+        {currentSubView !== 'overview' ? (
+          <button
+            type="button"
+            onClick={() => setIsSectionEditMode(!isSectionEditMode)}
+            className="text-[#007AFF] text-sm sm:text-base font-semibold active:opacity-60 transition-opacity cursor-pointer"
+          >
+            {isSectionEditMode ? 'Done' : 'Edit'}
+          </button>
+        ) : (
+          <div className="w-12" />
+        )}
       </header>
 
-      {/* 2. iOS SEGMENTED CONTROL */}
-      <div className="ios-segmented">
-        <button
-          type="button"
-          onClick={() => setActiveTab('vault')}
-          className={`ios-segmented-item ${activeTab === 'vault' ? 'active' : ''}`}
-        >
-          <FolderCheck className="w-3.5 h-3.5" />
-          <span>Document Vault ({documents.length})</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('procedures')}
-          className={`ios-segmented-item ${activeTab === 'procedures' ? 'active' : ''}`}
-        >
-          <ListTodo className="w-3.5 h-3.5" />
-          <span>Campus Steps ({doneStepsCount}/{procedureSteps.length})</span>
-        </button>
-      </div>
+      {/* ========================================================= */}
+      {/* VIEW A: 2-WIDGET OVERVIEW (Requirement #10)               */}
+      {/* ========================================================= */}
+      {currentSubView === 'overview' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider px-1 block">
+            Credentials & Procedures Overview
+          </span>
 
-      {/* TAB 1: CREDENTIAL VAULT */}
-      {activeTab === 'vault' && (
-        <div className="space-y-4">
-          {/* iOS Summary Progress Card (0-100% Math) */}
-          <div className="ios-card p-4 space-y-2.5">
+          {/* Widget 1: Document Vault Widget */}
+          <button
+            type="button"
+            onClick={() => setCurrentSubView('vault')}
+            className="w-full ios-card p-4 sm:p-5 text-left hover:border-[#007AFF]/40 active:opacity-90 transition-all cursor-pointer group space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center text-xl shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  📂
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-slate-900 group-hover:text-[#007AFF] transition-colors">
+                    Document Vault
+                  </h3>
+                  <p className="text-xs text-[#8E8E93] mt-0.5">
+                    Original credentials, passport visa, medical & JW202 certificates.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pl-2">
+                <div className="text-right">
+                  <span className="text-base font-bold text-slate-900 block">{docProgress}%</span>
+                  <span className="text-[10px] text-[#8E8E93]">{packedDocsCount}/{documents.length} Packed</span>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-[#007AFF] transition-colors" />
+              </div>
+            </div>
+
+            {/* Clean Progress Bar */}
+            <div className="w-full bg-[#E5E5EA] h-1.5 rounded-full overflow-hidden">
+              <div
+                className="bg-[#007AFF] h-full rounded-full transition-all duration-300"
+                style={{ width: `${docProgress}%` }}
+              />
+            </div>
+
+            {/* Folder Location & Critical Badges */}
+            <div className="pt-1 border-t border-black/5 flex items-center justify-between text-xs text-[#8E8E93] flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200">
+                  {criticalDocsCount} Critical Pass Documents
+                </span>
+              </div>
+              <span className="text-[11px] font-medium text-slate-600">
+                📁 A4 Waterproof Folder & Fanny Pack
+              </span>
+            </div>
+          </button>
+
+          {/* Widget 2: Campus Registration Steps Widget */}
+          <button
+            type="button"
+            onClick={() => setCurrentSubView('steps')}
+            className="w-full ios-card p-4 sm:p-5 text-left hover:border-[#007AFF]/40 active:opacity-90 transition-all cursor-pointer group space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-blue-50 text-[#007AFF] flex items-center justify-center text-xl shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                  📋
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-slate-900 group-hover:text-[#007AFF] transition-colors">
+                    Campus Registration Steps
+                  </h3>
+                  <p className="text-xs text-[#8E8E93] mt-0.5">
+                    Step-by-step guidance from Sri Lanka prep to dorm check-in.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pl-2">
+                <div className="text-right">
+                  <span className="text-base font-bold text-slate-900 block">{stepProgress}%</span>
+                  <span className="text-[10px] text-[#8E8E93]">{doneStepsCount}/{procedureSteps.length} Done</span>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-[#007AFF] transition-colors" />
+              </div>
+            </div>
+
+            <div className="w-full bg-[#E5E5EA] h-1.5 rounded-full overflow-hidden">
+              <div
+                className="bg-[#007AFF] h-full rounded-full transition-all duration-300"
+                style={{ width: `${stepProgress}%` }}
+              />
+            </div>
+
+            <div className="pt-1 border-t border-black/5 flex items-center justify-between text-xs text-[#8E8E93]">
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+                5 Structured Stages
+              </span>
+              <span className="text-[11px] font-medium text-slate-600">
+                Next: Haikou South Gate Registration
+              </span>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* VIEW B: DOCUMENT VAULT FULL VIEW                          */}
+      {/* ========================================================= */}
+      {currentSubView === 'vault' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="ios-card p-4 space-y-2">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider block">
-                  Document Readiness
+                <span className="text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider block">
+                  Vault Readiness
                 </span>
                 <span className="text-xl font-bold text-slate-900">
                   {packedDocsCount} of {documents.length} Documents Packed & Ready
@@ -249,7 +353,6 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
               </div>
             </div>
 
-            {/* Progress Bar */}
             <div className="w-full bg-[#E5E5EA] h-2 rounded-full overflow-hidden">
               <div
                 className="bg-[#007AFF] h-full rounded-full transition-all duration-300"
@@ -258,17 +361,15 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
             </div>
 
             <div className="flex items-center justify-between text-xs text-[#8E8E93] pt-1">
-              <span>Carry in A4 waterproof folder & fanny pack only</span>
-              {isSectionEditMode && (
-                <button
-                  type="button"
-                  onClick={() => setShowAddDoc(true)}
-                  className="text-[#007AFF] font-semibold flex items-center gap-1 active:opacity-60"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Document</span>
-                </button>
-              )}
+              <span>Never place original certificates in checked bags</span>
+              <button
+                type="button"
+                onClick={() => setShowAddDoc(true)}
+                className="text-[#007AFF] font-semibold flex items-center gap-1 active:opacity-60 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Document</span>
+              </button>
             </div>
           </div>
 
@@ -294,14 +395,14 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                         placeholder="Issuer"
                         value={editDocIssuer}
                         onChange={(e) => setEditDocIssuer(e.target.value)}
-                        className="w-full px-2 py-1.5 border border-black/10 rounded-lg bg-white"
+                        className="w-full px-2.5 py-1.5 border border-black/10 rounded-lg bg-white"
                       />
                       <input
                         type="text"
                         placeholder="Placement"
                         value={editDocLocation}
                         onChange={(e) => setEditDocLocation(e.target.value)}
-                        className="w-full px-2 py-1.5 border border-black/10 rounded-lg bg-white"
+                        className="w-full px-2.5 py-1.5 border border-black/10 rounded-lg bg-white"
                       />
                     </div>
                     <div className="flex justify-end gap-1.5 pt-1">
@@ -342,7 +443,6 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                       </button>
                     )}
 
-                    {/* Scannable Document Information */}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span
@@ -365,7 +465,6 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                         </span>
                       </div>
 
-                      {/* Scannable Key-Value Row */}
                       <div className="flex items-center gap-2 mt-1 text-[11px] text-[#8E8E93] flex-wrap">
                         <span>📍 {doc.carryLocation}</span>
                         <span>•</span>
@@ -374,7 +473,6 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                     </div>
                   </div>
 
-                  {/* Actions & Single Circular iOS Checkmark Circle */}
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
@@ -395,11 +493,12 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                       </button>
                     )}
 
+                    {/* Single Circular iOS Checkmark Circle */}
                     <button
                       type="button"
                       onClick={() => handleToggleDoc(doc)}
                       title={doc.isPacked ? 'Packed (Tap to unmark)' : 'Unpacked (Tap to mark packed)'}
-                      className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                      className={`w-6 h-6 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                         doc.isPacked
                           ? 'bg-[#007AFF] text-white shadow-xs'
                           : 'border-2 border-slate-300 hover:border-[#007AFF] bg-white'
@@ -415,15 +514,16 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
         </div>
       )}
 
-      {/* TAB 2: PROCEDURES & STEPS */}
-      {activeTab === 'procedures' && (
-        <div className="space-y-4">
-          {/* Summary Progress Card */}
-          <div className="ios-card p-4 space-y-2.5">
+      {/* ========================================================= */}
+      {/* VIEW C: REGISTRATION STEPS FULL VIEW                      */}
+      {/* ========================================================= */}
+      {currentSubView === 'steps' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="ios-card p-4 space-y-2">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider block">
-                  Campus & Transit Steps
+                <span className="text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider block">
+                  Procedure Steps
                 </span>
                 <span className="text-xl font-bold text-slate-900">
                   {doneStepsCount} of {procedureSteps.length} Steps Completed
@@ -443,16 +543,14 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
 
             <div className="flex items-center justify-between text-xs text-[#8E8E93] pt-1">
               <span>Follow in sequence during transit and arrival</span>
-              {isSectionEditMode && (
-                <button
-                  type="button"
-                  onClick={() => setShowAddStep(true)}
-                  className="text-[#007AFF] font-semibold flex items-center gap-1 active:opacity-60"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Step</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowAddStep(true)}
+                className="text-[#007AFF] font-semibold flex items-center gap-1 active:opacity-60 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Step</span>
+              </button>
             </div>
           </div>
 
@@ -463,7 +561,7 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                 key={st.id}
                 type="button"
                 onClick={() => setSelectedStage(st.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                   selectedStage === st.id
                     ? 'bg-[#007AFF] text-white shadow-xs'
                     : 'bg-white text-slate-700 border border-black/5 hover:bg-slate-50'
@@ -523,7 +621,6 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                   className="p-3 sm:p-3.5 flex items-start justify-between gap-3 bg-white hover:bg-slate-50/50 transition-colors"
                 >
                   <div className="flex items-start gap-3 min-w-0 flex-1">
-                    {/* Delete badge in edit mode */}
                     {isSectionEditMode && (
                       <button
                         type="button"
@@ -539,7 +636,7 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                     <button
                       type="button"
                       onClick={() => onToggleStepDone(step.id)}
-                      className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                      className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-all cursor-pointer ${
                         step.isDone
                           ? 'bg-[#007AFF] text-white shadow-xs'
                           : 'border-2 border-slate-300 hover:border-[#007AFF] bg-white'
@@ -548,7 +645,6 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                       {step.isDone && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                     </button>
 
-                    {/* Step Details with Scannable Key-Value formatting */}
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span
@@ -590,209 +686,217 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
         </div>
       )}
 
-      {/* iOS Modal Sheet: Add Document */}
+      {/* Add Document Modal */}
       {showAddDoc && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end sm:justify-center sm:p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
           <form
             onSubmit={handleAddDocSubmit}
-            className="bg-[#F2F2F7] rounded-t-3xl sm:rounded-3xl max-w-md w-full mx-auto overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-3.5 border border-black/10 text-xs"
           >
-            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-md px-4 py-3 border-b border-black/10 flex items-center justify-between">
+            <div className="flex items-center justify-between border-b border-black/5 pb-2">
+              <h3 className="font-bold text-sm text-slate-900">Add Document</h3>
               <button
                 type="button"
                 onClick={() => setShowAddDoc(false)}
-                className="text-[#007AFF] text-sm font-medium"
+                className="text-slate-400 hover:text-slate-600"
               >
-                Cancel
-              </button>
-              <h3 className="font-semibold text-sm text-slate-900">Add Document</h3>
-              <button
-                type="submit"
-                className="text-[#007AFF] text-sm font-bold"
-              >
-                Done
+                ✕
               </button>
             </div>
 
-            <div className="p-4 space-y-3 overflow-y-auto flex-1">
-              <div className="ios-card p-3 space-y-3 text-xs">
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
-                    Document Title
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Police Clearance Certificate"
-                    value={newDocTitle}
-                    onChange={(e) => setNewDocTitle(e.target.value)}
-                    className="w-full px-3 py-2 border border-black/10 rounded-xl bg-[#F2F2F7] focus:bg-white focus:outline-none"
-                    required
-                  />
-                </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                Document Title
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Police Clearance Certificate"
+                value={newDocTitle}
+                onChange={(e) => setNewDocTitle(e.target.value)}
+                className="w-full px-3 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
+                required
+              />
+            </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
-                      Issuer
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Police HQ"
-                      value={newDocIssuer}
-                      onChange={(e) => setNewDocIssuer(e.target.value)}
-                      className="w-full px-2 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
-                      Priority
-                    </label>
-                    <select
-                      value={newDocPriority}
-                      onChange={(e) => setNewDocPriority(e.target.value as any)}
-                      className="w-full px-2 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
-                    >
-                      <option value="Critical">Critical</option>
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
-                    Placement
-                  </label>
-                  <select
-                    value={newDocLocation}
-                    onChange={(e) => setNewDocLocation(e.target.value)}
-                    className="w-full px-2 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
-                  >
-                    <option value="Fanny Pack (Worn on Chest)">Fanny Pack (Worn on Chest)</option>
-                    <option value="A4 Waterproof Folder (Cabin Backpack)">A4 Waterproof Folder (Cabin Backpack)</option>
-                  </select>
-                </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                  Issuer
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Police HQ"
+                  value={newDocIssuer}
+                  onChange={(e) => setNewDocIssuer(e.target.value)}
+                  className="w-full px-2 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
+                />
               </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                  Priority
+                </label>
+                <select
+                  value={newDocPriority}
+                  onChange={(e) => setNewDocPriority(e.target.value as any)}
+                  className="w-full px-2 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
+                >
+                  <option value="Critical">Critical</option>
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                Placement
+              </label>
+              <select
+                value={newDocLocation}
+                onChange={(e) => setNewDocLocation(e.target.value)}
+                className="w-full px-2 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
+              >
+                <option value="Fanny Pack (Worn on Chest)">Fanny Pack (Worn on Chest)</option>
+                <option value="A4 Waterproof Folder (Cabin Backpack)">A4 Waterproof Folder (Cabin Backpack)</option>
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-black/5">
+              <button
+                type="button"
+                onClick={() => setShowAddDoc(false)}
+                className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-lg bg-[#007AFF] text-white font-semibold shadow-xs"
+              >
+                Save
+              </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* iOS Modal Sheet: Add Step */}
+      {/* Add Step Modal */}
       {showAddStep && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end sm:justify-center sm:p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
           <form
             onSubmit={handleAddStepSubmit}
-            className="bg-[#F2F2F7] rounded-t-3xl sm:rounded-3xl max-w-md w-full mx-auto overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-3.5 border border-black/10 text-xs"
           >
-            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-md px-4 py-3 border-b border-black/10 flex items-center justify-between">
+            <div className="flex items-center justify-between border-b border-black/5 pb-2">
+              <h3 className="font-bold text-sm text-slate-900">Add Procedure Step</h3>
               <button
                 type="button"
                 onClick={() => setShowAddStep(false)}
-                className="text-[#007AFF] text-sm font-medium"
+                className="text-slate-400 hover:text-slate-600"
               >
-                Cancel
-              </button>
-              <h3 className="font-semibold text-sm text-slate-900">Add Procedure Step</h3>
-              <button
-                type="submit"
-                className="text-[#007AFF] text-sm font-bold"
-              >
-                Done
+                ✕
               </button>
             </div>
 
-            <div className="p-4 space-y-3 overflow-y-auto flex-1">
-              <div className="ios-card p-3 space-y-3 text-xs">
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
-                    Stage
-                  </label>
-                  <select
-                    value={newStepStage}
-                    onChange={(e) => setNewStepStage(e.target.value as any)}
-                    className="w-full px-2 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
-                  >
-                    <option value="prep-srilanka">1. Sri Lanka Prep</option>
-                    <option value="airport-cmb">2. Colombo CMB Airport</option>
-                    <option value="transit-pvg">3. Shanghai PVG Layover</option>
-                    <option value="flight-hak">4. Haikou HAK Arrival</option>
-                    <option value="arrival-campus">5. University & Dorm Setup</option>
-                  </select>
-                </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                Stage
+              </label>
+              <select
+                value={newStepStage}
+                onChange={(e) => setNewStepStage(e.target.value as any)}
+                className="w-full px-2 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
+              >
+                <option value="prep-srilanka">1. Sri Lanka Prep</option>
+                <option value="airport-cmb">2. Colombo CMB Airport</option>
+                <option value="transit-pvg">3. Shanghai PVG Layover</option>
+                <option value="flight-hak">4. Haikou HAK Arrival</option>
+                <option value="arrival-campus">5. University & Dorm Setup</option>
+              </select>
+            </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
-                    Step Title
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Register at International Student Office"
-                    value={newStepTitle}
-                    onChange={(e) => setNewStepTitle(e.target.value)}
-                    className="w-full px-3 py-2 border border-black/10 rounded-xl bg-[#F2F2F7] focus:bg-white focus:outline-none"
-                    required
-                  />
-                </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                Step Title
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Register at International Student Office"
+                value={newStepTitle}
+                onChange={(e) => setNewStepTitle(e.target.value)}
+                className="w-full px-3 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
+                required
+              />
+            </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
-                    Instructions & Details
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Location, requirements, timing..."
-                    value={newStepDetail}
-                    onChange={(e) => setNewStepDetail(e.target.value)}
-                    className="w-full px-3 py-2 border border-black/10 rounded-xl bg-[#F2F2F7] focus:bg-white focus:outline-none"
-                  />
-                </div>
-              </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
+                Instructions & Details
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Location, requirements, timing..."
+                value={newStepDetail}
+                onChange={(e) => setNewStepDetail(e.target.value)}
+                className="w-full px-3 py-2 border border-black/10 rounded-xl bg-[#F2F2F7]"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-black/5">
+              <button
+                type="button"
+                onClick={() => setShowAddStep(false)}
+                className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-lg bg-[#007AFF] text-white font-semibold shadow-xs"
+              >
+                Save
+              </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* iOS Modal Sheet: Document Guidelines Popup */}
+      {/* Document Guidelines Modal */}
       {infoPopupDoc && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex flex-col justify-end sm:justify-center sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-[#F2F2F7] rounded-t-3xl sm:rounded-3xl max-w-md w-full mx-auto overflow-hidden shadow-2xl flex flex-col">
-            <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-md px-4 py-3 border-b border-black/10 flex items-center justify-between">
-              <h3 className="font-semibold text-sm text-slate-900 truncate pr-2">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-3 border border-black/10 text-xs">
+            <div className="flex items-center justify-between border-b border-black/5 pb-2">
+              <h3 className="font-bold text-sm text-slate-900 truncate pr-2">
                 {infoPopupDoc.title}
               </h3>
               <button
                 type="button"
                 onClick={() => setInfoPopupDoc(null)}
-                className="text-[#007AFF] text-sm font-bold"
+                className="text-[#007AFF] font-bold"
               >
                 Done
               </button>
             </div>
 
-            <div className="p-4 space-y-3">
-              <div className="ios-card p-4 space-y-2 text-xs">
-                <div className="flex items-center justify-between border-b border-black/5 pb-2">
-                  <span className="text-[#8E8E93]">Issuing Authority</span>
-                  <span className="font-semibold text-slate-900">{infoPopupDoc.issuer}</span>
-                </div>
-                <div className="flex items-center justify-between border-b border-black/5 pb-2">
-                  <span className="text-[#8E8E93]">Carry Location</span>
-                  <span className="font-semibold text-[#007AFF]">{infoPopupDoc.carryLocation}</span>
-                </div>
-                <div className="flex items-center justify-between border-b border-black/5 pb-2">
-                  <span className="text-[#8E8E93]">Priority Status</span>
-                  <span className="font-semibold text-slate-900">{infoPopupDoc.priority}</span>
-                </div>
-                {infoPopupDoc.notes && (
-                  <div className="pt-1 text-slate-700 leading-relaxed">
-                    <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider block mb-0.5">
-                      Special Guideline
-                    </span>
-                    {infoPopupDoc.notes}
-                  </div>
-                )}
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between py-1 border-b border-black/5">
+                <span className="text-[#8E8E93]">Issuer</span>
+                <span className="font-semibold text-slate-800">{infoPopupDoc.issuer}</span>
               </div>
+              <div className="flex justify-between py-1 border-b border-black/5">
+                <span className="text-[#8E8E93]">Placement</span>
+                <span className="font-semibold text-[#007AFF]">{infoPopupDoc.carryLocation}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-black/5">
+                <span className="text-[#8E8E93]">Priority</span>
+                <span className="font-semibold text-slate-800">{infoPopupDoc.priority}</span>
+              </div>
+              {infoPopupDoc.notes && (
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 mt-2">
+                  <span className="font-bold block mb-0.5">Special Guideline:</span>
+                  {infoPopupDoc.notes}
+                </div>
+              )}
             </div>
           </div>
         </div>
