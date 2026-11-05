@@ -137,7 +137,18 @@ export function App() {
     setTasks((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Wardrobe Handlers
+  // Device & Bag Bought Toggles
+  const toggleDeviceBought = (id: string) => {
+    setDevices((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, isBought: !d.isBought } : d))
+    );
+  };
+
+  const toggleBagBought = (id: string) => {
+    setBags((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, isBought: !b.isBought } : b))
+    );
+  };
   const toggleWardrobeBought = (id: string) => {
     setWardrobeItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, isBought: !item.isBought } : item))
@@ -338,7 +349,8 @@ export function App() {
       <HardwareOverviewBar
         devices={devices}
         bags={bags}
-        packedBagsCount={packedBagsCount}
+        onToggleDeviceBought={toggleDeviceBought}
+        onToggleBagBought={toggleBagBought}
       />
 
       {/* 4. FLIGHT TRANSIT SUMMARY CARD */}

@@ -325,7 +325,11 @@ export const WardrobeManager: React.FC<WardrobeManagerProps> = ({
                 <tr
                   key={item.id}
                   className={`hover:bg-slate-50/80 transition-colors ${
-                    item.isPacked ? 'bg-slate-50/40 text-slate-400' : ''
+                    !item.isBought
+                      ? 'bg-red-50/60'
+                      : item.isPacked
+                      ? 'bg-slate-50/40 text-slate-400'
+                      : ''
                   }`}
                 >
                   {/* Upfront Checkbox 1: Packed */}
@@ -339,22 +343,31 @@ export const WardrobeManager: React.FC<WardrobeManagerProps> = ({
                     />
                   </td>
 
-                  {/* Upfront Checkbox 2: Ready / Bought */}
+                  {/* Upfront Checkbox 2: Ready / Bought (Red badge if false) */}
                   <td className="py-2.5 px-3 text-center">
                     <input
                       type="checkbox"
                       checked={item.isBought}
                       onChange={() => onToggleBought(item.id)}
-                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600 cursor-pointer"
-                      title="Purchased / Ready at Home"
+                      className={`w-4 h-4 rounded cursor-pointer ${
+                        !item.isBought ? 'accent-red-600' : 'accent-emerald-600'
+                      }`}
+                      title={item.isBought ? 'Bought / Acquired' : 'Need to Buy!'}
                     />
                   </td>
 
                   {/* Description */}
                   <td className="py-2.5 px-3 font-medium text-slate-800">
-                    <span className={item.isPacked ? 'line-through text-slate-400' : ''}>
-                      {item.name}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={item.isPacked ? 'line-through text-slate-400' : ''}>
+                        {item.name}
+                      </span>
+                      {!item.isBought && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-red-100 text-red-800 border border-red-300">
+                          NEED TO BUY
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Category */}
