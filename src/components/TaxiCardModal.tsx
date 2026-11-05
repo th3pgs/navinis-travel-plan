@@ -6,9 +6,8 @@ interface TaxiCardModalProps {
   onClose: () => void;
 }
 
-// Generates a full standalone HTML document for printing in a new window.
-// This completely bypasses the broken window.print() approach that was
-// hiding/showing elements with CSS visibility — which caused 3 blank pages.
+// Generates a clean, professional standalone HTML document for printing.
+// Stripped of unnecessary English translations, confusing subtitles, and taxi fare text.
 function generatePrintableHTML(fields: {
   destinationCn: string;
   addressCn: string;
@@ -20,7 +19,7 @@ function generatePrintableHTML(fields: {
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <title>海南大学出租车卡 — Hainan University Taxi Card</title>
+  <title>海南大学留学生到达卡 — Hainan University Arrival Card</title>
   <style>
     @page {
       size: A4 portrait;
@@ -39,14 +38,14 @@ function generatePrintableHTML(fields: {
     }
     body {
       font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", -apple-system, "Segoe UI", sans-serif;
-      color: #1e293b;
+      color: #0f172a;
       padding: 8mm 10mm;
       background: #fff;
     }
     .card {
-      border: 3px solid #1e293b;
-      border-radius: 10px;
-      padding: 20px 22px 16px;
+      border: 3px solid #0f172a;
+      border-radius: 12px;
+      padding: 22px 24px 18px;
       max-width: 620px;
       margin: 0 auto;
       page-break-inside: avoid;
@@ -59,149 +58,153 @@ function generatePrintableHTML(fields: {
       padding-bottom: 10px;
       margin-bottom: 16px;
     }
-    .header-left {
+    .header-title-cn {
+      font-size: 20px;
+      font-weight: 900;
+      color: #0f172a;
+      letter-spacing: 0.5px;
+    }
+    .header-sub-en {
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      margin-top: 2px;
+    }
+    .header-badge {
       font-size: 11px;
       font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      color: #64748b;
-    }
-    .header-right {
-      font-size: 10px;
-      font-weight: 600;
-      color: #94a3b8;
-      background: #f1f5f9;
-      padding: 3px 10px;
-      border-radius: 4px;
-      border: 1px solid #e2e8f0;
-    }
-    .subtitle-cn {
-      font-size: 13px;
-      font-weight: 600;
-      color: #475569;
-      margin-top: 2px;
+      color: #1e3a8a;
+      background: #eff6ff;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid #bfdbfe;
     }
     .dest-box {
       background: #fef2f2;
-      border: 2px solid #fca5a5;
-      border-radius: 8px;
-      padding: 14px 16px;
+      border: 2px solid #ef4444;
+      border-radius: 10px;
+      padding: 16px 18px;
       margin-bottom: 14px;
     }
     .dest-label {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
+      font-size: 11px;
+      font-weight: 800;
       color: #991b1b;
+      letter-spacing: 0.5px;
       margin-bottom: 4px;
     }
     .dest-text {
-      font-size: 28px;
+      font-size: 32px;
       font-weight: 900;
       color: #b91c1c;
       line-height: 1.25;
-    }
-    .dest-en {
-      font-size: 11px;
-      color: #64748b;
-      margin-top: 4px;
+      letter-spacing: 0.5px;
     }
     .addr-box {
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 12px 14px;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 14px 16px;
       margin-bottom: 14px;
+      background: #f8fafc;
     }
     .addr-label {
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #94a3b8;
-      margin-bottom: 3px;
+      color: #64748b;
+      margin-bottom: 4px;
     }
     .addr-text {
-      font-size: 17px;
-      font-weight: 700;
-      color: #1e293b;
+      font-size: 18px;
+      font-weight: 800;
+      color: #0f172a;
       line-height: 1.4;
-    }
-    .addr-en {
-      font-size: 10px;
-      color: #94a3b8;
-      margin-top: 3px;
     }
     .msg-box {
       background: #fffbeb;
-      border: 1px solid #fcd34d;
-      border-radius: 8px;
-      padding: 12px 14px;
+      border: 1.5px solid #f59e0b;
+      border-radius: 10px;
+      padding: 14px 16px;
       margin-bottom: 14px;
     }
     .msg-label {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
+      font-size: 11px;
+      font-weight: 800;
       color: #92400e;
       margin-bottom: 4px;
     }
     .msg-text {
-      font-size: 13px;
-      font-weight: 500;
+      font-size: 14px;
+      font-weight: 600;
       color: #1e293b;
       line-height: 1.6;
     }
-    .phones-row {
+    .contacts-row {
       display: flex;
       gap: 12px;
       margin-bottom: 14px;
     }
-    .phone-card {
+    .contact-card {
       flex: 1;
-      border: 1px solid #e2e8f0;
+      border: 1px solid #cbd5e1;
       border-radius: 8px;
-      padding: 10px 12px;
-      background: #f8fafc;
+      padding: 10px 14px;
+      background: #ffffff;
     }
-    .phone-label {
-      font-size: 10px;
-      font-weight: 600;
-      color: #94a3b8;
+    .contact-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
     }
-    .phone-number {
-      font-size: 16px;
-      font-weight: 800;
+    .contact-phone {
+      font-size: 18px;
+      font-weight: 900;
       font-family: "SF Mono", "Menlo", "Consolas", monospace;
-      color: #1e293b;
+      color: #0f172a;
       margin-top: 2px;
     }
-    .footer-row {
+    .wechat-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-top: 1px solid #e2e8f0;
-      padding-top: 10px;
-      font-size: 11px;
-      color: #64748b;
+      border-top: 1.5px solid #e2e8f0;
+      padding-top: 12px;
     }
-    .footer-row strong {
-      color: #1e293b;
+    .wechat-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      padding: 4px 10px;
+      border-radius: 6px;
+      color: #065f46;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .wechat-icon {
+      width: 16px;
+      height: 16px;
+      fill: #07c160;
+    }
+    .wechat-id {
       font-family: "SF Mono", "Menlo", "Consolas", monospace;
+      font-weight: 900;
+      color: #047857;
+      font-size: 14px;
     }
     .student-bar {
-      margin-top: 18px;
-      border: 1px dashed #cbd5e1;
-      border-radius: 6px;
+      margin-top: 16px;
+      border: 1px dashed #94a3b8;
+      border-radius: 8px;
       padding: 8px 12px;
       text-align: center;
       font-size: 11px;
-      color: #64748b;
+      color: #475569;
       line-height: 1.5;
+      background: #f8fafc;
     }
     .student-bar strong {
-      color: #1e293b;
+      color: #0f172a;
     }
   </style>
 </head>
@@ -209,50 +212,56 @@ function generatePrintableHTML(fields: {
   <div class="card">
     <div class="header">
       <div>
-        <div class="header-left">Hainan University Arrival Pocket Card</div>
-        <div class="subtitle-cn">出示给出租车司机师傅看 (Show directly to Driver)</div>
+        <div class="header-title-cn">海南大学留学生到达卡</div>
+        <div class="header-sub-en">Hainan University Student Arrival Card</div>
       </div>
-      <div class="header-right">1-Page Pocket Pass</div>
+      <div class="header-badge">海甸校区 • 留学生公寓</div>
     </div>
 
     <div class="dest-box">
-      <div class="dest-label">Destination / 目的地:</div>
+      <div class="dest-label">目的地 (Destination):</div>
       <div class="dest-text">${fields.destinationCn}</div>
-      <div class="dest-en">(Please take me to: Hainan University — Haidian Campus)</div>
     </div>
 
     <div class="addr-box">
-      <div class="addr-label">Detailed Address / 详细地址:</div>
+      <div class="addr-label">详细地址 (Address):</div>
       <div class="addr-text">${fields.addressCn}</div>
-      <div class="addr-en">No. 58 Renmin Avenue, Meilan District, Haikou (School of International Education / Dormitory)</div>
     </div>
 
     <div class="msg-box">
-      <div class="msg-label">Message for Driver / 司机师傅说明:</div>
+      <div class="msg-label">留学生说明 (Note for Driver):</div>
       <div class="msg-text">${fields.messageCn}</div>
     </div>
 
-    <div class="phones-row">
-      <div class="phone-card">
-        <div class="phone-label">孙老师 (Ms. Sun 1)</div>
-        <div class="phone-number">${fields.phone1}</div>
+    <div class="contacts-row">
+      <div class="contact-card">
+        <div class="contact-label">学校接报联系人 1 (孙老师)</div>
+        <div class="contact-phone">${fields.phone1}</div>
       </div>
-      <div class="phone-card">
-        <div class="phone-label">孙老师 (Ms. Sun 2)</div>
-        <div class="phone-number">${fields.phone2}</div>
+      <div class="contact-card">
+        <div class="contact-label">学校接报联系人 2 (孙老师)</div>
+        <div class="contact-phone">${fields.phone2}</div>
       </div>
     </div>
 
-    <div class="footer-row">
-      <div>WeChat: <strong>sun_admission</strong></div>
-      <div>Metered Taxi Fare: approx. <strong>50–80 RMB</strong></div>
+    <div class="wechat-bar">
+      <div class="wechat-pill">
+        <svg class="wechat-icon" viewBox="0 0 24 24">
+          <path d="M8.5 2C4.36 2 1 4.91 1 8.5c0 2.05 1.05 3.89 2.7 5.09l-.7 2.1 2.45-1.23c.96.34 2 .54 3.05.54.2 0 .4 0 .6-.02-.15-.47-.23-.97-.23-1.48 0-3.31 3.13-6 7-6 .34 0 .68.02 1.01.07C16.14 4.5 12.63 2 8.5 2zm-2 4.5c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm4 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm6.5 4.5c-3.31 0-6 2.24-6 5s2.69 5 6 5c.83 0 1.62-.15 2.34-.42l1.91.96-.54-1.63c1.37-.95 2.29-2.39 2.29-3.91 0-2.76-2.69-5-6-5zm-2 3c.41 0 .75.34.75.75s-.34.75-.75.75-.75-.34-.75-.75.34-.75.75-.75zm4 0c.41 0 .75.34.75.75s-.34.75-.75.75-.75-.34-.75-.75.34-.75.75-.75z"/>
+        </svg>
+        <span>微信号 (WeChat ID):</span>
+        <span class="wechat-id">sun_admission</span>
+      </div>
+      <div style="font-size: 11px; color: #64748b;">
+        海口美兰机场出租车乘车点直达
+      </div>
     </div>
   </div>
 
   <div class="student-bar">
-    Student: <strong>Parana Gamage Navini Ravishka Priyantha</strong> •
-    Admission No: <strong>263660001</strong> •
-    Hainan University (Haidian Campus) • Food Science & Engineering (2026–2029)
+    学生姓名 (Student): <strong>Parana Gamage Navini Ravishka Priyantha</strong> •
+    录取编号: <strong>263660001</strong> •
+    专业: <strong>食品科学与工程（全英文授课全额奖学金）</strong>
   </div>
 </body>
 </html>`;
@@ -262,11 +271,11 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
   const [copied, setCopied] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
-  // Editable destination card fields
-  const [destinationCn, setDestinationCn] = useState('请送我去：海南大学（海甸校区）');
+  // Clean, high-impact destination fields
+  const [destinationCn, setDestinationCn] = useState('海南大学（海甸校区）');
   const [addressCn, setAddressCn] = useState('中国海南省海口市美兰区人民大道58号（海南大学国际教育学院 / 留学生公寓）');
   const [messageCn, setMessageCn] = useState(
-    '司机师傅您好：我是刚到的外国留学生，不会说中文，行李有两件大箱子。如果进门保安询问或找不到具体宿舍/报到楼，请帮我拨打学校老师电话：'
+    '司机师傅您好：我是刚到校报到的外国留学生，中文不流利，行李有两件大箱子。如果进门保安询问或找不到具体宿舍/报到楼，请帮我拨打学校老师电话。非常感谢！'
   );
   const [phone1, setPhone1] = useState('0898-66291354');
   const [phone2, setPhone2] = useState('0898-66213608');
@@ -280,7 +289,6 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
   };
 
   // Uses a clean isolated iframe to print strictly 1 page without any app chrome or blank sheets.
-  // Falls back to window.open if iframe printing is restricted.
   const handlePrint = () => {
     const html = generatePrintableHTML({
       destinationCn,
@@ -333,8 +341,7 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
     }
   };
 
-  // Downloads a standalone HTML file that can be opened locally and printed,
-  // works everywhere — no Google Docs, no cloud dependency.
+  // Downloads a standalone HTML file that can be opened locally and printed anywhere
   const handleDownloadHTML = () => {
     const html = generatePrintableHTML({
       destinationCn,
@@ -348,23 +355,25 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
     const a = document.createElement('a');
     a.href = url;
     a.download = 'Hainan_University_Taxi_Card.html';
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-white border border-slate-300 rounded-xl shadow-xl overflow-hidden my-auto">
-        {/* Modal Top Bar */}
-        <div className="bg-[#003580] text-white px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden my-4 border border-slate-200">
+        {/* Top Action Bar */}
+        <div className="bg-[#003580] text-white px-4 py-3 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-bold tracking-tight">Haikou Taxi Destination Pocket Card</h2>
-            <p className="text-[11px] text-blue-200">1-Page compact pocket format for print shops or wallet</p>
+            <h2 className="text-sm font-bold tracking-tight">海南大学出租车卡 (Taxi Destination Card)</h2>
+            <p className="text-[11px] text-blue-200">Clean 1-page pocket printout with zero clutter</p>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className="px-2.5 py-1 text-xs rounded bg-white/10 hover:bg-white/20 text-white flex items-center gap-1 transition-colors"
+              className="px-2 py-1 text-xs rounded bg-white/10 hover:bg-white/20 text-white flex items-center gap-1 transition-colors"
             >
               <Edit2 className="w-3.5 h-3.5" />
               <span>{isEditing ? 'Done' : 'Edit'}</span>
@@ -395,104 +404,98 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
 
         {/* Live Preview of the Card */}
         <div className="p-4 sm:p-5 space-y-3">
-          <div className="border-2 border-slate-900 p-4 rounded-lg bg-white space-y-3">
+          <div className="border-2 border-slate-900 p-4 sm:p-5 rounded-xl bg-white space-y-3">
             {/* Header */}
-            <div className="border-b border-slate-300 pb-1.5 flex items-center justify-between">
+            <div className="border-b border-slate-200 pb-2 flex items-center justify-between">
               <div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block">
-                  Hainan University Arrival Pocket Card
-                </span>
-                <span className="text-xs text-slate-800 font-semibold">
-                  出示给出租车司机师傅看 (Show directly to Driver)
+                <h3 className="text-base font-black text-slate-900">
+                  海南大学留学生到达卡
+                </h3>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  Hainan University Student Arrival Card
                 </span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600">
-                1-Page Pocket Pass
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-[#003580]">
+                海甸校区 • 留学生公寓
               </span>
             </div>
 
             {/* Destination in High Contrast Chinese */}
-            <div className="bg-red-50 border border-red-200 p-3 rounded">
-              <span className="text-[10px] uppercase font-bold text-red-800 block mb-0.5">
-                Destination / 目的地:
+            <div className="bg-red-50 border-2 border-red-200 p-3.5 rounded-lg">
+              <span className="text-[10px] uppercase font-extrabold text-red-800 block mb-0.5">
+                目的地 (Destination):
               </span>
               {isEditing ? (
                 <input
                   type="text"
                   value={destinationCn}
                   onChange={(e) => setDestinationCn(e.target.value)}
-                  className="w-full p-1.5 border border-blue-500 rounded text-xl font-bold text-slate-900"
+                  className="w-full p-1.5 border border-red-400 rounded text-xl font-bold text-slate-900 bg-white"
                 />
               ) : (
-                <div className="text-2xl sm:text-3xl font-extrabold text-red-700 tracking-tight leading-snug">
+                <div className="text-2xl sm:text-3xl font-black text-red-700 tracking-tight leading-snug">
                   {destinationCn}
                 </div>
               )}
-              <div className="text-[11px] text-slate-600 mt-0.5">
-                (Please take me to: Hainan University — Haidian Campus)
-              </div>
             </div>
 
             {/* Address */}
-            <div className="p-3 border border-slate-200 rounded space-y-0.5">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                Detailed Address / 详细地址:
+            <div className="p-3 border border-slate-200 rounded-lg space-y-0.5 bg-slate-50/60">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block">
+                详细地址 (Address):
               </span>
               {isEditing ? (
                 <textarea
                   value={addressCn}
                   onChange={(e) => setAddressCn(e.target.value)}
                   rows={2}
-                  className="w-full p-1.5 border border-blue-500 rounded text-sm font-semibold text-slate-900"
+                  className="w-full p-1.5 border border-blue-500 rounded text-sm font-semibold text-slate-900 bg-white"
                 />
               ) : (
-                <div className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
+                <div className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
                   {addressCn}
                 </div>
               )}
-              <div className="text-[10px] text-slate-500">
-                No. 58 Renmin Avenue, Meilan District, Haikou (School of International Education / Dormitory)
-              </div>
             </div>
 
             {/* Note to the Driver */}
-            <div className="p-2.5 bg-amber-50/60 border border-amber-300 rounded space-y-0.5">
+            <div className="p-3 bg-amber-50/70 border border-amber-300 rounded-lg space-y-0.5">
               <span className="text-[10px] uppercase font-bold text-amber-900 block">
-                Message for Driver / 司机师傅说明:
+                留学生说明 (Note for Driver):
               </span>
               {isEditing ? (
                 <textarea
                   value={messageCn}
                   onChange={(e) => setMessageCn(e.target.value)}
                   rows={2}
-                  className="w-full p-1.5 border border-blue-500 rounded text-xs text-slate-900"
+                  className="w-full p-1.5 border border-amber-500 rounded text-xs text-slate-900 bg-white"
                 />
               ) : (
-                <p className="text-xs font-medium text-slate-900 leading-relaxed">
+                <p className="text-xs font-semibold text-slate-900 leading-relaxed">
                   {messageCn}
                 </p>
               )}
             </div>
 
             {/* Phone numbers */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2 border border-slate-200 rounded bg-slate-50 flex items-center justify-between">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 border border-slate-200 rounded-lg bg-white flex items-center justify-between">
                 <div>
-                  <div className="text-[10px] text-slate-500 font-semibold">孙老师 (Ms. Sun 1)</div>
+                  <div className="text-[10px] text-slate-500 font-bold">学校联系人 1 (孙老师)</div>
                   {isEditing ? (
                     <input
                       type="text"
                       value={phone1}
                       onChange={(e) => setPhone1(e.target.value)}
-                      className="w-24 p-0.5 border text-xs font-mono font-bold"
+                      className="w-28 p-0.5 border text-xs font-mono font-bold"
                     />
                   ) : (
-                    <div className="font-mono font-bold text-slate-900">{phone1}</div>
+                    <div className="font-mono font-black text-slate-900 text-sm">{phone1}</div>
                   )}
                 </div>
                 <button
                   onClick={() => copyText(phone1)}
-                  className="px-2 py-0.5 text-[10px] border border-slate-300 rounded bg-white hover:bg-slate-100"
+                  className="px-2 py-1 text-[10px] border border-slate-300 rounded bg-slate-50 hover:bg-slate-100 font-semibold"
                 >
                   {copied === phone1 ? (
                     <span className="flex items-center gap-0.5 text-emerald-700"><Check className="w-3 h-3" />Done</span>
@@ -502,23 +505,23 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
                 </button>
               </div>
 
-              <div className="p-2 border border-slate-200 rounded bg-slate-50 flex items-center justify-between">
+              <div className="p-2.5 border border-slate-200 rounded-lg bg-white flex items-center justify-between">
                 <div>
-                  <div className="text-[10px] text-slate-500 font-semibold">孙老师 (Ms. Sun 2)</div>
+                  <div className="text-[10px] text-slate-500 font-bold">学校联系人 2 (孙老师)</div>
                   {isEditing ? (
                     <input
                       type="text"
                       value={phone2}
                       onChange={(e) => setPhone2(e.target.value)}
-                      className="w-24 p-0.5 border text-xs font-mono font-bold"
+                      className="w-28 p-0.5 border text-xs font-mono font-bold"
                     />
                   ) : (
-                    <div className="font-mono font-bold text-slate-900">{phone2}</div>
+                    <div className="font-mono font-black text-slate-900 text-sm">{phone2}</div>
                   )}
                 </div>
                 <button
                   onClick={() => copyText(phone2)}
-                  className="px-2 py-0.5 text-[10px] border border-slate-300 rounded bg-white hover:bg-slate-100"
+                  className="px-2 py-1 text-[10px] border border-slate-300 rounded bg-slate-50 hover:bg-slate-100 font-semibold"
                 >
                   {copied === phone2 ? (
                     <span className="flex items-center gap-0.5 text-emerald-700"><Check className="w-3 h-3" />Done</span>
@@ -529,14 +532,21 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="flex flex-wrap items-center justify-between pt-1 border-t border-slate-200 text-[10px] text-slate-600 gap-1">
-              <div>
-                WeChat: <strong className="font-mono text-slate-900">sun_admission</strong>
+            {/* WeChat Bar */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-xs">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold">
+                <svg className="w-4 h-4 fill-[#07C160]" viewBox="0 0 24 24">
+                  <path d="M8.5 2C4.36 2 1 4.91 1 8.5c0 2.05 1.05 3.89 2.7 5.09l-.7 2.1 2.45-1.23c.96.34 2 .54 3.05.54.2 0 .4 0 .6-.02-.15-.47-.23-.97-.23-1.48 0-3.31 3.13-6 7-6 .34 0 .68.02 1.01.07C16.14 4.5 12.63 2 8.5 2zm-2 4.5c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm4 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm6.5 4.5c-3.31 0-6 2.24-6 5s2.69 5 6 5c.83 0 1.62-.15 2.34-.42l1.91.96-.54-1.63c1.37-.95 2.29-2.39 2.29-3.91 0-2.76-2.69-5-6-5zm-2 3c.41 0 .75.34.75.75s-.34.75-.75.75-.75-.34-.75-.75.34-.75.75-.75zm4 0c.41 0 .75.34.75.75s-.34.75-.75.75-.75-.34-.75-.75.34-.75.75-.75z"/>
+                </svg>
+                <span>微信号 (WeChat):</span>
+                <span className="font-mono font-bold text-slate-900">sun_admission</span>
               </div>
-              <div>
-                Metered Taxi Fare: approx. <strong>50–80 RMB</strong>
-              </div>
+              <button
+                onClick={() => copyText('sun_admission')}
+                className="px-2 py-0.5 text-[10px] text-slate-500 hover:text-slate-900 border border-slate-200 rounded"
+              >
+                {copied === 'sun_admission' ? 'Copied' : 'Copy WeChat'}
+              </button>
             </div>
           </div>
         </div>
@@ -544,7 +554,7 @@ export const TaxiCardModal: React.FC<TaxiCardModalProps> = ({ isOpen, onClose })
         {/* Footer info */}
         <div className="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-between items-center">
           <span className="text-[11px] text-slate-500">
-            Print opens a clean page with only the card — no app chrome.
+            Print opens a clean page with only the card — strictly 1 page.
           </span>
           <button
             onClick={onClose}

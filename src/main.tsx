@@ -6,7 +6,7 @@ import App from './App.tsx'
 
 // Force clear legacy local storage cache if schema was updated
 try {
-  const currentVersion = '5.0';
+  const currentVersion = '5.1';
   const savedVersion = localStorage.getItem('navini_app_version');
   if (savedVersion !== currentVersion) {
     localStorage.removeItem('navini_checklist');

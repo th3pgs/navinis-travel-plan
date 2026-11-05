@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Edit3, Check, User, Shield, RefreshCw, Trash2 } from 'lucide-react';
+import { Camera, Edit3, Check, User, Shield, RefreshCw, Trash2, RotateCcw } from 'lucide-react';
 import { compressImage } from '../cloudSync';
 
 interface StudentProfileCardProps {
@@ -15,7 +15,6 @@ interface StudentProfileCardProps {
 export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
   passportInfo,
   onUpdatePassportInfo,
-  isCloudSynced = true,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [passportNum, setPassportNum] = useState(passportInfo.passportNumber);
@@ -23,7 +22,10 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
 
-  // Sync internal state when external props update via cloud sync polling
+  // Canonical passport photo stored directly in the GitHub repository
+  const defaultPassportPhoto = `${import.meta.env.BASE_URL}navini-passport.png`;
+  const activePhoto = passportInfo.photoUrl || defaultPassportPhoto;
+
   useEffect(() => {
     setPassportNum(passportInfo.passportNumber);
     setExpiry(passportInfo.expiryDate);
@@ -35,15 +37,15 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
 
     try {
       setIsOptimizing(true);
-      // Downscale & compress to ~15KB for instantaneous cloud database synchronization
-      const compressedBase64 = await compressImage(file, 260, 340, 0.78);
+      // Downscale & compress for instant offline-safe persistence
+      const compressedBase64 = await compressImage(file, 300, 400, 0.82);
 
       onUpdatePassportInfo({
         ...passportInfo,
         photoUrl: compressedBase64,
       });
 
-      setSyncToast('Photo synced to cloud database!');
+      setSyncToast('Profile photo updated & saved!');
       setTimeout(() => setSyncToast(null), 3000);
     } catch (err) {
       console.error('Error optimizing image', err);
@@ -54,12 +56,12 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
     }
   };
 
-  const handleRemovePhoto = () => {
+  const handleResetToDefault = () => {
     onUpdatePassportInfo({
       ...passportInfo,
       photoUrl: '',
     });
-    setSyncToast('Photo removed & synced!');
+    setSyncToast('Reset to official passport photo!');
     setTimeout(() => setSyncToast(null), 3000);
   };
 
@@ -70,7 +72,7 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
       expiryDate: expiry || passportInfo.expiryDate,
     });
     setIsEditing(false);
-    setSyncToast('Passport details saved & synced!');
+    setSyncToast('Passport details saved!');
     setTimeout(() => setSyncToast(null), 3000);
   };
 
@@ -85,24 +87,23 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
       )}
 
       <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-        {/* Large Modern Photo (No tacky frame, rounded-2xl with clean hover upload) */}
+        {/* Large Modern Photo (Permanent official photo + clean hover upload) */}
         <div className="relative group shrink-0">
           {isOptimizing ? (
             <div className="w-28 h-36 sm:w-32 sm:h-40 rounded-2xl bg-blue-50 border-2 border-blue-400 flex flex-col items-center justify-center text-[#003580] p-2 text-center shadow-inner animate-pulse">
               <RefreshCw className="w-6 h-6 animate-spin mb-1 text-[#003580]" />
-              <span className="text-[10px] font-bold">Syncing Photo...</span>
+              <span className="text-[10px] font-bold">Saving Photo...</span>
             </div>
-          ) : passportInfo.photoUrl ? (
-            <img
-              src={passportInfo.photoUrl}
-              alt="Navini Ravishka"
-              className="w-28 h-36 sm:w-32 sm:h-40 object-cover rounded-2xl shadow-sm"
-            />
           ) : (
-            <div className="w-28 h-36 sm:w-32 sm:h-40 rounded-2xl bg-gradient-to-b from-slate-100 to-slate-200 flex flex-col items-center justify-center text-slate-400 p-2 shadow-inner">
-              <User className="w-10 h-10 text-slate-400 stroke-[1.5]" />
-              <span className="text-[11px] font-semibold text-slate-500 mt-2">Upload Photo</span>
-            </div>
+            <img
+              src={activePhoto}
+              alt="Parana Gamage Navini Ravishka Priyantha"
+              className="w-28 h-36 sm:w-32 sm:h-40 object-cover object-top rounded-2xl shadow-sm border border-slate-200 bg-slate-50"
+              onError={(e) => {
+                // Fallback to default repo photo if custom image fails
+                (e.target as HTMLImageElement).src = defaultPassportPhoto;
+              }}
+            />
           )}
 
           {/* Upload Button Overlay */}
@@ -130,10 +131,10 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
               </h1>
             </div>
 
-            {/* Cloud Sync Status Badge */}
-            <div className="flex items-center justify-center sm:justify-end gap-1.5 text-xs text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 self-center sm:self-start">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="font-semibold text-[11px]">Database Synced</span>
+            {/* Verified Student Pass Badge */}
+            <div className="flex items-center justify-center sm:justify-end gap-1.5 text-xs text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 self-center sm:self-start">
+              <Shield className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="font-bold text-[11px]">Official Scholar Profile</span>
             </div>
           </div>
 
@@ -158,7 +159,18 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
               <span className="font-mono font-bold text-slate-800 text-sm">{passportInfo.expiryDate}</span>
             </div>
 
-            <div className="sm:ml-auto">
+            <div className="sm:ml-auto flex items-center gap-2">
+              {passportInfo.photoUrl && (
+                <button
+                  type="button"
+                  onClick={handleResetToDefault}
+                  title="Reset to official passport photo"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-[11px] font-semibold text-slate-600 transition-colors shadow-2xs"
+                >
+                  <RotateCcw className="w-3 h-3 text-slate-500" />
+                  <span>Reset Photo</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setIsEditing(!isEditing)}
@@ -181,7 +193,7 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
                     type="text"
                     value={passportNum}
                     onChange={(e) => setPassportNum(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-mono"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-mono font-bold"
                   />
                 </div>
                 <div>
@@ -190,37 +202,25 @@ export const StudentProfileCard: React.FC<StudentProfileCardProps> = ({
                     type="date"
                     value={expiry}
                     onChange={(e) => setExpiry(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-mono"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-mono font-bold"
                   />
                 </div>
               </div>
-              <div className="flex items-center justify-between pt-1">
-                {passportInfo.photoUrl ? (
-                  <button
-                    type="button"
-                    onClick={handleRemovePhoto}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 font-semibold transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Remove Photo</span>
-                  </button>
-                ) : <div />}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsEditing(false)}
-                    className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSavePassport}
-                    className="px-4 py-1.5 rounded-xl bg-[#003580] hover:bg-[#00224f] text-white font-bold transition-colors shadow-2xs"
-                  >
-                    Save & Sync
-                  </button>
-                </div>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  className="px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSavePassport}
+                  className="px-4 py-1.5 rounded-xl bg-[#003580] hover:bg-[#00224f] text-white font-bold transition-colors shadow-2xs"
+                >
+                  Save Changes
+                </button>
               </div>
             </div>
           )}

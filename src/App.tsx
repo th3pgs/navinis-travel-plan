@@ -31,7 +31,7 @@ import {
   INITIAL_PROCEDURE_STEPS,
 } from './data';
 
-import { fetchCloudState, pushCloudState, AppMasterState } from './cloudSync';
+import { AppMasterState } from './cloudSync';
 import { AuthGate } from './components/AuthGate';
 import { StudentProfileCard } from './components/StudentProfileCard';
 import { FlightItineraryCard } from './components/FlightItineraryCard';
@@ -61,8 +61,7 @@ export function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showTaxiModal, setShowTaxiModal] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
-  const [isCloudSynced, setIsCloudSynced] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
+
 
   // Synchronize hash with currentView
   useEffect(() => {
@@ -99,6 +98,7 @@ export function App() {
     return {
       passportNumber: 'N10385921',
       expiryDate: '2034-08-15',
+      photoUrl: `${import.meta.env.BASE_URL}navini-passport.png`,
     };
   });
 
@@ -179,113 +179,10 @@ export function App() {
     return INITIAL_MILESTONES;
   });
 
-  // Pull latest master state from cloud database & merge
-  const pullRemoteState = async () => {
-    setIsSyncing(true);
-    try {
-      const remoteState = await fetchCloudState();
-      if (remoteState) {
-        if (remoteState.passportInfo) {
-          setPassportInfo((prev) => {
-            // If remote doesn't have a photoUrl, but local already has one,
-            // preserve local photoUrl to prevent accidental wipe from race condition.
-            const mergedPhoto = remoteState.passportInfo.photoUrl !== undefined && remoteState.passportInfo.photoUrl !== ''
-              ? remoteState.passportInfo.photoUrl
-              : (prev.photoUrl || remoteState.passportInfo.photoUrl);
-
-            const updated = {
-              ...remoteState.passportInfo,
-              photoUrl: mergedPhoto,
-            };
-
-            try {
-              localStorage.setItem('navini_passport_profile_v5', JSON.stringify(updated));
-            } catch (e) {}
-
-            return updated;
-          });
-        }
-        if (Array.isArray(remoteState.bags) && remoteState.bags.length > 0) {
-          setBags(remoteState.bags);
-          try {
-            localStorage.setItem('navini_bags_v5', JSON.stringify(remoteState.bags));
-          } catch (e) {}
-        }
-        if (Array.isArray(remoteState.devices) && remoteState.devices.length > 0) {
-          setDevices(remoteState.devices);
-          try {
-            localStorage.setItem('navini_devices_v5', JSON.stringify(remoteState.devices));
-          } catch (e) {}
-        }
-        if (Array.isArray(remoteState.wardrobe) && remoteState.wardrobe.length > 0) {
-          setWardrobe(remoteState.wardrobe);
-          try {
-            localStorage.setItem('navini_wardrobe_v5', JSON.stringify(remoteState.wardrobe));
-          } catch (e) {}
-        }
-        if (Array.isArray(remoteState.documents) && remoteState.documents.length > 0) {
-          setDocuments(remoteState.documents);
-          try {
-            localStorage.setItem('navini_docs_v5', JSON.stringify(remoteState.documents));
-          } catch (e) {}
-        }
-        if (Array.isArray(remoteState.procedureSteps) && remoteState.procedureSteps.length > 0) {
-          setProcedureSteps(remoteState.procedureSteps);
-          try {
-            localStorage.setItem('navini_procedure_steps_v5', JSON.stringify(remoteState.procedureSteps));
-          } catch (e) {}
-        }
-        if (Array.isArray(remoteState.apps) && remoteState.apps.length > 0) {
-          setApps(remoteState.apps);
-          try {
-            localStorage.setItem('navini_apps_v5', JSON.stringify(remoteState.apps));
-          } catch (e) {}
-        }
-        if (Array.isArray(remoteState.milestones) && remoteState.milestones.length > 0) {
-          setMilestones(remoteState.milestones);
-          try {
-            localStorage.setItem('navini_milestones_v5', JSON.stringify(remoteState.milestones));
-          } catch (e) {}
-        }
-        setIsCloudSynced(true);
-      }
-    } catch (e) {
-      console.warn('Sync notice:', e);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  // Automated background polling & window focus synchronization
-  useEffect(() => {
-    // 1. Initial pull
-    pullRemoteState();
-
-    // 2. Poll every 6 seconds so other devices viewing the site auto-update seamlessly
-    const interval = setInterval(pullRemoteState, 6000);
-
-    // 3. Re-sync immediately when user switches back to browser tab
-    const handleFocus = () => pullRemoteState();
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        pullRemoteState();
-      }
-    };
-
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, []);
-
-  // Broadcast sync updates to local storage & cloud database
-  const syncAllState = (overrides?: Partial<AppMasterState>, immediate = false) => {
+  // Instant local-first persistence (100% stable, zero network race conditions)
+  const syncAllState = (overrides?: Partial<AppMasterState>) => {
     const masterState: AppMasterState = {
-      version: '5.0',
+      version: '5.1',
       lastUpdated: new Date().toISOString(),
       passportInfo: overrides?.passportInfo || passportInfo,
       bags: overrides?.bags || bags,
@@ -297,7 +194,7 @@ export function App() {
       milestones: overrides?.milestones || milestones,
     };
 
-    // Save locally
+    // Save locally with zero latency (instant and offline safe)
     try {
       localStorage.setItem('navini_passport_profile_v5', JSON.stringify(masterState.passportInfo));
       localStorage.setItem('navini_bags_v5', JSON.stringify(masterState.bags));
@@ -307,19 +204,16 @@ export function App() {
       localStorage.setItem('navini_procedure_steps_v5', JSON.stringify(masterState.procedureSteps));
       localStorage.setItem('navini_apps_v5', JSON.stringify(masterState.apps));
       localStorage.setItem('navini_milestones_v5', JSON.stringify(masterState.milestones));
+      localStorage.setItem('navini_master_state_v5', JSON.stringify(masterState));
     } catch (e) {
       console.warn('Local storage write warning', e);
     }
-
-    // Push to cloud database
-    pushCloudState(masterState, immediate);
-    setIsCloudSynced(true);
   };
 
   // Profile Update Handler (Synced to database)
   const handleUpdatePassportInfo = (updated: { passportNumber: string; expiryDate: string; photoUrl?: string }) => {
     setPassportInfo(updated);
-    syncAllState({ passportInfo: updated }, true);
+    syncAllState({ passportInfo: updated });
   };
 
   // Handlers for Physical Gear
@@ -522,17 +416,14 @@ export function App() {
 
           {/* Quick Action Pills + Hamburger Menu */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Cloud Sync indicator / trigger */}
-            <button
-              type="button"
-              onClick={pullRemoteState}
-              disabled={isSyncing}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-semibold transition-colors cursor-pointer"
-              title="Click to refresh cloud database across devices"
+            {/* Status indicator */}
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold"
+              title="All checklists and records are safely preserved"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">{isSyncing ? 'Syncing...' : 'Live Synced'}</span>
-            </button>
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="hidden sm:inline">Active & Saved</span>
+            </div>
 
             <button
               type="button"
@@ -565,7 +456,6 @@ export function App() {
               <StudentProfileCard
                 passportInfo={passportInfo}
                 onUpdatePassportInfo={handleUpdatePassportInfo}
-                isCloudSynced={isCloudSynced}
               />
             </section>
 
@@ -759,8 +649,7 @@ export function App() {
         onNavigate={navigateToView}
         onOpenTaxi={() => setShowTaxiModal(true)}
         onOpenBackup={() => setShowBackupModal(true)}
-        onSyncNow={pullRemoteState}
-        isSyncing={isSyncing}
+
         passportInfo={passportInfo}
       />
 

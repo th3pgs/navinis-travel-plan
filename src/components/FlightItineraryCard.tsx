@@ -55,11 +55,10 @@ export const FlightItineraryCard: React.FC = () => {
               <span className="text-[11px] font-bold font-mono text-slate-500 block mb-1">
                 MU6018 • 6h 45m Direct
               </span>
-              <div className="relative flex items-center justify-center">
-                <div className="w-full h-0.5 bg-slate-200" />
-                <div className="absolute w-7 h-7 rounded-full bg-white border border-slate-300 flex items-center justify-center text-[#003580] shadow-2xs">
-                  <Plane className="w-3.5 h-3.5 rotate-90" />
-                </div>
+              <div className="flex items-center justify-center gap-2 my-1.5">
+                <div className="h-px flex-1 bg-slate-200" />
+                <Plane className="w-3.5 h-3.5 text-[#003580] rotate-90 shrink-0" />
+                <div className="h-px flex-1 bg-slate-200" />
               </div>
               <span className="text-[10px] text-slate-400 block mt-1">Airbus A330 • Economy</span>
             </div>
@@ -102,11 +101,10 @@ export const FlightItineraryCard: React.FC = () => {
               <span className="text-[11px] font-bold font-mono text-slate-500 block mb-1">
                 MU6381 • 3h 40m Direct
               </span>
-              <div className="relative flex items-center justify-center">
-                <div className="w-full h-0.5 bg-slate-200" />
-                <div className="absolute w-7 h-7 rounded-full bg-white border border-slate-300 flex items-center justify-center text-[#003580] shadow-2xs">
-                  <Plane className="w-3.5 h-3.5 rotate-90" />
-                </div>
+              <div className="flex items-center justify-center gap-2 my-1.5">
+                <div className="h-px flex-1 bg-slate-200" />
+                <Plane className="w-3.5 h-3.5 text-[#003580] rotate-90 shrink-0" />
+                <div className="h-px flex-1 bg-slate-200" />
               </div>
               <span className="text-[10px] text-slate-400 block mt-1">Domestic Flight • China Eastern</span>
             </div>
