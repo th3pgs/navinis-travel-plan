@@ -100,16 +100,32 @@
 
 /* Dedicated Print Styles for Visual Packing Catalog & Taxi Card */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 10mm 12mm 10mm;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box !important;
+  }
+
   html,
   body,
   #root,
-  .min-h-screen {
+  .min-h-screen,
+  main {
     background-color: #ffffff !important;
+    background: #ffffff !important;
     color: #000000 !important;
     overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
     height: auto !important;
     min-height: auto !important;
     max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
@@ -122,7 +138,18 @@
   }
 
   .break-inside-avoid {
-    break-inside: avoid;
-    page-break-inside: avoid;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .break-after-avoid {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  img {
+    max-width: 100% !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

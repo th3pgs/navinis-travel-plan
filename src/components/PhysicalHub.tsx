@@ -8,6 +8,8 @@ import {
   DEFAULT_BAG_LOCATIONS,
   MEDICINE_SUBTYPES,
   isItemInBag,
+  normalizeCategoryName,
+  migrateWardrobeItems,
 } from '../data';
 import {
   ChevronLeft,
@@ -281,20 +283,38 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   const [formColorHex, setFormColorHex] = useState('#38bdf8');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
-  // All categories
+  // Auto-switch to print mode if window.print() or Ctrl+P is triggered
+  React.useEffect(() => {
+    const handleBeforePrint = () => {
+      setIsPrintMode(true);
+    };
+    window.addEventListener('beforeprint', handleBeforePrint);
+    return () => window.removeEventListener('beforeprint', handleBeforePrint);
+  }, []);
+
+  // All categories: standard 9 categories + user custom categories + any distinct categories on items
   const allCategories = React.useMemo(() => {
-    return Array.from(new Set([...DEFAULT_WARDROBE_CATEGORIES, ...customCategories]));
-  }, [customCategories]);
+    const extraCategories = wardrobe
+      .map((w) => normalizeCategoryName(w.category))
+      .filter((c) => !DEFAULT_WARDROBE_CATEGORIES.includes(c));
+    return Array.from(new Set([...DEFAULT_WARDROBE_CATEGORIES, ...customCategories, ...extraCategories]));
+  }, [customCategories, wardrobe]);
 
   // All bag locations
   const allLocations = React.useMemo(() => {
     return Array.from(new Set([...DEFAULT_BAG_LOCATIONS, ...bags.map((b) => b.name), ...customLocations]));
   }, [bags, customLocations]);
 
-  // Filtered Items
+  // Filtered Items (matching normalized categories so legacy or short names match correctly)
   const displayedItems = React.useMemo(() => {
     return wardrobe.filter((item) => {
-      if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
+      const itemCat = normalizeCategoryName(item.category);
+      if (selectedCategory !== 'all') {
+        const selNorm = normalizeCategoryName(selectedCategory);
+        if (itemCat !== selNorm && item.category !== selectedCategory) {
+          return false;
+        }
+      }
       if (selectedSuitcaseFilter !== 'all') {
         const bagMatch = bags.find((b) => b.id === selectedSuitcaseFilter || b.name === selectedSuitcaseFilter);
         if (bagMatch && !isItemInBag(item.targetBag, bagMatch)) return false;
@@ -302,6 +322,37 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
       return true;
     });
   }, [wardrobe, selectedCategory, selectedSuitcaseFilter, bags]);
+
+  // Group all wardrobe items by category for the print catalog
+  // CRITICAL FIX: Groups all actual wardrobe items so 100% of items appear, never dropped or empty!
+  const printCategoryGroups = React.useMemo(() => {
+    const map = new Map<string, WardrobeItem[]>();
+
+    // Pre-populate canonical order of default categories
+    DEFAULT_WARDROBE_CATEGORIES.forEach((cat) => {
+      map.set(cat, []);
+    });
+
+    // Map each wardrobe item to its canonical group or custom category
+    wardrobe.forEach((item) => {
+      const normCat = normalizeCategoryName(item.category);
+      if (!map.has(normCat)) {
+        map.set(normCat, []);
+      }
+      map.get(normCat)!.push(item);
+    });
+
+    // Only return non-empty groups
+    const groups: { category: string; items: WardrobeItem[]; totalPieces: number }[] = [];
+    map.forEach((items, category) => {
+      if (items.length > 0) {
+        const totalPieces = items.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0);
+        groups.push({ category, items, totalPieces });
+      }
+    });
+
+    return groups;
+  }, [wardrobe]);
 
   const packedCount = wardrobe.filter((w) => w.isPacked).length;
   const packedPercent = Math.round((packedCount / (wardrobe.length || 1)) * 100);
@@ -403,8 +454,10 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
 
   // PRINT VIEW: Dedicated Full Clean Mode (Clothing Items Partitioned by Category ONLY)
   if (isPrintMode) {
+    const totalPieces = wardrobe.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0);
+
     return (
-      <div className="min-h-screen bg-white text-slate-900 p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
+      <div className="min-h-screen bg-white text-slate-900 p-4 sm:p-6 max-w-5xl mx-auto space-y-6 print:p-0 print:m-0 print:max-w-none print:w-full">
         {/* Floating Print Controls (Hidden on paper print) */}
         <div className="no-print sticky top-4 z-50 bg-slate-900 text-white p-3 rounded-2xl shadow-xl flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
@@ -417,7 +470,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
             <button
               type="button"
               onClick={() => window.print()}
-              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm active:scale-95"
             >
               <Printer className="w-4 h-4" />
               <span>Print / Save PDF</span>
@@ -433,53 +486,83 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         </div>
 
         {/* Minimal Single-Line Print Header */}
-        <div className="border-b border-slate-300 pb-2 flex items-center justify-between">
-          <h1 className="text-base font-bold text-slate-900 tracking-tight">
-            Navini's Packing Catalog
-          </h1>
-          <span className="text-xs text-slate-500 font-mono">
-            {wardrobe.length} items total
-          </span>
+        <div className="border-b-2 border-slate-900 pb-2 flex items-center justify-between">
+          <div>
+            <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+              Navini's Packing Catalog
+            </h1>
+            <p className="text-[11px] text-slate-500 font-medium">
+              Physical inventory & suitcase allocation lookbook
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="text-xs sm:text-sm text-slate-900 font-mono font-bold block">
+              {totalPieces} pieces ({wardrobe.length} items)
+            </span>
+            <span className="text-[10px] text-slate-500 font-mono">
+              China Eastern Airlines • Haikou
+            </span>
+          </div>
         </div>
 
-        {/* Partitioned Categorized Clothing Photos Grid (No Hardware Boxes!) */}
-        <div className="space-y-6 pt-1">
-          {allCategories.map((category) => {
-            const itemsInCat = wardrobe.filter((w) => w.category === category);
-            if (itemsInCat.length === 0) return null;
-
-            return (
-              <div key={category} className="space-y-2.5 break-inside-avoid">
-                <div className="flex items-center justify-between border-b border-slate-900 pb-1">
+        {/* Partitioned Categorized Clothing Photos Grid */}
+        {wardrobe.length === 0 ? (
+          <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-2xl p-8">
+            <p className="font-bold text-sm text-slate-800">Your packing list is currently empty</p>
+            <p className="text-xs text-slate-500 mt-1">Add items to Luggage & Wardrobe to generate your printable visual catalog.</p>
+            <button
+              type="button"
+              onClick={() => setIsPrintMode(false)}
+              className="mt-4 px-4 py-2 rounded-xl bg-[#007AFF] text-white text-xs font-bold cursor-pointer"
+            >
+              Back to Wardrobe
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-6 pt-1">
+            {printCategoryGroups.map(({ category, items, totalPieces: catPieces }) => (
+              <div key={category} className="space-y-2.5 print:break-inside-auto">
+                <div className="flex items-center justify-between border-b border-slate-900 pb-1 break-after-avoid">
                   <h2 className="font-bold text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
-                    {category} ({itemsInCat.reduce((sum, i) => sum + (i.quantity || 1), 0)} pcs)
+                    {category} ({catPieces} pcs)
                   </h2>
                   <span className="text-[11px] text-slate-500 font-mono">
-                    {itemsInCat.length} kinds
+                    {items.length} {items.length === 1 ? 'item' : 'items'}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                  {itemsInCat.map((item) => {
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 print:grid-cols-3 print:gap-2.5">
+                  {items.map((item) => {
                     const visual = getCategoryVisual(item.name, item.category);
                     return (
                       <div
                         key={item.id}
-                        className="rounded-xl border border-slate-200 bg-white overflow-hidden flex flex-col justify-between shadow-2xs break-inside-avoid"
+                        className="rounded-xl border border-slate-200 bg-white overflow-hidden flex flex-col justify-between shadow-2xs break-inside-avoid print:border-slate-300"
                       >
-                        {/* Large Square Photo (aspect-ratio: 1/1) */}
-                        <div className="w-full aspect-square bg-slate-100 relative overflow-hidden flex items-center justify-center border-b border-slate-100">
+                        {/* Large Square Photo (aspect-ratio: 1/1 with explicit min-height for print safety) */}
+                        <div className="w-full aspect-square min-h-[110px] bg-slate-100 relative overflow-hidden flex items-center justify-center border-b border-slate-100">
                           {item.photoUrl ? (
                             <img
                               src={item.photoUrl}
                               alt={item.name}
+                              crossOrigin="anonymous"
+                              loading="eager"
                               className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                const fallback = e.currentTarget.parentElement?.querySelector('.fallback-emoji');
+                                if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                              }}
                             />
-                          ) : (
-                            <div className="flex flex-col items-center justify-center p-2 text-center">
-                              <span className="text-3xl mb-1">{visual.emoji}</span>
-                            </div>
-                          )}
+                          ) : null}
+
+                          <div
+                            className={`fallback-emoji flex flex-col items-center justify-center p-2 text-center w-full h-full ${
+                              item.photoUrl ? 'hidden' : 'flex'
+                            }`}
+                          >
+                            <span className="text-3xl mb-1">{visual.emoji}</span>
+                          </div>
 
                           {/* Quantity Badge */}
                           <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/75 text-white font-mono font-bold text-[10px]">
@@ -508,9 +591,9 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   })}
                 </div>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -566,8 +649,9 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         </button>
 
         {allCategories.map((cat) => {
-          const count = wardrobe.filter((w) => w.category === cat).length;
-          const isActive = selectedCategory === cat;
+          const normCat = normalizeCategoryName(cat);
+          const count = wardrobe.filter((w) => normalizeCategoryName(w.category) === normCat || w.category === cat).length;
+          const isActive = selectedCategory === cat || (selectedCategory !== 'all' && normalizeCategoryName(selectedCategory) === normCat);
           return (
             <button
               key={cat}

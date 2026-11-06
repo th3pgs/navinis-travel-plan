@@ -163,6 +163,153 @@ export const DEFAULT_WARDROBE_CATEGORIES: string[] = [
   'Daily Essentials, Cutlery & Folders',
 ];
 
+/**
+ * Normalizes any category string (handling legacy, shorthand, or alternative spellings)
+ * into one of the canonical 9 categories, or returns the trimmed custom category.
+ */
+export function normalizeCategoryName(rawCategory?: string): string {
+  if (!rawCategory || !rawCategory.trim()) {
+    return 'Daily Essentials, Cutlery & Folders';
+  }
+  const trimmed = rawCategory.trim();
+  const lower = trimmed.toLowerCase();
+
+  // Match variants of Tops
+  if (
+    lower === 'tops' ||
+    lower === 'top' ||
+    lower === 't-shirts' ||
+    lower === 't-shirt' ||
+    lower === 'shirts' ||
+    lower === 'shirt' ||
+    lower === 'blouse' ||
+    lower === 'blouses' ||
+    lower === 'tops & t-shirts' ||
+    lower.startsWith('top')
+  ) {
+    return 'Tops & T-Shirts';
+  }
+  // Match variants of Dresses & Frocks
+  if (
+    lower === 'dresses' ||
+    lower === 'dress' ||
+    lower === 'frocks' ||
+    lower === 'frock' ||
+    lower === 'dresses & frocks' ||
+    lower === 'frocks & dresses' ||
+    lower.includes('frock') ||
+    lower.includes('dress')
+  ) {
+    return 'Dresses & Frocks';
+  }
+  // Match variants of Bottoms & Jeans
+  if (
+    lower === 'bottoms' ||
+    lower === 'bottom' ||
+    lower === 'jeans' ||
+    lower === 'jean' ||
+    lower === 'pants' ||
+    lower === 'pant' ||
+    lower === 'trousers' ||
+    lower === 'trouser' ||
+    lower === 'skirts' ||
+    lower === 'skirt' ||
+    lower === 'bottoms & jeans'
+  ) {
+    return 'Bottoms & Jeans';
+  }
+  // Match variants of Undergarments & Innerwear
+  if (
+    lower === 'undergarments' ||
+    lower === 'undergarment' ||
+    lower === 'innerwear' ||
+    lower === 'underwear' ||
+    lower === 'undergarments & innerwear'
+  ) {
+    return 'Undergarments & Innerwear';
+  }
+  // Match variants of Footwear & Slippers
+  if (
+    lower === 'footwear' ||
+    lower === 'slippers' ||
+    lower === 'slipper' ||
+    lower === 'shoes' ||
+    lower === 'shoe' ||
+    lower === 'sandals' ||
+    lower === 'sandal' ||
+    lower === 'footwear & slippers'
+  ) {
+    return 'Footwear & Slippers';
+  }
+  // Match variants of Bottles, Liquids & Toiletries
+  if (
+    lower === 'bottles, liquids & toiletries' ||
+    lower === 'bottles & liquids' ||
+    lower === 'bottles and liquids' ||
+    lower === 'liquids' ||
+    lower === 'liquid' ||
+    lower === 'toiletries' ||
+    lower === 'toiletry' ||
+    lower === 'bottles' ||
+    lower === 'bottle'
+  ) {
+    return 'Bottles, Liquids & Toiletries';
+  }
+  // Match variants of Medicine & First Aid
+  if (
+    lower === 'medicine & first aid' ||
+    lower === 'medicine and first aid' ||
+    lower === 'medicine' ||
+    lower === 'medicines' ||
+    lower === 'first aid' ||
+    lower === 'pharmacy'
+  ) {
+    return 'Medicine & First Aid';
+  }
+  // Match variants of Gifts & Souvenirs
+  if (
+    lower === 'gifts & souvenirs' ||
+    lower === 'gifts and souvenirs' ||
+    lower === 'gifts' ||
+    lower === 'gift' ||
+    lower === 'souvenirs' ||
+    lower === 'souvenir'
+  ) {
+    return 'Gifts & Souvenirs';
+  }
+  // Match variants of Daily Essentials, Cutlery & Folders
+  if (
+    lower === 'daily essentials, cutlery & folders' ||
+    lower === 'daily essentials' ||
+    lower === 'essentials' ||
+    lower === 'cutlery' ||
+    lower === 'folders' ||
+    lower === 'folder' ||
+    lower === 'lab coats & gear' ||
+    lower === 'lab coat' ||
+    lower === 'lab coats'
+  ) {
+    return 'Daily Essentials, Cutlery & Folders';
+  }
+
+  // Exact case-insensitive match against default categories
+  const exactDefault = DEFAULT_WARDROBE_CATEGORIES.find((c) => c.toLowerCase() === lower);
+  if (exactDefault) return exactDefault;
+
+  return trimmed;
+}
+
+/**
+ * Automatically normalizes wardrobe items to canonical categories
+ */
+export function migrateWardrobeItems(items: WardrobeItem[]): WardrobeItem[] {
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => {
+    const normalized = normalizeCategoryName(item.category);
+    return item.category !== normalized ? { ...item, category: normalized } : item;
+  });
+}
+
 export const MEDICINE_SUBTYPES: string[] = [
   'Painkillers',
   'Prescription',

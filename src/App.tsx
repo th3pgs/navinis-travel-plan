@@ -27,6 +27,7 @@ import {
   INITIAL_BANKING_TASKS,
   INITIAL_GIFTS,
   migrateLegacyApps,
+  migrateWardrobeItems,
 } from './data';
 
 import {
@@ -138,7 +139,7 @@ export function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return migrateWardrobeItems(parsed);
       } catch (e) {}
     }
     return INITIAL_WARDROBE;
@@ -233,7 +234,14 @@ export function App() {
         if (remote.passportInfo) setPassportInfo(remote.passportInfo);
         if (remote.bags?.length) setBags(remote.bags);
         if (remote.devices?.length) setDevices(remote.devices);
-        if (remote.wardrobe?.length) setWardrobe(remote.wardrobe);
+        if (remote.wardrobe?.length) {
+          const migrated = migrateWardrobeItems(remote.wardrobe);
+          setWardrobe(migrated);
+          const hadLegacyCategory = migrated.some((m, idx) => m.category !== remote.wardrobe[idx]?.category);
+          if (hadLegacyCategory) {
+            syncAllState({ wardrobe: migrated });
+          }
+        }
         if (remote.documents?.length) setDocuments(remote.documents);
         if (remote.apps?.length) setApps(migrateLegacyApps(remote.apps));
         if (remote.milestones?.length) setMilestones(remote.milestones);
@@ -256,7 +264,7 @@ export function App() {
       if (incoming.passportInfo) setPassportInfo(incoming.passportInfo);
       if (incoming.bags?.length) setBags(incoming.bags);
       if (incoming.devices?.length) setDevices(incoming.devices);
-      if (incoming.wardrobe?.length) setWardrobe(incoming.wardrobe);
+      if (incoming.wardrobe?.length) setWardrobe(migrateWardrobeItems(incoming.wardrobe));
       if (incoming.documents?.length) setDocuments(incoming.documents);
       if (incoming.apps?.length) setApps(migrateLegacyApps(incoming.apps));
       if (incoming.milestones?.length) setMilestones(incoming.milestones);
@@ -634,7 +642,7 @@ export function App() {
   const appPercent = Math.round((verifiedApps / (apps.length || 1)) * 100);
 
   return (
-    <div className="min-h-screen bg-[#F2F2F7] text-slate-900 pb-20 font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-[#F2F2F7] text-slate-900 pb-20 font-sans overflow-x-hidden print:bg-white print:pb-0 print:overflow-visible">
       {/* 1. TOP HEADER (China Flag PNG Branding & Live Supabase Rippling Indicator) */}
       <header className="bg-white/90 backdrop-blur-md border-b border-black/10 sticky top-0 z-40 w-full transition-all">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between gap-3">
@@ -696,7 +704,7 @@ export function App() {
       </header>
 
       {/* 2. MAIN WORKSPACE CONTAINER */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-5">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-5 print:p-0 print:m-0 print:max-w-none print:w-full print:pt-0">
         {/* OVERVIEW VIEW */}
         {currentView === 'overview' && (
           <div className="space-y-5 animate-in fade-in duration-200">
