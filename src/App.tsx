@@ -720,8 +720,8 @@ export function App() {
 
             {/* SECTION 3: THREE MAIN INTERACTIVE PORTALS */}
             <section className="space-y-2">
-              <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider px-1 block">
-                Main Interactive Portals
+              <span className="text-xs font-bold text-slate-900 tracking-tight px-1 block">
+                Portals
               </span>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
@@ -748,7 +748,7 @@ export function App() {
                       Luggage & Wardrobe
                     </h3>
                     <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
-                      Physical packing matrix, suitcase allocations, dual photo uploads & visual lookbook.
+                      Clothing, shoes, toiletries, and suitcase allocations.
                     </p>
                   </div>
 
@@ -791,7 +791,7 @@ export function App() {
                       Documents
                     </h3>
                     <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
-                      Physical credentials, passport, JW202/Visa, medical forms, and secure carrying allocations.
+                      Passport, JW202/Visa, and official physical certificates.
                     </p>
                   </div>
 
@@ -800,7 +800,7 @@ export function App() {
                       {inHandDocs}/{documents.length} In Hand
                     </span>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900">
-                      Ready for Border
+                      Ready
                     </span>
                   </div>
                 </button>
@@ -828,16 +828,16 @@ export function App() {
                       Internet, Apps & Chat
                     </h3>
                     <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
-                      3-tier connectivity, official 56×56px app square matrix & university WeChat templates.
+                      CMLink 5G eSIM, Hiddify VPN guide, and campus WeChat.
                     </p>
                   </div>
 
                   <div className="mt-3.5 pt-2.5 border-t border-black/5 flex items-center justify-between text-xs">
                     <span className="font-semibold text-slate-700">
-                      {verifiedApps}/{apps.length} Verified
+                      {verifiedApps}/{apps.length} Ready
                     </span>
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                      CMLink 5G + Hiddify
+                      CMLink + Hiddify
                     </span>
                   </div>
                 </button>
@@ -924,14 +924,6 @@ export function App() {
           />
         )}
       </main>
-
-      {/* FOOTER */}
-      <footer className="max-w-5xl mx-auto px-4 sm:px-6 pt-12 pb-6 text-center text-xs text-[#8E8E93] border-t border-black/5 mt-12">
-        <div>Hainan University (Haidian Campus) • School of Food Science and Engineering (2026–2029)</div>
-        <div className="mt-1">
-          Student: Parana Gamage Navini Ravishka Priyantha • E-Ticket: 7812903731438 • Admission: 263660001
-        </div>
-      </footer>
 
       {/* APPLE STYLE SLIDE-OUT SIDEBAR */}
       <AppleSidebar

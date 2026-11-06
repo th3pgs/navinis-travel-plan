@@ -158,16 +158,16 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
               Internet, Apps & Chat
             </h1>
             <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-              3-tier internet connectivity architecture, official 56×56px app square matrix & university WeChat templates.
+              CMLink 5G eSIM, Hiddify proxy guide, and university WeChat chat.
             </p>
           </div>
         </div>
       </div>
 
-      {/* 3. SECTION 5: 3-TIER CONNECTIVITY ARCHITECTURE (FROM APPLE NOTES) */}
+      {/* 3. 3-TIER CONNECTIVITY ARCHITECTURE */}
       <div className="space-y-3">
-        <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider px-1 block">
-          3-Tier Internet & Connectivity Architecture
+        <span className="text-xs font-bold text-slate-900 tracking-tight px-1 block">
+          Connectivity Setup
         </span>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -394,19 +394,16 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
       {/* 4. PRE-WRITTEN WECHAT & UNIVERSITY BUDDY ARRIVAL TEMPLATES */}
       <UniversityBuddyCard />
 
-      {/* 5. FULL-VIEW SQUARE MATRIX FOR APPLICATIONS (56x56px Squircles) */}
+      {/* 5. APPLICATIONS MATRIX */}
       <div className="space-y-3 pt-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
           <div>
-            <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider block">
-              Applications Square Matrix ({displayedApps.length} Apps)
-            </span>
-            <span className="text-xs text-slate-500 font-medium">
-              3 Checkpoints: 1. Installed • 2. Logged In • 3. Tested & Verified
+            <span className="text-xs font-bold text-slate-900 tracking-tight block">
+              Applications ({displayedApps.length})
             </span>
           </div>
 
-          {/* Device Filter Pills (Strictly NO Chinese Apps on Samsung S20 FE) */}
+          {/* Device Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             <button
               type="button"

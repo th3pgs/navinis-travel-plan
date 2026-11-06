@@ -148,7 +148,7 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
               </h1>
             </div>
             <p className="text-xs sm:text-sm text-slate-600 mt-1">
-              Physical credentials, passport, JW202/Visa, medical forms, and secure carrying allocations.
+              Passport, JW202/Visa, medical forms, and physical certificates.
             </p>
           </div>
 
@@ -172,19 +172,19 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
         <div className="mt-4 p-3 bg-white/80 rounded-xl border border-amber-200 text-xs text-amber-950 flex items-center gap-2">
           <Shield className="w-4 h-4 text-amber-700 shrink-0" />
           <span>
-            <strong>Aviation Golden Rule:</strong> Never pack original documents in checked suitcases! Keep all certificates, passports, and medical forms in your chest fanny pack or cabin backpack.
+            <strong>Reminder:</strong> Keep original documents, passport, and medical forms in your carry-on bag or fanny pack.
           </span>
         </div>
       </div>
 
-      {/* 3. BINARY VERIFICATION CHECKLIST (8 CREDENTIALS) */}
+      {/* 3. CHECKLIST */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider block">
-            Required Credentials Checklist ({documents.length} Items)
+          <span className="text-xs font-bold text-slate-900 tracking-tight block">
+            Required Documents ({documents.length})
           </span>
           <span className="text-xs text-slate-500 font-medium">
-            Tap status badge to mark In Hand & Ready
+            Tap badge to verify in hand
           </span>
         </div>
 

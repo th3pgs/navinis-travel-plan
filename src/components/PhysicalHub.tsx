@@ -401,16 +401,16 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     }
   };
 
-  // PRINT VIEW: Dedicated Full Clean Mode
+  // PRINT VIEW: Dedicated Full Clean Mode (Clothing Items Partitioned by Category ONLY)
   if (isPrintMode) {
     return (
-      <div className="min-h-screen bg-white text-slate-900 p-6 max-w-5xl mx-auto space-y-6">
+      <div className="min-h-screen bg-white text-slate-900 p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
         {/* Floating Print Controls (Hidden on paper print) */}
         <div className="no-print sticky top-4 z-50 bg-slate-900 text-white p-3 rounded-2xl shadow-xl flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Printer className="w-5 h-5 text-emerald-400" />
             <span className="font-bold text-xs sm:text-sm">
-              Visual Packing Catalog Ready to Print / Save as PDF
+              Navini's Packing Catalog
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -427,104 +427,48 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
               onClick={() => setIsPrintMode(false)}
               className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors cursor-pointer"
             >
-              Close Catalog
+              Close
             </button>
           </div>
         </div>
 
-        {/* 1. PRINT HEADER */}
-        <div className="border-b border-black/10 pb-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">🧳</span>
-                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                  Navini's Master Luggage & Packing Visual Lookbook
-                </h1>
-              </div>
-              <div className="text-xs text-slate-600 mt-1">
-                Scholar: <strong>Parana Gamage Navini Ravishka Priyantha</strong> • Hainan University • Admission: #263660001
-              </div>
-            </div>
-            <div className="text-left sm:text-right text-xs text-slate-600 font-mono">
-              <div>Flight: MU6018 / MU6381 • CMB &rarr; PVG &rarr; HAK</div>
-              <div className="text-[11px] text-[#007AFF] font-semibold mt-0.5">E-Commerce Visual Packing Grid</div>
-            </div>
-          </div>
+        {/* Minimal Single-Line Print Header */}
+        <div className="border-b border-slate-300 pb-2 flex items-center justify-between">
+          <h1 className="text-base font-bold text-slate-900 tracking-tight">
+            Navini's Packing Catalog
+          </h1>
+          <span className="text-xs text-slate-500 font-mono">
+            {wardrobe.length} items total
+          </span>
         </div>
 
-        {/* 2. TOP HARDWARE & LUGGAGE WIDGETS (4 Bags + 6 Devices) */}
-        <div className="space-y-2.5">
-          <h2 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center justify-between">
-            <span>Hardware & Suitcase Allocations (10 Items)</span>
-            <span className="font-mono text-[11px] font-normal text-slate-500">4 Suitcases/Packs • 6 Essential Devices</span>
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs">
-            {bags.map((b) => (
-              <div key={b.id} className="p-3 rounded-xl border border-slate-300 bg-slate-50 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="font-bold text-slate-900 truncate">{b.name}</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold shrink-0">
-                      {b.weightLimit}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-600 font-mono mt-0.5">{b.dimensions}</div>
-                </div>
-                <div className="text-[10px] text-slate-500 line-clamp-1 mt-1.5 pt-1.5 border-t border-slate-200">
-                  {b.recommendedContents}
-                </div>
-              </div>
-            ))}
-            {devices.map((d) => (
-              <div key={d.id} className="p-3 rounded-xl border border-slate-300 bg-slate-50 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="font-bold text-slate-900 truncate">{d.name}</span>
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 shrink-0">
-                      {d.carrierOrOs}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-600 mt-0.5">{d.model}</div>
-                </div>
-                <div className="text-[10px] font-mono text-slate-600 truncate mt-1.5 pt-1.5 border-t border-slate-200">
-                  📍 {d.carryLocation}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 3. STOREFRONT "T-SHIRT STORE" VISUAL LOOKBOOK GRID */}
-        <div className="space-y-8 pt-3">
-          {DEFAULT_WARDROBE_CATEGORIES.map((category) => {
+        {/* Partitioned Categorized Clothing Photos Grid (No Hardware Boxes!) */}
+        <div className="space-y-6 pt-1">
+          {allCategories.map((category) => {
             const itemsInCat = wardrobe.filter((w) => w.category === category);
             if (itemsInCat.length === 0) return null;
 
             return (
-              <div key={category} className="space-y-3 break-inside-avoid">
-                <div className="flex items-center justify-between border-b-2 border-slate-900 pb-1.5">
-                  <h3 className="font-black text-sm sm:text-base text-slate-900 uppercase tracking-wide flex items-center gap-2">
-                    <span>{category}</span>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                      {itemsInCat.reduce((sum, i) => sum + i.quantity, 0)} total pcs
-                    </span>
-                  </h3>
-                  <span className="text-xs text-slate-500 font-mono">
-                    {itemsInCat.length} items
+              <div key={category} className="space-y-2.5 break-inside-avoid">
+                <div className="flex items-center justify-between border-b border-slate-900 pb-1">
+                  <h2 className="font-bold text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
+                    {category} ({itemsInCat.reduce((sum, i) => sum + (i.quantity || 1), 0)} pcs)
+                  </h2>
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    {itemsInCat.length} kinds
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                   {itemsInCat.map((item) => {
                     const visual = getCategoryVisual(item.name, item.category);
                     return (
                       <div
                         key={item.id}
-                        className="rounded-2xl border border-slate-200 bg-white overflow-hidden flex flex-col justify-between shadow-2xs break-inside-avoid"
+                        className="rounded-xl border border-slate-200 bg-white overflow-hidden flex flex-col justify-between shadow-2xs break-inside-avoid"
                       >
-                        {/* E-Commerce Product Image Frame (Large Square/Portrait Frame) */}
-                        <div className="w-full aspect-[4/5] bg-slate-100 relative overflow-hidden flex items-center justify-center border-b border-slate-100">
+                        {/* Large Square Photo (aspect-ratio: 1/1) */}
+                        <div className="w-full aspect-square bg-slate-100 relative overflow-hidden flex items-center justify-center border-b border-slate-100">
                           {item.photoUrl ? (
                             <img
                               src={item.photoUrl}
@@ -532,48 +476,31 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                               className="w-full h-full object-cover"
                             />
                           ) : (
-                            <div className="flex flex-col items-center justify-center p-4 text-center">
-                              <span className="text-5xl mb-2">{visual.emoji}</span>
-                              <span className="text-[11px] font-semibold text-slate-500 line-clamp-1 px-2">
-                                {item.name}
-                              </span>
+                            <div className="flex flex-col items-center justify-center p-2 text-center">
+                              <span className="text-3xl mb-1">{visual.emoji}</span>
                             </div>
                           )}
 
-                          {/* Top-Right Quantity Badge */}
-                          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-lg bg-black/80 backdrop-blur-xs text-white font-mono font-bold text-[11px] shadow-xs">
-                            ×{item.quantity}
+                          {/* Quantity Badge */}
+                          <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/75 text-white font-mono font-bold text-[10px]">
+                            x{item.quantity || 1}
                           </div>
 
                           {/* Medicine SubType Badge */}
                           {item.subType && (
-                            <div className="absolute top-2 left-2 px-2 py-0.5 rounded-lg bg-red-600 text-white font-bold text-[10px] shadow-xs">
+                            <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-red-600 text-white font-bold text-[9px]">
                               {item.subType}
                             </div>
                           )}
                         </div>
 
-                        {/* Product Card Details */}
-                        <div className="p-3 space-y-1.5 flex-1 flex flex-col justify-between">
-                          <div>
-                            <h4 className="font-bold text-xs sm:text-sm text-slate-900 leading-snug line-clamp-2">
-                              {item.name}
-                            </h4>
-                            {item.notes && (
-                              <p className="text-[11px] text-slate-500 line-clamp-2 mt-1 leading-tight">
-                                {item.notes}
-                              </p>
-                            )}
+                        {/* Item Details right underneath photo */}
+                        <div className="p-2 space-y-0.5 flex-1 flex flex-col justify-between">
+                          <div className="font-bold text-xs text-slate-900 leading-tight line-clamp-2">
+                            {item.name}
                           </div>
-
-                          {/* Luggage Location Pill */}
-                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
-                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono font-medium truncate max-w-[180px]">
-                              📍 {item.targetBag}
-                            </span>
-                            <span className="font-semibold text-emerald-700">
-                              {item.isPacked ? 'Packed ✓' : 'Allocated'}
-                            </span>
+                          <div className="text-[10px] text-slate-500 font-mono truncate pt-1 border-t border-slate-100">
+                            📍 {item.targetBag}
                           </div>
                         </div>
                       </div>
@@ -589,7 +516,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200 pb-16">
+    <div className="space-y-4 animate-in fade-in duration-200 pb-16">
       {/* 1. TOP NAVIGATION BAR */}
       <div className="flex items-center justify-between gap-3">
         <button
@@ -607,11 +534,9 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
             type="button"
             onClick={() => setIsPrintMode(true)}
             className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-            title="Open printable visual catalog for university arrival"
           >
             <Printer className="w-4 h-4 text-emerald-400" />
-            <span className="hidden sm:inline">🖨️ Print Visual Catalog</span>
-            <span className="sm:hidden">Print</span>
+            <span>Print Catalog</span>
           </button>
 
           {/* Add Item Button */}
@@ -626,122 +551,49 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         </div>
       </div>
 
-      {/* 2. SECTION HEADER & PACKING PROGRESS */}
-      <div className="ios-card p-5 sm:p-6 bg-gradient-to-r from-blue-50/50 via-white to-indigo-50/50 border border-blue-100/60 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xl sm:text-2xl">🧳</span>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                Luggage & Wardrobe
-              </h1>
-            </div>
-            <p className="text-xs sm:text-sm text-slate-600 mt-1">
-              Physical packing matrix, suitcase allocations, dual camera/gallery uploads & visual lookbook.
-            </p>
-          </div>
+      {/* 2. CATEGORY PILLS (Horizontal Scrolling, Starting Immediately without Summary Card) */}
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none pt-1">
+        <button
+          type="button"
+          onClick={() => setSelectedCategory('all')}
+          className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+            selectedCategory === 'all'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          All ({wardrobe.length})
+        </button>
 
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <div className="text-xl sm:text-2xl font-black text-[#007AFF]">{packedPercent}%</div>
-              <div className="text-[11px] font-semibold text-slate-500">
-                {packedCount} of {wardrobe.length} Packed
-              </div>
-            </div>
-            <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#007AFF] rounded-full transition-all duration-500"
-                style={{ width: `${packedPercent}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Luggage Allocation Quick Inspectors */}
-        <div className="mt-4 pt-3 border-t border-black/5 grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {bags.map((b) => {
-            const packedInBag = wardrobe.filter((w) => isItemInBag(w.targetBag, b) && w.isPacked).length;
-            const totalInBag = wardrobe.filter((w) => isItemInBag(w.targetBag, b)).length;
-            return (
-              <button
-                key={b.id}
-                type="button"
-                onClick={() => setInspectBag(b)}
-                className="p-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200/80 text-left transition-all active:scale-98 flex items-center justify-between shadow-2xs cursor-pointer"
-              >
-                <div className="min-w-0 pr-1">
-                  <div className="font-bold text-xs text-slate-900 truncate">{b.name}</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">
-                    {packedInBag}/{totalInBag} items packed
-                  </div>
-                </div>
-                <Eye className="w-3.5 h-3.5 text-[#007AFF] shrink-0" />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 3. CATEGORY SWITCHER (9 EXACT CATEGORIES) */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between px-1">
-          <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider block">
-            Filter by Category (9 Roster Categories)
-          </span>
-          {selectedCategory !== 'all' && (
+        {allCategories.map((cat) => {
+          const count = wardrobe.filter((w) => w.category === cat).length;
+          const isActive = selectedCategory === cat;
+          return (
             <button
+              key={cat}
               type="button"
-              onClick={() => setSelectedCategory('all')}
-              className="text-xs text-[#007AFF] font-semibold hover:underline"
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                isActive
+                  ? 'bg-[#007AFF] text-white shadow-xs'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+              }`}
             >
-              Reset to All
-            </button>
-          )}
-        </div>
-
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
-          <button
-            type="button"
-            onClick={() => setSelectedCategory('all')}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-              selectedCategory === 'all'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            All Items ({wardrobe.length})
-          </button>
-
-          {allCategories.map((cat) => {
-            const count = wardrobe.filter((w) => w.category === cat).length;
-            const isActive = selectedCategory === cat;
-            return (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-                  isActive
-                    ? 'bg-[#007AFF] text-white shadow-xs'
-                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+              <span>{cat}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                 }`}
               >
-                <span>{cat}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                    isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* 4. VISUAL WARDROBE GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+      {/* 3. 2-COLUMN SQUARE PHOTO GRID FOR WARDROBE ITEMS (iOS Visual Cards) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
         {displayedItems.map((item) => {
           const visual = getCategoryVisual(item.name, item.category);
           const isPacked = item.isPacked;
@@ -749,111 +601,90 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
           return (
             <div
               key={item.id}
-              className={`ios-card p-4 flex flex-col justify-between transition-all border shadow-xs relative ${
+              className={`ios-card p-2.5 sm:p-3 rounded-2xl flex flex-col justify-between transition-all border shadow-xs relative ${
                 isPacked
-                  ? 'bg-emerald-50/40 border-emerald-300/70'
+                  ? 'bg-emerald-50/40 border-emerald-300'
                   : 'bg-white border-black/10 hover:border-slate-300'
               }`}
             >
               <div>
-                <div className="flex items-start gap-3">
-                  {/* Photo or Visual Thumbnail */}
-                  <div className="w-16 h-16 rounded-xl bg-slate-100 border border-black/5 overflow-hidden flex items-center justify-center shrink-0 relative group">
-                    {item.photoUrl ? (
-                      <img
-                        src={item.photoUrl}
-                        alt={item.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-2xl">{visual.emoji}</span>
-                    )}
+                {/* Large Square Photo (aspect-square, rounded-[14px]) */}
+                <div className="w-full aspect-square rounded-[14px] bg-slate-100 border border-black/5 overflow-hidden flex items-center justify-center relative group">
+                  {item.photoUrl ? (
+                    <img
+                      src={item.photoUrl}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-4xl">{visual.emoji}</span>
+                  )}
 
-                    {/* Quick photo change on hover */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditModal(item)}
-                      className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
-                      title="Edit photo"
-                    >
-                      <Camera className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Title & Details */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-1">
-                      <h3 className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight leading-snug">
-                        {item.name}
-                      </h3>
-                      <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 shrink-0">
-                        ×{item.quantity}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                        {item.category}
-                      </span>
-                      {item.subType && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-800">
-                          {item.subType}
-                        </span>
-                      )}
-                    </div>
-
-                    {item.notes && (
-                      <p className="text-[11px] text-slate-500 line-clamp-2 mt-1">
-                        {item.notes}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-3 pt-2.5 border-t border-black/5 text-[11px] font-mono text-slate-600 truncate flex items-center justify-between">
-                  <span className="truncate">📍 {item.targetBag}</span>
-                  <span
-                    className={`font-semibold ${
-                      item.isBought ? 'text-emerald-700' : 'text-red-600'
-                    }`}
-                  >
-                    {item.isBought ? 'Owned' : 'To Buy'}
+                  {/* Quantity Badge in Corner */}
+                  <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 text-white font-mono font-bold text-[10px] shadow-2xs">
+                    x{item.quantity || 1}
                   </span>
-                </div>
-              </div>
 
-              {/* Action Bar: Single Packed vs Unpacked Checkbox + Edit + Delete */}
-              <div className="mt-3 pt-2.5 border-t border-black/5 flex items-center justify-between">
-                {/* Single Packed State Toggle */}
-                <button
-                  type="button"
-                  onClick={() => onToggleWardrobePacked(item.id)}
-                  className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer ${
-                    isPacked
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'bg-[#F2F2F7] hover:bg-slate-200 text-slate-700'
-                  }`}
-                >
-                  <Check className={`w-3.5 h-3.5 stroke-[3] ${isPacked ? 'text-white' : 'text-slate-400'}`} />
-                  <span>{isPacked ? 'Packed in Bag' : 'Mark Packed'}</span>
-                </button>
+                  {/* Medicine SubType Badge */}
+                  {item.subType && (
+                    <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-red-600 text-white font-bold text-[9px] shadow-2xs">
+                      {item.subType}
+                    </span>
+                  )}
 
-                <div className="flex items-center gap-1">
+                  {/* Quick photo change on hover */}
                   <button
                     type="button"
                     onClick={() => handleOpenEditModal(item)}
-                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+                    className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                    title="Edit photo"
+                  >
+                    <Camera className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Clean Item Name Below Photo */}
+                <h3 className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight leading-snug line-clamp-2 mt-2">
+                  {item.name}
+                </h3>
+
+                {/* Assigned Bag Pill */}
+                <div className="mt-1 text-[10px] font-mono text-slate-600 truncate bg-slate-100 px-2 py-0.5 rounded-md inline-block max-w-full">
+                  📍 {item.targetBag}
+                </div>
+              </div>
+
+              {/* Compact Packed Toggle + Edit Icon */}
+              <div className="mt-3 pt-2 border-t border-black/5 flex items-center justify-between gap-1">
+                <button
+                  type="button"
+                  onClick={() => onToggleWardrobePacked(item.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                    isPacked
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  <Check className={`w-3 h-3 stroke-[3] ${isPacked ? 'text-white' : 'text-slate-400'}`} />
+                  <span>{isPacked ? 'Packed' : 'Pack'}</span>
+                </button>
+
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditModal(item)}
+                    className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
                     title="Edit item"
                   >
-                    <Edit3 className="w-3.5 h-3.5" />
+                    <Edit3 className="w-3 h-3" />
                   </button>
                   <button
                     type="button"
                     onClick={() => onDeleteWardrobeItem(item.id)}
-                    className="w-7 h-7 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 flex items-center justify-center transition-colors cursor-pointer"
+                    className="w-6 h-6 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 flex items-center justify-center transition-colors cursor-pointer"
                     title="Delete item"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
               </div>

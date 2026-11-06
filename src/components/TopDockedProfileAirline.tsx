@@ -111,12 +111,11 @@ export const TopDockedProfileAirline: React.FC<TopDockedProfileAirlineProps> = (
                 <img
                   src={activePhoto}
                   alt="Navini Ravishka"
-                  className="w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-slate-200 shadow-2xs"
+                  className="w-[52px] h-[64px] rounded-[12px] object-cover border border-slate-200/80 shadow-2xs"
                   onError={(e) => {
                     e.currentTarget.src = defaultPassportPhoto;
                   }}
                 />
-                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white" />
               </div>
             )}
 
@@ -164,7 +163,7 @@ export const TopDockedProfileAirline: React.FC<TopDockedProfileAirlineProps> = (
                 {/* Profile Portrait */}
                 <div className="relative shrink-0">
                   {isUploading ? (
-                    <div className="w-24 h-32 rounded-2xl bg-blue-50 border border-blue-200 flex flex-col items-center justify-center text-[#007AFF] p-2 text-center animate-pulse">
+                    <div className="w-[100px] h-[124px] rounded-[16px] bg-blue-50 border border-blue-200 flex flex-col items-center justify-center text-[#007AFF] p-2 text-center animate-pulse">
                       <RefreshCw className="w-6 h-6 animate-spin mb-1 text-[#007AFF]" />
                       <span className="text-[10px] font-semibold">Uploading...</span>
                     </div>
@@ -172,7 +171,7 @@ export const TopDockedProfileAirline: React.FC<TopDockedProfileAirlineProps> = (
                     <img
                       src={activePhoto}
                       alt="Navini Ravishka"
-                      className="w-24 h-32 rounded-2xl object-cover border-2 border-slate-200 shadow-sm"
+                      className="w-[100px] h-[124px] rounded-[16px] object-cover border-2 border-slate-200 shadow-sm"
                       onError={(e) => {
                         e.currentTarget.src = defaultPassportPhoto;
                       }}

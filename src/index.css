@@ -100,9 +100,16 @@
 
 /* Dedicated Print Styles for Visual Packing Catalog & Taxi Card */
 @media print {
-  body {
+  html,
+  body,
+  #root,
+  .min-h-screen {
     background-color: #ffffff !important;
     color: #000000 !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-width: 100% !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
