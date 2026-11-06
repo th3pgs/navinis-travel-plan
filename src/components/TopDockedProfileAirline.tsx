@@ -106,17 +106,19 @@ export const TopDockedProfileAirline: React.FC<TopDockedProfileAirlineProps> = (
         >
           {/* Left: Small Profile Photo + Two Clean Name Lines */}
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="relative shrink-0">
-              <img
-                src={activePhoto}
-                alt="Navini Ravishka"
-                className="w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-slate-200 shadow-2xs"
-                onError={(e) => {
-                  e.currentTarget.src = defaultPassportPhoto;
-                }}
-              />
-              <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white" />
-            </div>
+            {!isExpanded && (
+              <div className="relative shrink-0">
+                <img
+                  src={activePhoto}
+                  alt="Navini Ravishka"
+                  className="w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover border-2 border-slate-200 shadow-2xs"
+                  onError={(e) => {
+                    e.currentTarget.src = defaultPassportPhoto;
+                  }}
+                />
+                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white" />
+              </div>
+            )}
 
             <div className="min-w-0 flex-1">
               {/* Full Name in Two Clean Lines */}
@@ -456,17 +458,34 @@ export const TopDockedProfileAirline: React.FC<TopDockedProfileAirlineProps> = (
               Upload a new photo or take one with your device camera.
             </p>
 
-            <label className="w-full py-3 rounded-xl bg-[#007AFF] hover:bg-blue-600 text-white font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors">
-              <Camera className="w-4 h-4" />
-              <span>Take Photo / Choose Image</span>
-              <input
-                type="file"
-                accept="image/*"
-                capture="user"
-                onChange={handlePhotoUpload}
-                className="hidden"
-              />
-            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="py-3 px-2 rounded-xl bg-[#007AFF] hover:bg-blue-600 text-white font-semibold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-2xs">
+                <Camera className="w-5 h-5" />
+                <span>Take Photo</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="user"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+              </label>
+
+              <label className="py-3 px-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-2xs">
+                <svg className="w-5 h-5 fill-none stroke-current" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                  <circle cx="9" cy="9" r="2" />
+                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                </svg>
+                <span>Photo Gallery</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+              </label>
+            </div>
 
             {passportInfo.photoUrl && (
               <button

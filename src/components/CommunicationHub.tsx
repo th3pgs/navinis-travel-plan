@@ -6,6 +6,7 @@ import {
 } from '../data';
 import { AppIcon } from './AppIcon';
 import { DynamicSelect } from './DynamicSelect';
+import { UniversityBuddyCard } from './UniversityBuddyCard';
 import {
   ChevronLeft,
   Plus,
@@ -154,10 +155,10 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
           <span className="text-xl sm:text-2xl">🌐</span>
           <div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Internet & Connectivity Hub
+              Internet, Apps & Chat
             </h1>
             <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
-              3-tier family connectivity architecture + spacious square applications verification matrix.
+              3-tier internet connectivity architecture, official 56×56px app square matrix & university WeChat templates.
             </p>
           </div>
         </div>
@@ -390,7 +391,10 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
         </div>
       </div>
 
-      {/* 4. SECTION 6: FULL-VIEW SQUARE MATRIX FOR APPLICATIONS */}
+      {/* 4. PRE-WRITTEN WECHAT & UNIVERSITY BUDDY ARRIVAL TEMPLATES */}
+      <UniversityBuddyCard />
+
+      {/* 5. FULL-VIEW SQUARE MATRIX FOR APPLICATIONS (56x56px Squircles) */}
       <div className="space-y-3 pt-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
           <div>
@@ -398,7 +402,7 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
               Applications Square Matrix ({displayedApps.length} Apps)
             </span>
             <span className="text-xs text-slate-500 font-medium">
-              3 Checkpoints: 1. Installed • 2. Logged In • 3. Verified in Sri Lanka
+              3 Checkpoints: 1. Installed • 2. Logged In • 3. Tested & Verified
             </span>
           </div>
 
@@ -450,9 +454,9 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
                 }`}
               >
                 <div>
-                  {/* Top: High-Res SVG Logo + Devices Badges */}
+                  {/* Top: High-Res 56x56px (w-14 h-14) Squircle Logo + Badges */}
                   <div className="flex items-start justify-between gap-2 mb-2.5">
-                    <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-50 border border-black/5 flex items-center justify-center p-1.5 shadow-2xs shrink-0">
+                    <div className="w-14 h-14 rounded-[14px] bg-slate-50 border border-black/5 flex items-center justify-center p-2 shadow-2xs shrink-0 overflow-hidden">
                       <AppIcon name={app.appIcon || app.name} className="w-full h-full object-contain" />
                     </div>
 
@@ -532,7 +536,7 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
                     <Check className={`w-3 h-3 stroke-[3] ${isLoggedIn ? 'text-amber-700' : 'text-slate-300'}`} />
                   </button>
 
-                  {/* Checkpoint 3: Verified Working */}
+                  {/* Checkpoint 3: Tested & Verified */}
                   <button
                     type="button"
                     onClick={() => {
@@ -548,7 +552,7 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
                         : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200'
                     }`}
                   >
-                    <span>3. Verified ✓</span>
+                    <span>3. Tested & Verified ✓</span>
                     <Check className={`w-3 h-3 stroke-[3] ${isVerified ? 'text-emerald-700' : 'text-slate-300'}`} />
                   </button>
                 </div>

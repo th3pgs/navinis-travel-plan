@@ -26,6 +26,7 @@ import {
   INITIAL_PROCEDURE_STEPS,
   INITIAL_BANKING_TASKS,
   INITIAL_GIFTS,
+  migrateLegacyApps,
 } from './data';
 
 import {
@@ -39,7 +40,6 @@ import {
 import { AuthGate } from './components/AuthGate';
 import { TopDockedProfileAirline } from './components/TopDockedProfileAirline';
 import { HardwareShowcaseWidgets } from './components/HardwareShowcaseWidgets';
-import { UniversityBuddyCard } from './components/UniversityBuddyCard';
 import { PhysicalHub } from './components/PhysicalHub';
 import { DocumentationHub } from './components/DocumentationHub';
 import { CommunicationHub } from './components/CommunicationHub';
@@ -92,13 +92,13 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // State Management
+  // State Management (v7 Migration with Purged Legacy VPNs)
   const [passportInfo, setPassportInfo] = useState<{
     passportNumber: string;
     expiryDate: string;
     photoUrl?: string;
   }>(() => {
-    const saved = localStorage.getItem('navini_passport_profile_v6');
+    const saved = localStorage.getItem('navini_passport_profile_v7') || localStorage.getItem('navini_passport_profile_v6');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -112,7 +112,7 @@ export function App() {
   });
 
   const [bags, setBags] = useState<BagAsset[]>(() => {
-    const saved = localStorage.getItem('navini_bags_v6');
+    const saved = localStorage.getItem('navini_bags_v7') || localStorage.getItem('navini_bags_v6');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -123,7 +123,7 @@ export function App() {
   });
 
   const [devices, setDevices] = useState<DeviceAsset[]>(() => {
-    const saved = localStorage.getItem('navini_devices_v6');
+    const saved = localStorage.getItem('navini_devices_v7') || localStorage.getItem('navini_devices_v6');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -134,7 +134,7 @@ export function App() {
   });
 
   const [wardrobe, setWardrobe] = useState<WardrobeItem[]>(() => {
-    const saved = localStorage.getItem('navini_wardrobe_v6');
+    const saved = localStorage.getItem('navini_wardrobe_v7') || localStorage.getItem('navini_wardrobe_v6');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -145,7 +145,7 @@ export function App() {
   });
 
   const [documents, setDocuments] = useState<DocumentItem[]>(() => {
-    const saved = localStorage.getItem('navini_docs_v6');
+    const saved = localStorage.getItem('navini_docs_v7') || localStorage.getItem('navini_docs_v6');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -156,18 +156,20 @@ export function App() {
   });
 
   const [apps, setApps] = useState<AppConfigItem[]>(() => {
-    const saved = localStorage.getItem('navini_apps_v6');
+    const saved = localStorage.getItem('navini_apps_v7') || localStorage.getItem('navini_apps_v6');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return migrateLegacyApps(parsed);
+        }
       } catch (e) {}
     }
     return INITIAL_APPS;
   });
 
   const [milestones, setMilestones] = useState<TimelineMilestone[]>(() => {
-    const saved = localStorage.getItem('navini_milestones_v6');
+    const saved = localStorage.getItem('navini_milestones_v7') || localStorage.getItem('navini_milestones_v6');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -187,7 +189,7 @@ export function App() {
   // Dynamic Custom Dropdown Options State
   const [customCategories, setCustomCategories] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('navini_custom_categories_v6');
+      const saved = localStorage.getItem('navini_custom_categories_v7') || localStorage.getItem('navini_custom_categories_v6');
       if (saved) return JSON.parse(saved);
     } catch {}
     return [];
@@ -195,7 +197,7 @@ export function App() {
 
   const [customLocations, setCustomLocations] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('navini_custom_locations_v6');
+      const saved = localStorage.getItem('navini_custom_locations_v7') || localStorage.getItem('navini_custom_locations_v6');
       if (saved) return JSON.parse(saved);
     } catch {}
     return [];
@@ -204,7 +206,7 @@ export function App() {
   const [customBanks, setCustomBanks] = useState<string[]>([]);
   const [customAppCategories, setCustomAppCategories] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('navini_custom_app_categories_v6');
+      const saved = localStorage.getItem('navini_custom_app_categories_v7') || localStorage.getItem('navini_custom_app_categories_v6');
       if (saved) return JSON.parse(saved);
     } catch {}
     return [];
@@ -212,7 +214,7 @@ export function App() {
 
   const [customAppDevices, setCustomAppDevices] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('navini_custom_app_devices_v6');
+      const saved = localStorage.getItem('navini_custom_app_devices_v7') || localStorage.getItem('navini_custom_app_devices_v6');
       if (saved) return JSON.parse(saved);
     } catch {}
     return [];
@@ -233,7 +235,7 @@ export function App() {
         if (remote.devices?.length) setDevices(remote.devices);
         if (remote.wardrobe?.length) setWardrobe(remote.wardrobe);
         if (remote.documents?.length) setDocuments(remote.documents);
-        if (remote.apps?.length) setApps(remote.apps);
+        if (remote.apps?.length) setApps(migrateLegacyApps(remote.apps));
         if (remote.milestones?.length) setMilestones(remote.milestones);
         if (remote.customCategories?.length) setCustomCategories(remote.customCategories);
         if (remote.customLocations?.length) setCustomLocations(remote.customLocations);
@@ -256,7 +258,7 @@ export function App() {
       if (incoming.devices?.length) setDevices(incoming.devices);
       if (incoming.wardrobe?.length) setWardrobe(incoming.wardrobe);
       if (incoming.documents?.length) setDocuments(incoming.documents);
-      if (incoming.apps?.length) setApps(incoming.apps);
+      if (incoming.apps?.length) setApps(migrateLegacyApps(incoming.apps));
       if (incoming.milestones?.length) setMilestones(incoming.milestones);
       if (incoming.customCategories?.length) setCustomCategories(incoming.customCategories);
       if (incoming.customLocations?.length) setCustomLocations(incoming.customLocations);
@@ -294,20 +296,20 @@ export function App() {
     const mStones = overrides?.milestones || milestones;
     const pInfo = overrides?.passportInfo || passportInfo;
 
-    localStorage.setItem('navini_passport_profile_v6', JSON.stringify(pInfo));
-    localStorage.setItem('navini_bags_v6', JSON.stringify(bAssets));
-    localStorage.setItem('navini_devices_v6', JSON.stringify(dAssets));
-    localStorage.setItem('navini_wardrobe_v6', JSON.stringify(wItems));
-    localStorage.setItem('navini_docs_v6', JSON.stringify(docItems));
-    localStorage.setItem('navini_apps_v6', JSON.stringify(appItems));
-    localStorage.setItem('navini_milestones_v6', JSON.stringify(mStones));
-    localStorage.setItem('navini_custom_categories_v6', JSON.stringify(cCats));
-    localStorage.setItem('navini_custom_locations_v6', JSON.stringify(cLocs));
-    localStorage.setItem('navini_custom_app_categories_v6', JSON.stringify(cAppCats));
-    localStorage.setItem('navini_custom_app_devices_v6', JSON.stringify(cAppDevs));
+    localStorage.setItem('navini_passport_profile_v7', JSON.stringify(pInfo));
+    localStorage.setItem('navini_bags_v7', JSON.stringify(bAssets));
+    localStorage.setItem('navini_devices_v7', JSON.stringify(dAssets));
+    localStorage.setItem('navini_wardrobe_v7', JSON.stringify(wItems));
+    localStorage.setItem('navini_docs_v7', JSON.stringify(docItems));
+    localStorage.setItem('navini_apps_v7', JSON.stringify(appItems));
+    localStorage.setItem('navini_milestones_v7', JSON.stringify(mStones));
+    localStorage.setItem('navini_custom_categories_v7', JSON.stringify(cCats));
+    localStorage.setItem('navini_custom_locations_v7', JSON.stringify(cLocs));
+    localStorage.setItem('navini_custom_app_categories_v7', JSON.stringify(cAppCats));
+    localStorage.setItem('navini_custom_app_devices_v7', JSON.stringify(cAppDevs));
 
     const masterState: AppMasterState = {
-      version: '6.0',
+      version: '7.0',
       lastUpdated: new Date().toISOString(),
       passportInfo: pInfo,
       bags: bAssets,
@@ -400,6 +402,22 @@ export function App() {
     syncAllState({ bags: updated });
   };
 
+  const handleCycleBagStatus = (id: string) => {
+    const updated = bags.map((b) => {
+      if (b.id !== id) return b;
+      // Cycle: !isBought (Missing) -> isBought && !isPacked (Bought) -> isBought && isPacked (Packed) -> !isBought (Missing)
+      if (!b.isBought) {
+        return { ...b, isBought: true, isPacked: false };
+      } else if (b.isBought && !b.isPacked) {
+        return { ...b, isBought: true, isPacked: true };
+      } else {
+        return { ...b, isBought: false, isPacked: false };
+      }
+    });
+    setBags(updated);
+    syncAllState({ bags: updated });
+  };
+
   const toggleBagPacked = (id: string) => {
     const updated = bags.map((b) => (b.id === id ? { ...b, isPacked: !b.isPacked } : b));
     setBags(updated);
@@ -427,6 +445,22 @@ export function App() {
 
   const toggleDeviceBought = (id: string) => {
     const updated = devices.map((d) => (d.id === id ? { ...d, isBought: !d.isBought } : d));
+    setDevices(updated);
+    syncAllState({ devices: updated });
+  };
+
+  const handleCycleDeviceStatus = (id: string) => {
+    const updated = devices.map((d) => {
+      if (d.id !== id) return d;
+      // Cycle: !isBought (Missing) -> isBought && !isPacked (Bought) -> isBought && isPacked (Packed) -> !isBought (Missing)
+      if (!d.isBought) {
+        return { ...d, isBought: true, isPacked: false };
+      } else if (d.isBought && !d.isPacked) {
+        return { ...d, isBought: true, isPacked: true };
+      } else {
+        return { ...d, isBought: false, isPacked: false };
+      }
+    });
     setDevices(updated);
     syncAllState({ devices: updated });
   };
@@ -673,12 +707,14 @@ export function App() {
               isCloudSynced={isSupabaseConnected}
             />
 
-            {/* SECTION 2: 10 HARDWARE & LUGGAGE SHOWCASE WIDGETS (Requirement #2) */}
+            {/* SECTION 2: 10 HARDWARE & LUGGAGE SHOWCASE WIDGETS (Strict 3-State Cycle) */}
             <HardwareShowcaseWidgets
               bags={bags}
               devices={devices}
               onToggleBagBought={toggleBagBought}
               onToggleDeviceBought={toggleDeviceBought}
+              onCycleBagStatus={handleCycleBagStatus}
+              onCycleDeviceStatus={handleCycleDeviceStatus}
               onInspectBag={(bag) => setSelectedInspectBag(bag)}
             />
 
@@ -689,7 +725,7 @@ export function App() {
               </span>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                {/* Portal 1: Wardrobe & Packing Studio */}
+                {/* Portal 1: Luggage & Wardrobe */}
                 <button
                   type="button"
                   onClick={() => navigateToView('physical')}
@@ -709,10 +745,10 @@ export function App() {
                     </div>
 
                     <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#007AFF] transition-colors">
-                      Wardrobe & Packing Studio
+                      Luggage & Wardrobe
                     </h3>
                     <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
-                      9-category physical packing, photo orientation controls, and 🖨️ PDF catalog.
+                      Physical packing matrix, suitcase allocations, dual photo uploads & visual lookbook.
                     </p>
                   </div>
 
@@ -732,7 +768,7 @@ export function App() {
                   </div>
                 </button>
 
-                {/* Portal 2: Document Checker */}
+                {/* Portal 2: Documents */}
                 <button
                   type="button"
                   onClick={() => navigateToView('documents')}
@@ -752,10 +788,10 @@ export function App() {
                     </div>
 
                     <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#F59E0B] transition-colors">
-                      Document Checker
+                      Documents
                     </h3>
                     <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
-                      Binary verification checklist confirming credentials exist & are in hand.
+                      Physical credentials, passport, JW202/Visa, medical forms, and secure carrying allocations.
                     </p>
                   </div>
 
@@ -769,7 +805,7 @@ export function App() {
                   </div>
                 </button>
 
-                {/* Portal 3: Internet & Applications */}
+                {/* Portal 3: Internet, Apps & Chat */}
                 <button
                   type="button"
                   onClick={() => navigateToView('connectivity')}
@@ -789,10 +825,10 @@ export function App() {
                     </div>
 
                     <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#10B981] transition-colors">
-                      Internet & Applications
+                      Internet, Apps & Chat
                     </h3>
                     <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
-                      3-Tier architecture, Hiddify setup, and square verification matrix.
+                      3-tier connectivity, official 56×56px app square matrix & university WeChat templates.
                     </p>
                   </div>
 
@@ -808,10 +844,7 @@ export function App() {
               </div>
             </section>
 
-            {/* SECTION 4: SEPARATE BUBBLE: CONTACTING UNIVERSITY & WECHAT SUGGESTIONS (Requirement #7) */}
-            <UniversityBuddyCard />
-
-            {/* SECTION 5: SCHEDULE & TRAVEL STEPS */}
+            {/* SECTION 4: SCHEDULE & TRAVEL STEPS */}
             <section>
               <TimelineOverview
                 milestones={milestones}

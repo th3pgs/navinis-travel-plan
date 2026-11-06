@@ -121,7 +121,7 @@ export const AppleSidebar: React.FC<AppleSidebarProps> = ({
             >
               <div className="flex items-center gap-3">
                 <Luggage className="w-4 h-4 text-[#007AFF]" />
-                <span>Wardrobe & Packing Studio</span>
+                <span>Luggage & Wardrobe</span>
               </div>
               <ChevronRight className="w-4 h-4 opacity-60" />
             </button>
@@ -140,7 +140,7 @@ export const AppleSidebar: React.FC<AppleSidebarProps> = ({
             >
               <div className="flex items-center gap-3">
                 <FileText className="w-4 h-4 text-amber-600" />
-                <span>Document Checker</span>
+                <span>Documents</span>
               </div>
               <ChevronRight className="w-4 h-4 opacity-60" />
             </button>
@@ -159,7 +159,7 @@ export const AppleSidebar: React.FC<AppleSidebarProps> = ({
             >
               <div className="flex items-center gap-3">
                 <Globe2 className="w-4 h-4 text-emerald-600" />
-                <span>Internet & Applications</span>
+                <span>Internet, Apps & Chat</span>
               </div>
               <ChevronRight className="w-4 h-4 opacity-60" />
             </button>

@@ -473,7 +473,7 @@ export const INITIAL_DOCUMENTS: DocumentItem[] = [
 
 // Initial Curated Applications Roster (Strictly NO Chinese Apps on Samsung S20 FE)
 export const INITIAL_APPS: AppConfigItem[] = [
-  // 1. Firewall & Security (All Devices)
+  // 1. Firewall Bypass & VPN (All 4 Devices — NO Shadowrocket!)
   {
     id: 'app-hiddify',
     platform: 'iOS',
@@ -501,7 +501,165 @@ export const INITIAL_APPS: AppConfigItem[] = [
     appIcon: 'astrill',
   },
 
-  // 2. Google Ecosystem
+  // 2. Chinese Social, Entertainment & Lifestyle (iPhone 17 & iPad 11 ONLY — NEVER on S20 FE!)
+  {
+    id: 'app-rednote',
+    platform: 'iOS',
+    devices: ['iPhone 17', 'Apple iPad 11'],
+    name: 'RedNote / Xiaohongshu (小红书)',
+    category: 'Essential Daily',
+    role: 'Essential lifestyle, campus dorm tips, Hainan food/travel guides & entertainment.',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'rednote',
+  },
+  {
+    id: 'app-douyin-bilibili',
+    platform: 'iOS',
+    devices: ['iPhone 17', 'Apple iPad 11'],
+    name: 'Douyin (抖音) / Bilibili (哔哩哔哩)',
+    category: 'Essential Daily',
+    role: 'Chinese video entertainment, student vlogs & academic study/tech tutorials.',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'douyin',
+  },
+  {
+    id: 'app-wechat',
+    platform: 'iOS',
+    devices: ['iPhone 17', 'Apple iPad 11'],
+    name: 'WeChat (微信)',
+    category: 'Essential Daily',
+    role: 'Campus lifeline, faculty messaging with Ms. Sun, student guide calls & campus mini-programs.',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'wechat',
+  },
+  {
+    id: 'app-alipay',
+    platform: 'iOS',
+    devices: ['iPhone 17'],
+    name: 'Alipay (支付宝)',
+    category: 'Essential Daily',
+    role: 'Primary QR mobile payment bound to international Visa card, transport QR & node purchases.',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'alipay',
+  },
+  {
+    id: 'app-meituan',
+    platform: 'iOS',
+    devices: ['iPhone 17'],
+    name: 'Meituan (美团)',
+    category: 'Essential Daily',
+    role: 'Campus food delivery, bottled water replenishment & Haikou dorm supplies.',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'meituan',
+  },
+  {
+    id: 'app-eleme',
+    platform: 'iOS',
+    devices: ['iPhone 17'],
+    name: 'Ele.me (饿了么)',
+    category: 'Essential Daily',
+    role: 'Alibaba food & grocery delivery in Haikou (Login via Alipay).',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'eleme',
+  },
+  {
+    id: 'app-taobao-pdd',
+    platform: 'iOS',
+    devices: ['iPhone 17', 'Apple iPad 11'],
+    name: 'Taobao (淘宝) & Pinduoduo (拼多多)',
+    category: 'Essential Daily',
+    role: 'Buying dorm bedding, pillows, lamps, and essentials cheaply (Login via Alipay/WeChat).',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'taobao',
+  },
+  {
+    id: 'app-didi',
+    platform: 'iOS',
+    devices: ['iPhone 17'],
+    name: 'DiDi (滴滴出行)',
+    category: 'Transit & Maps',
+    role: 'English ride-hailing app with automatic driver chat translation and cashless billing.',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'didi',
+  },
+  {
+    id: 'app-amap',
+    platform: 'iOS',
+    devices: ['iPhone 17'],
+    name: 'Amap / Gaode Maps (高德地图)',
+    category: 'Transit & Maps',
+    role: 'Most accurate GPS navigation & campus gate walking maps in Haikou.',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'amap',
+  },
+  {
+    id: 'app-baidu',
+    platform: 'iOS',
+    devices: ['iPhone 17'],
+    name: 'Baidu Maps (百度地图)',
+    category: 'Transit & Maps',
+    role: 'Secondary campus gate GPS walking routes & offline map downloads.',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'baidu',
+  },
+  {
+    id: 'app-trip',
+    platform: 'iOS',
+    devices: ['iPhone 17'],
+    name: 'Trip.com',
+    category: 'Transit & Maps',
+    role: 'Flight booking check, domestic high-speed train tickets & e-ticket verification.',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'tripdotcom',
+  },
+  {
+    id: 'app-metroman',
+    platform: 'iOS',
+    devices: ['iPhone 17'],
+    name: 'MetroMan (地铁通)',
+    category: 'Transit & Maps',
+    role: 'Offline national metro transit network maps with transfer calculators.',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'metroman',
+  },
+
+  // 3. Specific Google Apps (Individual Apps, NEVER group as "Google Suite")
   {
     id: 'app-gmail',
     platform: 'iOS',
@@ -567,8 +725,21 @@ export const INITIAL_APPS: AppConfigItem[] = [
     isConfigured: false,
     appIcon: 'chrome',
   },
+  {
+    id: 'app-youtube',
+    platform: 'iOS',
+    devices: ['iPhone 17', 'Samsung S20 FE', 'Apple iPad 11', 'Dell Laptop'],
+    name: 'YouTube',
+    category: 'Essential Daily',
+    role: 'Video learning, research tutorials, and entertainment via proxy.',
+    isInstalled: false,
+    isLoggedIn: false,
+    isVerified: false,
+    isConfigured: false,
+    appIcon: 'youtube',
+  },
 
-  // 3. AI & Academic Tools
+  // 4. AI & Academic Research
   {
     id: 'app-gpt',
     platform: 'iOS',
@@ -635,12 +806,12 @@ export const INITIAL_APPS: AppConfigItem[] = [
     appIcon: 'pleco',
   },
 
-  // 4. Samsung S20 FE Specific Android Essentials (NO Chinese Apps!)
+  // 5. Samsung S20 FE Specific Android Essentials (NO Chinese Apps!)
   {
     id: 'app-dialog',
     platform: 'Android',
     devices: ['Samsung S20 FE'],
-    name: 'Dialog MyAccount App',
+    name: 'Dialog MyAccount',
     category: 'Essential Daily',
     role: 'Monitor Sri Lankan SIM balance & SMS roaming status (Mobile data hard-locked off).',
     isInstalled: false,
@@ -648,19 +819,6 @@ export const INITIAL_APPS: AppConfigItem[] = [
     isVerified: false,
     isConfigured: false,
     appIcon: 'dialog',
-  },
-  {
-    id: 'app-auth',
-    platform: 'Android',
-    devices: ['Samsung S20 FE'],
-    name: 'Google Authenticator',
-    category: 'Essential Daily',
-    role: '2FA backup security codes for university and banking logins.',
-    isInstalled: false,
-    isLoggedIn: false,
-    isVerified: false,
-    isConfigured: false,
-    appIcon: 'authenticator',
   },
   {
     id: 'app-whatsapp',
@@ -676,140 +834,66 @@ export const INITIAL_APPS: AppConfigItem[] = [
     appIcon: 'whatsapp',
   },
   {
-    id: 'app-boc-smartpay',
+    id: 'app-auth',
     platform: 'Android',
     devices: ['Samsung S20 FE'],
-    name: "BOC SmartPay / People's Wave",
+    name: 'Google Authenticator',
     category: 'Essential Daily',
-    role: 'Sri Lankan bank balance monitoring right alongside SMS OTPs.',
+    role: '2FA backup security codes for university and banking logins.',
     isInstalled: false,
     isLoggedIn: false,
     isVerified: false,
     isConfigured: false,
-    appIcon: 'boc',
-  },
-
-  // 5. Chinese Daily Life Super-Apps (iPhone 17 & iPad 11 ONLY — NEVER on S20 FE!)
-  {
-    id: 'app-wechat',
-    platform: 'iOS',
-    devices: ['iPhone 17', 'Apple iPad 11'],
-    name: 'WeChat (微信)',
-    category: 'Essential Daily',
-    role: 'Installed, logged in with Sri Lankan number, Ms. Sun & Campus Buddy added, WeChat Pay identity verified.',
-    isInstalled: false,
-    isLoggedIn: false,
-    isVerified: false,
-    isConfigured: false,
-    appIcon: 'wechat',
-  },
-  {
-    id: 'app-alipay',
-    platform: 'iOS',
-    devices: ['iPhone 17'],
-    name: 'Alipay (支付宝)',
-    category: 'Essential Daily',
-    role: 'Installed, logged in, Passport verified, Foreign Debit Card linked, TourCard/Transport QR checked.',
-    isInstalled: false,
-    isLoggedIn: false,
-    isVerified: false,
-    isConfigured: false,
-    appIcon: 'alipay',
-  },
-  {
-    id: 'app-meituan',
-    platform: 'iOS',
-    devices: ['iPhone 17'],
-    name: 'Meituan (美团)',
-    category: 'Essential Daily',
-    role: 'Campus food delivery & bottled water delivery (Login via WeChat/Alipay).',
-    isInstalled: false,
-    isLoggedIn: false,
-    isVerified: false,
-    isConfigured: false,
-    appIcon: 'meituan',
-  },
-  {
-    id: 'app-eleme',
-    platform: 'iOS',
-    devices: ['iPhone 17'],
-    name: 'Ele.me (饿了么)',
-    category: 'Essential Daily',
-    role: 'Alibaba food & grocery delivery in Haikou (Login via Alipay).',
-    isInstalled: false,
-    isLoggedIn: false,
-    isVerified: false,
-    isConfigured: false,
-    appIcon: 'eleme',
-  },
-  {
-    id: 'app-taobao-pdd',
-    platform: 'iOS',
-    devices: ['iPhone 17', 'Apple iPad 11'],
-    name: 'Taobao (淘宝) & Pinduoduo (拼多多)',
-    category: 'Essential Daily',
-    role: 'Buying dorm bedding, pillows, lamps, and essentials cheaply (Login via Alipay/WeChat).',
-    isInstalled: false,
-    isLoggedIn: false,
-    isVerified: false,
-    isConfigured: false,
-    appIcon: 'taobao',
-  },
-  {
-    id: 'app-didi',
-    platform: 'iOS',
-    devices: ['iPhone 17'],
-    name: 'DiDi (滴滴出行)',
-    category: 'Transit & Maps',
-    role: 'English ride-hailing app or used directly as a Mini-Program inside Alipay/WeChat.',
-    isInstalled: false,
-    isLoggedIn: false,
-    isVerified: false,
-    isConfigured: false,
-    appIcon: 'didi',
-  },
-  {
-    id: 'app-amap',
-    platform: 'iOS',
-    devices: ['iPhone 17'],
-    name: 'Amap / Gaode Maps (高德地图)',
-    category: 'Transit & Maps',
-    role: 'Accurate China GPS & Haikou campus gate walking navigation.',
-    isInstalled: false,
-    isLoggedIn: false,
-    isVerified: false,
-    isConfigured: false,
-    appIcon: 'amap',
-  },
-  {
-    id: 'app-baidu',
-    platform: 'iOS',
-    devices: ['iPhone 17'],
-    name: 'Baidu Maps (百度地图)',
-    category: 'Transit & Maps',
-    role: 'Secondary campus gate GPS walking routes & offline map downloads.',
-    isInstalled: false,
-    isLoggedIn: false,
-    isVerified: false,
-    isConfigured: false,
-    appIcon: 'baidu',
-  },
-  {
-    id: 'app-trip',
-    platform: 'iOS',
-    devices: ['iPhone 17'],
-    name: 'Trip.com',
-    category: 'Transit & Maps',
-    role: 'English booking for Chinese high-speed trains & domestic flights.',
-    isInstalled: false,
-    isLoggedIn: false,
-    isVerified: false,
-    isConfigured: false,
-    appIcon: 'tripdotcom',
+    appIcon: 'authenticator',
   },
 ];
 
 export const INITIAL_INTERNET_APPS = INITIAL_APPS;
+
+/**
+ * Automatically purges legacy apps (Shadowrocket, v2rayNG, Clash Verge)
+ * and migrates cached state to the modern 2026 roster.
+ */
+export function migrateLegacyApps(currentApps: AppConfigItem[]): AppConfigItem[] {
+  if (!currentApps || !Array.isArray(currentApps) || currentApps.length === 0) {
+    return INITIAL_APPS;
+  }
+
+  const hasLegacyForbidden = currentApps.some(
+    (a) =>
+      a.id.includes('shadowrocket') ||
+      a.name.toLowerCase().includes('shadowrocket') ||
+      a.id.includes('v2ray') ||
+      a.name.toLowerCase().includes('v2ray') ||
+      a.id.includes('clash') ||
+      a.name.toLowerCase().includes('clash')
+  );
+
+  const missingModernApps =
+    !currentApps.some((a) => a.name.toLowerCase().includes('hiddify')) ||
+    !currentApps.some((a) => a.name.toLowerCase().includes('xiaohongshu') || a.name.toLowerCase().includes('rednote')) ||
+    !currentApps.some((a) => a.name.toLowerCase().includes('youtube'));
+
+  if (hasLegacyForbidden || missingModernApps) {
+    return INITIAL_APPS.map((initial) => {
+      const existing = currentApps.find(
+        (c) => c.name.toLowerCase().trim() === initial.name.toLowerCase().trim() || c.id === initial.id
+      );
+      if (existing) {
+        return {
+          ...initial,
+          isInstalled: existing.isInstalled,
+          isLoggedIn: existing.isLoggedIn ?? existing.isConfigured,
+          isVerified: existing.isVerified ?? existing.isConfigured,
+          isConfigured: existing.isConfigured,
+        };
+      }
+      return initial;
+    });
+  }
+
+  return currentApps;
+}
 
 // Initial 9-Category Wardrobe & Packing Studio Inventory
 export const INITIAL_WARDROBE: WardrobeItem[] = [

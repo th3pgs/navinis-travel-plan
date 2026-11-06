@@ -144,11 +144,11 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-xl sm:text-2xl">📋</span>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                Document Checker
+                Documents
               </h1>
             </div>
             <p className="text-xs sm:text-sm text-slate-600 mt-1">
-              Binary verification checklist confirming credentials exist & are in hand before departure.
+              Physical credentials, passport, JW202/Visa, medical forms, and secure carrying allocations.
             </p>
           </div>
 
