@@ -28,65 +28,78 @@ interface LuggageContentsModalProps {
   isOpen: boolean;
   onClose: () => void;
   bag: BagAsset | null;
-  bags: BagAsset[];
-  wardrobe: WardrobeItem[];
-  gifts: GiftItem[];
-  devices: DeviceAsset[];
-  documents: DocumentItem[];
-  locationOptions: string[];
-  wardrobeCategories: string[];
-  onAddCustomLocation: (name: string) => void;
-  onAddCustomCategory: (cat: string) => void;
-  onToggleWardrobePacked: (id: string) => void;
-  onToggleGiftPacked: (id: string) => void;
-  onToggleDevicePacked: (id: string) => void;
-  onToggleDocPacked: (id: string) => void;
-  onUpdateWardrobeItem: (id: string, partial: Partial<WardrobeItem>) => void;
-  onUpdateGift: (id: string, partial: Partial<GiftItem>) => void;
-  onUpdateDevice: (id: string, partial: Partial<DeviceAsset>) => void;
-  onUpdateDoc: (id: string, partial: Partial<DocumentItem>) => void;
+  bags?: BagAsset[];
+  wardrobe?: WardrobeItem[];
+  wardrobeItems?: WardrobeItem[];
+  gifts?: GiftItem[];
+  giftItems?: GiftItem[];
+  devices?: DeviceAsset[];
+  deviceItems?: DeviceAsset[];
+  documents?: DocumentItem[];
+  documentItems?: DocumentItem[];
+  locationOptions?: string[];
+  wardrobeCategories?: string[];
+  onAddCustomLocation?: (name: string) => void;
+  onAddCustomCategory?: (cat: string) => void;
+  onToggleWardrobePacked?: (id: string) => void;
+  onToggleGiftPacked?: (id: string) => void;
+  onToggleDevicePacked?: (id: string) => void;
+  onToggleDocPacked?: (id: string) => void;
+  onUpdateWardrobeItem?: (id: string, partial: Partial<WardrobeItem>) => void;
+  onUpdateGift?: (id: string, partial: Partial<GiftItem>) => void;
+  onUpdateDevice?: (id: string, partial: Partial<DeviceAsset>) => void;
+  onUpdateDoc?: (id: string, partial: Partial<DocumentItem>) => void;
   onDeleteWardrobeItem?: (id: string) => void;
   onDeleteGift?: (id: string) => void;
   onDeleteDevice?: (id: string) => void;
   onDeleteDoc?: (id: string) => void;
-  onAddWardrobeItem: (item: Omit<WardrobeItem, 'id'>) => void;
-  onAddGift: (item: Omit<GiftItem, 'id'>) => void;
-  onAddDevice: (item: Omit<DeviceAsset, 'id'>) => void;
-  onAddDoc: (item: Omit<DocumentItem, 'id'>) => void;
-  renderBagIcon: (kind: any, sizeClass?: string, title?: string) => React.ReactNode;
+  onAddWardrobeItem?: (item: Omit<WardrobeItem, 'id'>) => void;
+  onAddGift?: (item: Omit<GiftItem, 'id'>) => void;
+  onAddDevice?: (item: Omit<DeviceAsset, 'id'>) => void;
+  onAddDoc?: (item: Omit<DocumentItem, 'id'>) => void;
+  renderBagIcon?: (kind: any, sizeClass?: string, title?: string) => React.ReactNode;
 }
 
 export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
   isOpen,
   onClose,
   bag,
-  bags,
-  wardrobe,
-  gifts,
-  devices,
-  documents,
-  locationOptions,
-  wardrobeCategories,
-  onAddCustomLocation,
-  onAddCustomCategory,
-  onToggleWardrobePacked,
-  onToggleGiftPacked,
-  onToggleDevicePacked,
-  onToggleDocPacked,
-  onUpdateWardrobeItem,
-  onUpdateGift,
-  onUpdateDevice,
-  onUpdateDoc,
+  bags = [],
+  wardrobe = [],
+  wardrobeItems,
+  gifts = [],
+  giftItems,
+  devices = [],
+  deviceItems,
+  documents = [],
+  documentItems,
+  locationOptions = [],
+  wardrobeCategories = [],
+  onAddCustomLocation = () => {},
+  onAddCustomCategory = () => {},
+  onToggleWardrobePacked = () => {},
+  onToggleGiftPacked = () => {},
+  onToggleDevicePacked = () => {},
+  onToggleDocPacked = () => {},
+  onUpdateWardrobeItem = () => {},
+  onUpdateGift = () => {},
+  onUpdateDevice = () => {},
+  onUpdateDoc = () => {},
   onDeleteWardrobeItem,
   onDeleteGift,
   onDeleteDevice,
   onDeleteDoc,
-  onAddWardrobeItem,
-  onAddGift,
-  onAddDevice,
-  onAddDoc,
+  onAddWardrobeItem = () => {},
+  onAddGift = () => {},
+  onAddDevice = () => {},
+  onAddDoc = () => {},
   renderBagIcon,
 }) => {
+  const activeWardrobe = wardrobeItems || wardrobe;
+  const activeGifts = giftItems || gifts;
+  const activeDevices = deviceItems || devices;
+  const activeDocs = documentItems || documents;
+  const activeRenderBagIcon = renderBagIcon || (() => <Luggage className="w-6 h-6 text-slate-700" />);
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'wardrobe' | 'gifts' | 'devices' | 'docs'>('all');
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -102,10 +115,10 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
   if (!isOpen || !bag) return null;
 
   // Cross-portal inventory querying for this bag
-  const bagWardrobe = wardrobe.filter((w) => isItemInBag(w.targetBag, bag));
-  const bagGifts = gifts.filter((g) => isItemInBag(g.targetBag, bag));
-  const bagDevices = devices.filter((d) => isItemInBag(d.carryLocation, bag));
-  const bagDocs = documents.filter((doc) => isItemInBag(doc.carryLocation, bag));
+  const bagWardrobe = activeWardrobe.filter((w) => isItemInBag(w.targetBag, bag));
+  const bagGifts = activeGifts.filter((g) => isItemInBag(g.targetBag, bag));
+  const bagDevices = activeDevices.filter((d) => isItemInBag(d.carryLocation, bag));
+  const bagDocs = activeDocs.filter((doc) => isItemInBag(doc.carryLocation, bag));
 
   const totalItems = bagWardrobe.length + bagGifts.length + bagDevices.length + bagDocs.length;
   const packedItems =
@@ -210,7 +223,7 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="p-1 rounded-xl bg-[#F2F2F7] border border-black/5 flex items-center justify-center shrink-0">
-                {renderBagIcon(bag.kind, 'w-10 h-14', bag.name)}
+                {activeRenderBagIcon(bag.kind, 'w-10 h-14', bag.name)}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">

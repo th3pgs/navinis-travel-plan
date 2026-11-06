@@ -8,6 +8,7 @@ export interface DynamicSelectProps {
   onAddCustom?: (newOption: string) => void;
   label?: string;
   addCustomLabel?: string;
+  customPlaceholder?: string;
   placeholder?: string;
   className?: string;
   selectClassName?: string;
@@ -20,12 +21,14 @@ export const DynamicSelect: React.FC<DynamicSelectProps> = ({
   onChange,
   onAddCustom,
   label,
-  addCustomLabel = '+ Add Custom...',
+  addCustomLabel,
+  customPlaceholder,
   placeholder = 'Type custom name...',
   className = '',
   selectClassName = '',
   disabled = false,
 }) => {
+  const customLabelText = addCustomLabel || customPlaceholder || '+ Add Custom...';
   const [isAdding, setIsAdding] = useState(false);
   const [customText, setCustomText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -136,7 +139,7 @@ export const DynamicSelect: React.FC<DynamicSelectProps> = ({
             </option>
           ))}
           <option value="__ADD_CUSTOM__" className="font-semibold text-[#007AFF]">
-            {addCustomLabel}
+            {customLabelText}
           </option>
         </select>
       )}

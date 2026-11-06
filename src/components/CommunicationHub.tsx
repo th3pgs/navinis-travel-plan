@@ -8,22 +8,23 @@ import { AppIcon } from './AppIcon';
 import { DynamicSelect } from './DynamicSelect';
 import {
   ChevronLeft,
-  ChevronRight,
-  Copy,
-  Edit3,
-  ExternalLink,
   Plus,
-  Minus,
+  Trash2,
   Check,
   Globe2,
-  Sparkles,
-  ShieldCheck,
-  MessageCircle,
-  Printer,
+  Shield,
+  Wifi,
+  Smartphone,
+  Copy,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
+  Lock,
+  Key,
+  Info,
+  Radio,
   X,
-  Phone,
-  Mail,
-  CheckCircle2,
 } from 'lucide-react';
 
 interface CommunicationHubProps {
@@ -34,14 +35,14 @@ interface CommunicationHubProps {
   onAddCustomAppCategory?: (cat: string) => void;
   onAddCustomAppDevice?: (dev: string) => void;
   onToggleAppInstalled: (id: string) => void;
+  onToggleAppLoggedIn?: (id: string) => void;
+  onToggleAppVerified?: (id: string) => void;
   onToggleAppConfigured: (id: string) => void;
   onAddApp: (app: Omit<AppConfigItem, 'id'>) => void;
   onDeleteApp: (id: string) => void;
-  onOpenTaxiModal: () => void;
+  onOpenTaxiModal?: () => void;
   confirmedCampusChat?: boolean;
   onToggleCampusChatMaster?: () => void;
-  confirmedChatTopics?: Record<string, boolean>;
-  onToggleChatTopic?: (topicId: string) => void;
 }
 
 export const CommunicationHub: React.FC<CommunicationHubProps> = ({
@@ -52,800 +53,582 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
   onAddCustomAppCategory,
   onAddCustomAppDevice,
   onToggleAppInstalled,
+  onToggleAppLoggedIn,
+  onToggleAppVerified,
   onToggleAppConfigured,
   onAddApp,
   onDeleteApp,
-  onOpenTaxiModal,
-  confirmedCampusChat = false,
-  onToggleCampusChatMaster,
-  confirmedChatTopics = {},
-  onToggleChatTopic,
 }) => {
-  // Navigation: 'overview' (3-widget entry) | 'apps' | 'chat' | 'taxi' (Requirement #7)
-  const [currentSubView, setCurrentSubView] = useState<'overview' | 'apps' | 'chat' | 'taxi'>('overview');
-  const [selectedDevice, setSelectedDevice] = useState<string>('all');
-  const [isSectionEditMode, setIsSectionEditMode] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedDeviceFilter, setSelectedDeviceFilter] = useState<string>('all');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
+  const [isTier3Expanded, setIsTier3Expanded] = useState(false);
+  const [copiedText, setCopiedText] = useState<string | null>(null);
 
-  // Dynamic Options
-  const allAppCategories = React.useMemo(() => {
-    return Array.from(new Set([...DEFAULT_APP_CATEGORIES, ...customAppCategories]));
-  }, [customAppCategories]);
-
-  const allAppDevices = React.useMemo(() => {
-    return Array.from(new Set([...DEFAULT_APP_DEVICES, ...customAppDevices]));
-  }, [customAppDevices]);
-
-  // New App Modal State
-  const [showAddAppModal, setShowAddAppModal] = useState(false);
+  // Add App Modal
+  const [showAddModal, setShowAddModal] = useState(false);
   const [newAppName, setNewAppName] = useState('');
   const [newAppPlatform, setNewAppPlatform] = useState<AppConfigItem['platform']>('iOS');
   const [newAppCategory, setNewAppCategory] = useState<AppConfigItem['category']>('Stock AI & Academic');
   const [newAppRole, setNewAppRole] = useState('');
   const [newAppIcon, setNewAppIcon] = useState('doc');
+  const [newAppDevices, setNewAppDevices] = useState<('iPhone 17' | 'Samsung S20 FE' | 'Dell Laptop' | 'Apple iPad 11')[]>([
+    'iPhone 17',
+  ]);
 
-  // Local state for chat master confirmation if not passed
-  const [localConfirmedChat, setLocalConfirmedChat] = useState<boolean>(() => {
-    return localStorage.getItem('navini_campus_chat_confirmed') === 'true';
-  });
+  const allCategories = React.useMemo(() => {
+    return Array.from(new Set([...DEFAULT_APP_CATEGORIES, ...customAppCategories]));
+  }, [customAppCategories]);
 
-  const [localTopicChecked, setLocalTopicChecked] = useState<Record<string, boolean>>(() => {
-    try {
-      const saved = localStorage.getItem('navini_chat_topics_confirmed');
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
+  const allDevices = React.useMemo(() => {
+    return Array.from(new Set([...DEFAULT_APP_DEVICES, ...customAppDevices]));
+  }, [customAppDevices]);
 
-  const isMasterConfirmed = confirmedCampusChat || localConfirmedChat;
+  // Filtered Apps for Square Matrix View
+  const displayedApps = React.useMemo(() => {
+    return apps.filter((app) => {
+      if (selectedDeviceFilter !== 'all') {
+        if (!app.devices || !app.devices.includes(selectedDeviceFilter as any)) {
+          return false;
+        }
+      }
+      if (selectedCategoryFilter !== 'all' && app.category !== selectedCategoryFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [apps, selectedDeviceFilter, selectedCategoryFilter]);
 
-  const handleToggleMasterChat = () => {
-    const next = !isMasterConfirmed;
-    setLocalConfirmedChat(next);
-    localStorage.setItem('navini_campus_chat_confirmed', String(next));
-    if (onToggleCampusChatMaster) onToggleCampusChatMaster();
-  };
-
-  const isTopicConfirmed = (id: string) => {
-    return Boolean(confirmedChatTopics[id] || localTopicChecked[id]);
-  };
-
-  const handleToggleTopic = (id: string) => {
-    const next = !isTopicConfirmed(id);
-    const updated = { ...localTopicChecked, [id]: next };
-    setLocalTopicChecked(updated);
-    localStorage.setItem('navini_chat_topics_confirmed', JSON.stringify(updated));
-    if (onToggleChatTopic) onToggleChatTopic(id);
-  };
-
-  // Editable Messages State (4 Key Inquiry Topics, Requirement #8)
-  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
-  const [chatTopics, setChatTopics] = useState<
-    {
-      id: string;
-      topicNum: number;
-      title: string;
-      whoToAsk: string;
-      detailsToGet: string[];
-      body: string;
-      timeStr: string;
-    }[]
-  >(() => {
-    const saved = localStorage.getItem('navini_support_topics_v5');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {}
-    }
-    return [
-      {
-        id: 'topic-1',
-        topicNum: 1,
-        title: '📍 Fresh Location & Exact Dormitory Gate Check',
-        whoToAsk: 'Chat Buddy / Student Volunteer',
-        detailsToGet: [
-          'Verify if the previously shared live location / Haidian Campus South Gate is still the exact drop-off point.',
-          'Confirm which specific building name/number to walk into for dormitory room key pickup.',
-          'Ask if buddy will meet outside the South Gate or directly at the dormitory lobby.',
-        ],
-        body: 'Hello! I am getting ready for my flight to Haikou. Just to confirm the exact arrival location: is the previously shared Haidian Campus South Gate (No. 58 Renmin Avenue) still the best drop-off point for the taxi? Also, which building should I report to for dorm room key collection?',
-        timeStr: 'Before Departure',
-      },
-      {
-        id: 'topic-2',
-        topicNum: 2,
-        title: '🚕 Airport Taxi vs. DiDi Recommendation',
-        whoToAsk: 'Chat Buddy / Ms. Sun',
-        detailsToGet: [
-          'Explain that we have a printed bilingual Chinese Taxi Pocket Card ready.',
-          'Clarify whether taking the official airport metered taxi line is recommended, or if booking DiDi from Meilan Airport is smoother.',
-          'Get advice on whether Haikou airport taxi drivers reliably accept WeChat Pay or Cash.',
-        ],
-        body: 'Hi! Regarding transportation from Haikou Meilan Airport to campus: I have a printed Chinese Taxi Pocket Card with the exact South Gate address ready. Do you recommend taking an official airport taxi from the outdoor taxi rank, or is it better to book a DiDi ride? Which one works best for international students with 2 large bags?',
-        timeStr: 'Before Departure',
-      },
-      {
-        id: 'topic-3',
-        topicNum: 3,
-        title: '📋 On-Arrival Registration & Dorm Process in China',
-        whoToAsk: 'Ms. Sun (Admission) / Student Buddy',
-        detailsToGet: [
-          'Step-by-step flow: key collection, dorm deposit/card, electricity card recharge, and campus Wi-Fi setup.',
-          'Office hours for Ms. Sun at International Students Office on arrival day.',
-          'Documents needed immediately on day 1 (Admission Notice, Passport, Photos).',
-        ],
-        body: 'Hello Ms. Sun, could you please advise on the first-day registration steps once I arrive on campus? When collecting the dormitory room key, do I pay the room deposit in cash or via Alipay? Also, could you let me know your office hours so I can complete my initial document verification?',
-        timeStr: 'Arrival Morning',
-      },
-      {
-        id: 'topic-4',
-        topicNum: 4,
-        title: '✈️ Live Flight & Shanghai Transfer Updates',
-        whoToAsk: 'Chat Buddy & Family',
-        detailsToGet: [
-          'Pre-written Colombo boarding update (Flight MU6018 at 20:50).',
-          'Shanghai Pudong T1 transit update (re-checking 2 bags for domestic flight MU6381).',
-          'Live location sharing notice from the airport taxi.',
-        ],
-        body: 'Hi! I have safely landed at Shanghai Pudong (PVG), collected my 2 checked suitcases, cleared customs, and re-checked my luggage at the domestic transfer desk for flight MU6381. My estimated arrival at Haikou Meilan Airport is 14:35 today. Will share my live location once in the taxi!',
-        timeStr: 'During PVG Layover',
-      },
-    ];
-  });
-
-  const [editText, setEditText] = useState('');
-
-  const handleStartEdit = (id: string, text: string) => {
-    setEditingMsgId(id);
-    setEditText(text);
-  };
-
-  const handleSaveEdit = (id: string) => {
-    if (!editText.trim()) return;
-    const updated = chatTopics.map((m) => (m.id === id ? { ...m, body: editText.trim() } : m));
-    setChatTopics(updated);
-    localStorage.setItem('navini_support_topics_v5', JSON.stringify(updated));
-    setEditingMsgId(null);
-  };
-
-  const handleCopyMessage = (id: string, text: string) => {
+  const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2500);
+    setCopiedText(label);
+    setTimeout(() => setCopiedText(null), 2500);
   };
 
-  const handleAddAppSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveApp = () => {
     if (!newAppName.trim()) return;
+
     onAddApp({
       name: newAppName.trim(),
       platform: newAppPlatform,
       category: newAppCategory,
-      role: newAppRole.trim() || 'Essential tool for study and communication',
+      role: newAppRole.trim() || 'Custom installed application.',
+      appIcon: newAppIcon.trim() || 'doc',
+      devices: newAppDevices,
       isInstalled: false,
+      isLoggedIn: false,
+      isVerified: false,
       isConfigured: false,
-      appIcon: newAppIcon,
     });
+
+    setShowAddModal(false);
     setNewAppName('');
     setNewAppRole('');
-    setShowAddAppModal(false);
-  };
-
-  // Filter apps by device (Requirement #5A: Deduplication & strict device matching)
-  const filteredApps = apps.filter((app) => {
-    if (selectedDevice === 'all') return true;
-    if (selectedDevice === 'iphone') return app.devices ? app.devices.includes('iPhone 17') : app.platform === 'iOS';
-    if (selectedDevice === 'samsung') return app.devices ? app.devices.includes('Samsung S20 FE') : app.platform === 'Android';
-    if (selectedDevice === 'dell') return app.devices ? app.devices.includes('Dell Laptop') : app.platform === 'Windows';
-    if (selectedDevice === 'ipad') return app.devices ? app.devices.includes('Apple iPad 11') : false;
-    return true;
-  });
-
-  // Simplified 0-100% Math for Apps (Starts at 0% default, Requirement #7)
-  const totalApps = apps.length;
-  const readyApps = apps.filter((a) => a.isConfigured).length;
-  const appProgress = Math.round((readyApps / (totalApps || 1)) * 100);
-
-  const handleToggleReady = (app: AppConfigItem) => {
-    if (!app.isConfigured) {
-      if (!app.isInstalled) onToggleAppInstalled(app.id);
-      onToggleAppConfigured(app.id);
-    } else {
-      onToggleAppConfigured(app.id);
-    }
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-200 pb-16">
-      {/* 1. iOS STICKY NAVIGATION BAR */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-black/10 -mx-4 sm:-mx-6 px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between">
+    <div className="space-y-6 animate-in fade-in duration-200 pb-16">
+      {/* 1. TOP NAVIGATION BAR */}
+      <div className="flex items-center justify-between gap-3">
         <button
           type="button"
-          onClick={() => {
-            if (currentSubView === 'overview') {
-              onBack();
-            } else {
-              setCurrentSubView('overview');
-            }
-          }}
-          className="text-[#007AFF] text-base font-medium flex items-center gap-0.5 active:opacity-60 transition-opacity cursor-pointer"
+          onClick={onBack}
+          className="ios-back-button group"
         >
-          <ChevronLeft className="w-5 h-5 -ml-1.5" />
-          <span>{currentSubView === 'overview' ? 'Overview' : 'Internet, Apps & Chat'}</span>
+          <ChevronLeft className="w-5 h-5 text-[#007AFF] group-hover:-translate-x-0.5 transition-transform" />
+          <span>Overview</span>
         </button>
 
-        <h1 className="font-semibold text-sm sm:text-base text-slate-900 truncate px-2 text-center">
-          {currentSubView === 'overview' && 'Internet, Apps & Chat'}
-          {currentSubView === 'apps' && 'Device Apps'}
-          {currentSubView === 'chat' && 'Campus Chat Suggestions'}
-          {currentSubView === 'taxi' && 'Taxi Pocket Card'}
-        </h1>
+        <button
+          type="button"
+          onClick={() => setShowAddModal(true)}
+          className="px-3.5 py-2 rounded-xl bg-[#007AFF] hover:bg-blue-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add App</span>
+        </button>
+      </div>
 
-        {currentSubView === 'apps' ? (
-          <button
-            type="button"
-            onClick={() => setIsSectionEditMode(!isSectionEditMode)}
-            className="text-[#007AFF] text-sm sm:text-base font-semibold active:opacity-60 transition-opacity cursor-pointer"
-          >
-            {isSectionEditMode ? 'Done' : 'Edit'}
-          </button>
-        ) : (
-          <div className="w-12" />
-        )}
-      </header>
+      {/* 2. SECTION BANNER */}
+      <div className="ios-card p-5 sm:p-6 bg-gradient-to-r from-emerald-50/60 via-white to-blue-50/60 border border-emerald-200/60 shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-xl sm:text-2xl">🌐</span>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              Internet & Connectivity Hub
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
+              3-tier family connectivity architecture + spacious square applications verification matrix.
+            </p>
+          </div>
+        </div>
+      </div>
 
-      {/* ========================================================= */}
-      {/* VIEW A: 3 SUB-PORTAL WIDGETS ENTRY (Requirement #7)       */}
-      {/* ========================================================= */}
-      {currentSubView === 'overview' && (
-        <div className="space-y-4 animate-in fade-in duration-200">
-          <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider px-1 block">
-            Digital & Communication Portals
-          </span>
+      {/* 3. SECTION 5: 3-TIER CONNECTIVITY ARCHITECTURE (FROM APPLE NOTES) */}
+      <div className="space-y-3">
+        <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider px-1 block">
+          3-Tier Internet & Connectivity Architecture
+        </span>
 
-          {/* Widget 1: Device Apps (0% to 100% progress) */}
-          <button
-            type="button"
-            onClick={() => setCurrentSubView('apps')}
-            className="w-full ios-card p-4 sm:p-5 text-left hover:border-[#007AFF]/40 active:opacity-90 transition-all cursor-pointer group space-y-3"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center text-xl shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                  📱
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          {/* TIER 1: Primary Arrival Internet */}
+          <div className="ios-card p-5 border-l-4 border-l-emerald-500 bg-white shadow-xs space-y-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs shadow-2xs">
+                  T1
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm sm:text-base text-slate-900 group-hover:text-[#007AFF] transition-colors">
-                    Device Apps & VPN
+                  <h3 className="font-bold text-sm text-slate-900 tracking-tight">
+                    Primary Arrival Internet
                   </h3>
-                  <p className="text-xs text-[#8E8E93] mt-0.5">
-                    {totalApps} apps across iPhone 17, Samsung S20 FE, and Dell laptop.
-                  </p>
+                  <div className="text-[11px] text-emerald-700 font-semibold">
+                    CMLink China 5G eSIM (30 Days / 30GB)
+                  </div>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2 pl-2">
-                <div className="text-right">
-                  <span className="text-base font-bold text-slate-900 block">{appProgress}%</span>
-                  <span className="text-[10px] text-[#8E8E93]">{readyApps}/{totalApps} Ready</span>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-[#007AFF] transition-colors" />
-              </div>
-            </div>
-
-            <div className="w-full bg-[#E5E5EA] h-1.5 rounded-full overflow-hidden">
-              <div
-                className="bg-[#007AFF] h-full rounded-full transition-all duration-300"
-                style={{ width: `${appProgress}%` }}
-              />
-            </div>
-
-            <div className="pt-1 border-t border-black/5 flex items-center justify-between text-xs text-[#8E8E93]">
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-blue-50 text-[#007AFF]">
-                Shadowrocket • WeChat • Alipay • DiDi
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                iPhone 17
               </span>
-              <span>Tap to configure apps</span>
-            </div>
-          </button>
-
-          {/* Widget 2: Campus Chat (Single Master Checkbox, Requirement #7 & #8) */}
-          <div className="ios-card p-4 sm:p-5 space-y-3">
-            <div
-              onClick={() => setCurrentSubView('chat')}
-              className="flex items-center justify-between cursor-pointer group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-blue-50 text-[#007AFF] flex items-center justify-center text-xl shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                  💬
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm sm:text-base text-slate-900 group-hover:text-[#007AFF] transition-colors">
-                    Campus Chat Suggestions
-                  </h3>
-                  <p className="text-xs text-[#8E8E93] mt-0.5">
-                    4 Inquiry topics & live templates for Buddy & Ms. Sun.
-                  </p>
-                </div>
-              </div>
-
-              <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-[#007AFF] transition-colors" />
             </div>
 
-            {/* Single Master Checkbox (Requirement #7) */}
-            <div className="pt-2 border-t border-black/5 flex items-center justify-between">
-              <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                <button
-                  type="button"
-                  onClick={handleToggleMasterChat}
-                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                    isMasterConfirmed
-                      ? 'bg-[#34C759] text-white shadow-xs'
-                      : 'border-2 border-slate-300 bg-white hover:border-[#34C759]'
-                  }`}
-                >
-                  {isMasterConfirmed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                </button>
-                <span className={`text-xs font-semibold ${isMasterConfirmed ? 'text-slate-900' : 'text-slate-600'}`}>
-                  Contacted Campus & Confirmed Fresh Details
-                </span>
-              </label>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              <strong>Device:</strong> iPhone 17 (Install QR profile in Sri Lanka before takeoff). Provides instantaneous 5G data upon touchdown in Shanghai PVG and Haikou Meilan Airport without relying on airport Wi-Fi.
+            </p>
 
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isMasterConfirmed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>
-                {isMasterConfirmed ? 'Confirmed' : 'Pending'}
-              </span>
+            <div className="p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200/60 text-[11px] text-emerald-950">
+              💡 <strong>Arrival Instruction:</strong> As soon as the flight touches down in Shanghai, toggle "Data Roaming ON" on the CMLink eSIM cellular line.
             </div>
           </div>
 
-          {/* Widget 3: Taxi Card */}
+          {/* TIER 2: Emergency & OTP Backup */}
+          <div className="ios-card p-5 border-l-4 border-l-amber-500 bg-white shadow-xs space-y-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-xs shadow-2xs">
+                  T2
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 tracking-tight">
+                    Emergency & OTP Backup
+                  </h3>
+                  <div className="text-[11px] text-amber-800 font-semibold">
+                    Dialog Sri Lanka Roaming SIM
+                  </div>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+                Samsung S20 FE
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              <strong>Device:</strong> Samsung S20 FE. Dedicated solely to receiving Sri Lankan bank SMS OTPs (BOC, People's Bank, NSB) and emergency voice calls.
+            </p>
+
+            <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-[11px] text-red-950 flex items-start gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
+              <span>
+                <strong>CRITICAL BILL SHOCK RULE:</strong> "Mobile Data" and "Data Roaming" MUST remain <strong>HARD-LOCKED OFF</strong> on the Samsung S20 FE at all times! SMS receipt is 100% free.
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* TIER 3: Long-Term Firewall Bypass & Emergency VPN (Collapsible Reference Guide) */}
+        <div className="ios-card overflow-hidden border-l-4 border-l-[#5856D6] bg-white shadow-xs">
           <button
             type="button"
-            onClick={onOpenTaxiModal}
-            className="w-full ios-card p-4 sm:p-5 text-left hover:border-[#007AFF]/40 active:opacity-90 transition-all cursor-pointer group flex items-center justify-between"
+            onClick={() => setIsTier3Expanded(!isTier3Expanded)}
+            className="w-full p-4 sm:p-5 flex items-center justify-between text-left hover:bg-slate-50 transition-colors cursor-pointer select-none"
           >
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-800 flex items-center justify-center text-xl shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                🚕
+              <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shadow-2xs">
+                T3
               </div>
               <div>
-                <h3 className="font-bold text-sm sm:text-base text-slate-900 group-hover:text-[#007AFF] transition-colors">
-                  Taxi Pocket Card
-                </h3>
-                <p className="text-xs text-[#8E8E93] mt-0.5">
-                  Bilingual Hainan University pass for airport taxi driver (Backup option).
-                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-sm sm:text-base text-slate-900 tracking-tight">
+                    Tier 3: Long-Term Proxy Nodes & Emergency VPN Guide
+                  </h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                    Hiddify Across All 4 Devices
+                  </span>
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  How to buy monthly node packages via Alipay + Astrill emergency credentials ($30 USD)
+                </div>
               </div>
             </div>
 
-            <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-[#007AFF] transition-colors" />
+            <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+              {isTier3Expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </div>
           </button>
+
+          {isTier3Expanded && (
+            <div className="p-4 sm:p-6 border-t border-black/5 bg-[#F9FAFB] space-y-5 text-xs sm:text-sm animate-in fade-in">
+              {/* Primary Client: Hiddify Reminder */}
+              <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200/80 text-purple-950 space-y-1.5">
+                <div className="font-bold flex items-center gap-2">
+                  <AppIcon name="hiddify" className="w-5 h-5 shrink-0" />
+                  <span>Primary Client: Hiddify (Installed on all 4 devices)</span>
+                </div>
+                <p className="text-xs text-purple-900 leading-relaxed">
+                  We are <strong>NOT</strong> using Shadowrocket, v2rayNG, or Clash. <strong>Hiddify</strong> is installed on Dell Latitude 5410, iPhone 17, iPad 11, and Samsung S20 FE.
+                </p>
+                <div className="text-[11px] font-semibold text-purple-800 bg-white/60 p-2 rounded-lg border border-purple-200">
+                  ⚠️ <em>Important Reminder:</em> Hiddify is a firewall bypass client, NOT an internet provider! She must first be connected to Campus Wi-Fi or local Chinese SIM data.
+                </div>
+              </div>
+
+              {/* Monthly Node Packages via Alipay */}
+              <div className="space-y-2.5">
+                <h4 className="font-bold text-slate-900 text-xs sm:text-sm uppercase tracking-wide">
+                  Top Recommended Monthly Node Providers (Buy via Alipay)
+                </h4>
+                <p className="text-xs text-slate-600">
+                  Always purchase <strong>monthly packages</strong> via Alipay (proxy domains change; search names on <code className="bg-slate-200 px-1 py-0.5 rounded text-slate-800">cn.bing.com</code> inside China if needed):
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-2xs">
+                    <div className="font-bold text-slate-900 flex items-center justify-between">
+                      <span>1. Taishan Net (泰山机场)</span>
+                      <span className="text-emerald-700 font-mono text-xs">~¥13 / mo</span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      40+ high speed ports at once. Accepts Alipay & WeChat Pay.
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-2xs">
+                    <div className="font-bold text-slate-900 flex items-center justify-between">
+                      <span>2. SkyLinX (SkyLinX 机场)</span>
+                      <span className="text-emerald-700 font-mono text-xs">~¥8–12 / mo</span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      Ultra-budget backup with generous port allocations.
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-2xs">
+                    <div className="font-bold text-slate-900 flex items-center justify-between">
+                      <span>3. JuziCloud (桔子云机场)</span>
+                      <span className="text-emerald-700 font-mono text-xs">~¥15–20 / mo</span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      ~50 lightning fast low-latency ports across HK, Singapore, and Japan.
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-2xs">
+                    <div className="font-bold text-slate-900 flex items-center justify-between">
+                      <span>4. ShunYun (顺云)</span>
+                      <span className="text-emerald-700 font-mono text-xs">~¥16 / mo</span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      High reliability during peak evening academic research hours.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-100 rounded-xl text-xs text-slate-700 space-y-1">
+                  <strong>4-Step Setup:</strong> 1) Open provider site &rarr; 2) Buy monthly plan via Alipay &rarr; 3) Copy Subscription URL / QR &rarr; 4) In Hiddify, tap <strong>"+"</strong> &rarr; Import from Clipboard &rarr; Connect!
+                </div>
+              </div>
+
+              {/* Emergency Backup: Astrill VPN Credential Box */}
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-xs uppercase tracking-wide flex items-center gap-1.5 text-amber-900">
+                    <Lock className="w-4 h-4 text-amber-700" />
+                    <span>Emergency Backup — Astrill VPN ($30 USD Dormant)</span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
+                    No Subscription Yet
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                  <div className="p-2.5 rounded-xl bg-white border border-amber-200 flex items-center justify-between">
+                    <div>
+                      <span className="text-slate-500 block text-[10px]">Account Email</span>
+                      <strong className="text-slate-900">naviniravishka@icloud.com</strong>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard('naviniravishka@icloud.com', 'email')}
+                      className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                      title="Copy email"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white border border-amber-200 flex items-center justify-between">
+                    <div>
+                      <span className="text-slate-500 block text-[10px]">Password / Code</span>
+                      <strong className="text-slate-900">RKB38R</strong>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard('RKB38R', 'pass')}
+                      className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                      title="Copy password"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-xs text-amber-900 leading-relaxed italic">
+                  "In case of an emergency where Hiddify nodes fail, message PGS on WeChat so I can buy the $30 Astrill subscription from Sri Lanka—then simply log in with the email and password above."
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* ========================================================= */}
-      {/* VIEW B: DEVICE APPS FULL VIEW (Requirement #7)             */}
-      {/* ========================================================= */}
-      {currentSubView === 'apps' && (
-        <div className="space-y-4 animate-in fade-in duration-200">
-          {/* Summary Progress Card (Starts at 0% default) */}
-          <div className="ios-card p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-semibold text-[#8E8E93] uppercase tracking-wider block">
-                  Digital Readiness
-                </span>
-                <span className="text-xl font-bold text-slate-900">
-                  {readyApps} of {totalApps} Apps Setup & Ready
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-2xl font-bold text-[#007AFF]">{appProgress}%</span>
-              </div>
-            </div>
-
-            <div className="w-full bg-[#E5E5EA] h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-[#007AFF] h-full rounded-full transition-all duration-300"
-                style={{ width: `${appProgress}%` }}
-              />
-            </div>
-
-            <div className="flex items-center justify-between text-xs text-[#8E8E93] pt-1">
-              <span>Tap checkmark once verified and setup on your device</span>
-              <button
-                type="button"
-                onClick={() => setShowAddAppModal(true)}
-                className="text-[#007AFF] font-semibold flex items-center gap-1 active:opacity-60 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add App</span>
-              </button>
-            </div>
+      {/* 4. SECTION 6: FULL-VIEW SQUARE MATRIX FOR APPLICATIONS */}
+      <div className="space-y-3 pt-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+          <div>
+            <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider block">
+              Applications Square Matrix ({displayedApps.length} Apps)
+            </span>
+            <span className="text-xs text-slate-500 font-medium">
+              3 Checkpoints: 1. Installed • 2. Logged In • 3. Verified in Sri Lanka
+            </span>
           </div>
 
-          {/* Device Filter Bar */}
+          {/* Device Filter Pills (Strictly NO Chinese Apps on Samsung S20 FE) */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {[
-              { id: 'all', label: 'All Devices' },
-              { id: 'iphone', label: 'iPhone 17' },
-              { id: 'samsung', label: 'Samsung S20 FE' },
-              { id: 'dell', label: 'Dell Laptop' },
-              { id: 'ipad', label: 'Apple iPad 11' },
-            ].map((d) => (
+            <button
+              type="button"
+              onClick={() => setSelectedDeviceFilter('all')}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                selectedDeviceFilter === 'all'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              All Devices
+            </button>
+            {allDevices.map((dev) => (
               <button
-                key={d.id}
+                key={dev}
                 type="button"
-                onClick={() => setSelectedDevice(d.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
-                  selectedDevice === d.id
+                onClick={() => setSelectedDeviceFilter(dev)}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  selectedDeviceFilter === dev
                     ? 'bg-[#007AFF] text-white shadow-xs'
-                    : 'bg-white text-slate-700 border border-black/5 hover:bg-slate-50'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                 }`}
               >
-                {d.label}
+                {dev}
               </button>
             ))}
           </div>
+        </div>
 
-          {/* GFW Bypass Architecture & Pre-Departure Setup Strategy (Requirement #5C) */}
-          <div className="ios-card p-4 space-y-2 bg-gradient-to-r from-blue-50/70 to-indigo-50/70 border-blue-200">
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-lg bg-[#007AFF] text-white flex items-center justify-center text-xs font-bold shadow-2xs">
-                🛡️
-              </span>
-              <h4 className="font-bold text-xs sm:text-sm text-slate-900">
-                China Proxy Architecture: Jichang + Shadowsocks / VLESS / Trojan
-              </h4>
-            </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Modern <strong>"Jichang" (Airport / 机场) subscription services</strong> paired with <strong>Shadowrocket</strong> (iPhone & iPad), <strong>v2rayNG</strong> (Samsung S20 FE), and <strong>Clash Verge Rev</strong> (Dell Laptop) using <strong>Shadowsocks (AEAD-2022), VLESS-Reality, or Trojan protocols</strong> are the gold standard for China—far more reliable and cost-effective than commercial consumer VPNs (ExpressVPN/NordVPN), which frequently get blocked during China's firewall crackdowns.
-            </p>
-            <div className="pt-1.5 border-t border-black/5 flex items-center justify-between text-[11px] text-[#007AFF] font-semibold flex-wrap gap-2">
-              <span>⚠️ Must-Do in Sri Lanka:</span>
-              <span className="text-slate-700 font-normal">
-                Import & test subscription URLs on Friday/Saturday before boarding CMB flight.
-              </span>
-            </div>
-          </div>
+        {/* Spacious Full Square Grid / Matrix View (2 to 3 per row on mobile, 4 on desktop) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          {displayedApps.map((app) => {
+            const isInstalled = !!app.isInstalled;
+            const isLoggedIn = !!app.isLoggedIn;
+            const isVerified = !!app.isVerified || !!app.isConfigured;
+            const allCheckpointsDone = isInstalled && isLoggedIn && isVerified;
 
-          {/* Deduplicated App Rows (Requirement #5A) */}
-          <div className="ios-card divide-y divide-black/5 overflow-hidden">
-            {filteredApps.map((app) => (
+            return (
               <div
                 key={app.id}
-                className="p-3 sm:p-3.5 flex items-center justify-between gap-3 bg-white hover:bg-slate-50/50 transition-colors"
+                className={`ios-card p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between transition-all border shadow-xs relative ${
+                  allCheckpointsDone
+                    ? 'bg-emerald-50/40 border-emerald-300'
+                    : 'bg-white border-black/10 hover:border-slate-300'
+                }`}
               >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  {isSectionEditMode && (
-                    <button
-                      type="button"
-                      onClick={() => onDeleteApp(app.id)}
-                      className="w-5 h-5 rounded-full bg-[#FF3B30] text-white flex items-center justify-center shrink-0 active:opacity-60 transition-opacity"
-                      title="Remove app"
-                    >
-                      <Minus className="w-3 h-3 stroke-[3]" />
-                    </button>
-                  )}
+                <div>
+                  {/* Top: High-Res SVG Logo + Devices Badges */}
+                  <div className="flex items-start justify-between gap-2 mb-2.5">
+                    <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-50 border border-black/5 flex items-center justify-center p-1.5 shadow-2xs shrink-0">
+                      <AppIcon name={app.appIcon || app.name} className="w-full h-full object-contain" />
+                    </div>
 
-                  {/* 36x36px Crisp Rounded App Icon */}
-                  <div className="w-9 h-9 rounded-xl bg-[#F2F2F7] border border-black/5 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
-                    <AppIcon name={app.appIcon} className="w-5 h-5" />
-                  </div>
-
-                  {/* App Info with Multiple Device Badges in All Devices View */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                        {app.name}
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-600 truncate max-w-[90px]">
+                        {app.category}
                       </span>
-
-                      {/* Display multiple device badges (Requirement #7) */}
-                      {app.devices && app.devices.length > 0 ? (
-                        app.devices.map((dev) => (
-                          <span
-                            key={dev}
-                            className="text-[9px] font-mono font-semibold px-1.5 py-0.2 rounded-md bg-[#F2F2F7] text-slate-600 border border-black/5"
-                          >
-                            {dev}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-[9px] font-mono font-semibold px-1.5 py-0.2 rounded-md bg-[#F2F2F7] text-slate-600 border border-black/5">
-                          {app.platform}
+                      {allCheckpointsDone && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800">
+                          Ready ✓
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-[#8E8E93] line-clamp-1 mt-0.5">
-                      {app.role}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Single Circular iOS Checkmark Circle */}
-                <div className="shrink-0 pl-1">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleReady(app)}
-                    title={app.isConfigured ? 'Ready (Tap to toggle)' : 'Not ready (Tap to mark ready)'}
-                    className={`w-6 h-6 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                      app.isConfigured
-                        ? 'bg-[#007AFF] text-white shadow-xs'
-                        : 'border-2 border-slate-300 hover:border-[#007AFF] bg-white'
-                    }`}
-                  >
-                    {app.isConfigured && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* VIEW C: CAMPUS CHAT GUIDED INQUIRY (Requirement #8)       */}
-      {/* ========================================================= */}
-      {currentSubView === 'chat' && (
-        <div className="space-y-4 max-w-2xl mx-auto animate-in fade-in duration-200">
-          {/* Master Confirmation Banner */}
-          <div className="ios-card p-4 flex items-center justify-between border-l-4 border-l-[#34C759]">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleToggleMasterChat}
-                className={`w-6 h-6 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                  isMasterConfirmed
-                    ? 'bg-[#34C759] text-white shadow-xs'
-                    : 'border-2 border-slate-300 bg-white hover:border-[#34C759]'
-                }`}
-              >
-                {isMasterConfirmed && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-              </button>
-              <div>
-                <span className="text-xs sm:text-sm font-bold text-slate-900 block">
-                  Master Check: Contacted Campus & Confirmed Fresh Details
-                </span>
-                <span className="text-[11px] text-[#8E8E93]">
-                  Tick off once your Buddy / Ms. Sun confirms arrival instructions.
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Section Header: iOS Support Page Layout (Requirement #8) */}
-          <div className="px-1">
-            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
-              Suggestion Sections — Get Fresh Details from Chat Buddy
-            </h2>
-            <p className="text-xs text-[#8E8E93] mt-0.5">
-              Review and copy these targeted inquiries to finalize arrival plans on WeChat.
-            </p>
-          </div>
-
-          {/* 4 Clear Suggestion Topics */}
-          <div className="space-y-4">
-            {chatTopics.map((topic) => {
-              const isConfirmed = isTopicConfirmed(topic.id);
-              const isEditing = editingMsgId === topic.id;
-              const isCopied = copiedId === topic.id;
-
-              return (
-                <div key={topic.id} className="ios-card p-4 sm:p-5 space-y-3">
-                  {/* Topic Header & Checkbox */}
-                  <div className="flex items-start justify-between gap-2 border-b border-black/5 pb-2.5">
-                    <div>
-                      <h3 className="font-bold text-sm text-slate-900">
-                        {topic.title}
-                      </h3>
-                      <span className="text-[11px] font-semibold text-[#007AFF] block mt-0.5">
-                        Ask: {topic.whoToAsk} • Timing: {topic.timeStr}
-                      </span>
-                    </div>
-
-                    <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleTopic(topic.id)}
-                        className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${
-                          isConfirmed ? 'bg-[#34C759] text-white' : 'border border-slate-300 bg-white'
-                        }`}
-                      >
-                        {isConfirmed && <Check className="w-3 h-3 stroke-[3]" />}
-                      </button>
-                      <span className={`text-[10px] font-semibold ${isConfirmed ? 'text-emerald-800' : 'text-[#8E8E93]'}`}>
-                        {isConfirmed ? 'Confirmed' : 'To Confirm'}
-                      </span>
-                    </label>
                   </div>
 
-                  {/* Who to ask & Details to get summary */}
-                  <div className="bg-[#F2F2F7] p-3 rounded-xl space-y-1.5 text-xs text-slate-700">
-                    <span className="font-bold text-[11px] text-slate-900 uppercase tracking-wider block">
-                      Key details to get:
-                    </span>
-                    <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-600">
-                      {topic.detailsToGet.map((d, i) => (
-                        <li key={i}>{d}</li>
+                  {/* App Title & Role */}
+                  <h3 className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight leading-snug line-clamp-1">
+                    {app.name}
+                  </h3>
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 line-clamp-2 mt-1 leading-snug">
+                    {app.role}
+                  </p>
+
+                  {/* Device Badges */}
+                  {app.devices && app.devices.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {app.devices.map((d) => (
+                        <span
+                          key={d}
+                          className="text-[9px] font-mono font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600"
+                        >
+                          {d === 'Samsung S20 FE' ? 'S20 FE (OTP)' : d}
+                        </span>
                       ))}
-                    </ul>
-                  </div>
-
-                  {/* Compact Chat Bubble Window */}
-                  {isEditing ? (
-                    <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-200 space-y-2 text-xs">
-                      <textarea
-                        rows={3}
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        className="w-full text-xs text-slate-900 p-2 rounded-lg bg-white border border-blue-200 focus:outline-none"
-                      />
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setEditingMsgId(null)}
-                          className="px-3 py-1 text-xs rounded-lg bg-white text-slate-600 border border-slate-200"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSaveEdit(topic.id)}
-                          className="px-4 py-1 text-xs rounded-lg bg-[#007AFF] text-white font-semibold"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-end pt-1">
-                      <div className="max-w-[95%] sm:max-w-[90%] bg-[#007AFF] text-white p-3 sm:p-3.5 rounded-2xl rounded-br-sm text-xs leading-relaxed shadow-2xs">
-                        {topic.body}
-                      </div>
-
-                      <div className="flex items-center gap-1.5 mt-2">
-                        <button
-                          type="button"
-                          onClick={() => handleStartEdit(topic.id, topic.body)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F2F2F7] text-slate-700 text-xs font-medium hover:bg-slate-200 transition-colors"
-                        >
-                          <Edit3 className="w-3 h-3 text-[#8E8E93]" />
-                          <span>Edit</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleCopyMessage(topic.id, topic.body)}
-                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                            isCopied
-                              ? 'bg-emerald-600 text-white'
-                              : 'bg-[#007AFF] hover:bg-blue-600 text-white shadow-2xs'
-                          }`}
-                        >
-                          {isCopied ? (
-                            <>
-                              <Check className="w-3 h-3 stroke-[3]" />
-                              <span>Copied!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3 h-3" />
-                              <span>Copy for WeChat</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
                     </div>
                   )}
                 </div>
-              );
-            })}
-          </div>
 
-          {/* Key Official Contacts Strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-            <div className="ios-card p-3.5 space-y-1.5">
-              <span className="font-bold text-xs text-slate-900 block">Ms. Sun (Admission)</span>
-              <p className="text-[11px] text-[#8E8E93]">Hotlines: 0898-66291354 / 0898-66213608</p>
-              <p className="text-[11px] text-[#007AFF] font-mono">WeChat: sun_admission</p>
-            </div>
+                {/* ACTIONABLE 3 SUB-TASK CHECKPOINTS INSIDE EVERY APP CARD */}
+                <div className="mt-3 pt-2.5 border-t border-black/5 space-y-1.5">
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                    Pre-Departure Checkpoints:
+                  </div>
 
-            <div className="ios-card p-3.5 space-y-1.5">
-              <span className="font-bold text-xs text-slate-900 block">Campus Student Volunteer</span>
-              <p className="text-[11px] text-[#8E8E93]">Meeting at Haidian South Gate</p>
-              <p className="text-[11px] text-[#34C759] font-medium">Assists with dorm key & campus card</p>
-            </div>
-          </div>
+                  {/* Checkpoint 1: Installed */}
+                  <button
+                    type="button"
+                    onClick={() => onToggleAppInstalled(app.id)}
+                    className={`w-full py-1 px-2 rounded-lg text-[10px] font-semibold flex items-center justify-between transition-all cursor-pointer ${
+                      isInstalled
+                        ? 'bg-blue-50 text-[#007AFF] font-bold'
+                        : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>1. Installed</span>
+                    <Check className={`w-3 h-3 stroke-[3] ${isInstalled ? 'text-[#007AFF]' : 'text-slate-300'}`} />
+                  </button>
+
+                  {/* Checkpoint 2: Account Logged In */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onToggleAppLoggedIn) {
+                        onToggleAppLoggedIn(app.id);
+                      } else {
+                        // Fallback toggling
+                        onToggleAppConfigured(app.id);
+                      }
+                    }}
+                    className={`w-full py-1 px-2 rounded-lg text-[10px] font-semibold flex items-center justify-between transition-all cursor-pointer ${
+                      isLoggedIn
+                        ? 'bg-amber-50 text-amber-800 font-bold'
+                        : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>2. Logged In</span>
+                    <Check className={`w-3 h-3 stroke-[3] ${isLoggedIn ? 'text-amber-700' : 'text-slate-300'}`} />
+                  </button>
+
+                  {/* Checkpoint 3: Verified Working */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onToggleAppVerified) {
+                        onToggleAppVerified(app.id);
+                      } else {
+                        onToggleAppConfigured(app.id);
+                      }
+                    }}
+                    className={`w-full py-1 px-2 rounded-lg text-[10px] font-semibold flex items-center justify-between transition-all cursor-pointer ${
+                      isVerified
+                        ? 'bg-emerald-50 text-emerald-800 font-bold'
+                        : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>3. Verified ✓</span>
+                    <Check className={`w-3 h-3 stroke-[3] ${isVerified ? 'text-emerald-700' : 'text-slate-300'}`} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      )}
+      </div>
 
-      {/* Add App Modal */}
-      {showAddAppModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <form
-            onSubmit={handleAddAppSubmit}
-            className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-3.5 border border-black/10 text-xs"
-          >
-            <div className="flex items-center justify-between border-b border-black/5 pb-2">
-              <h3 className="font-bold text-sm text-slate-900">Add Application</h3>
+      {/* ADD APP MODAL */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm">Add New Application</h3>
               <button
                 type="button"
-                onClick={() => setShowAddAppModal(false)}
-                className="text-slate-400 hover:text-slate-600"
+                onClick={() => setShowAddModal(false)}
+                className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center cursor-pointer"
               >
-                ✕
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
-                App Name
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Pleco, Notion, WeChat"
-                value={newAppName}
-                onChange={(e) => setNewAppName(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-black/10 rounded-xl bg-[#F2F2F7]"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="space-y-3 text-xs">
               <div>
-                <DynamicSelect
-                  value={newAppPlatform}
-                  options={allAppDevices}
-                  onChange={(val) => setNewAppPlatform(val as any)}
-                  onAddCustom={onAddCustomAppDevice}
-                  addCustomLabel="+ Add Custom Device..."
-                  label="Device"
-                  selectClassName="py-1.5 text-xs bg-[#F2F2F7]"
+                <label className="block text-slate-600 font-medium mb-1">App Name</label>
+                <input
+                  type="text"
+                  value={newAppName}
+                  onChange={(e) => setNewAppName(e.target.value)}
+                  placeholder="e.g. Notion, WeChat, Baidu..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-[#007AFF]"
                 />
               </div>
 
               <div>
+                <label className="block text-slate-600 font-medium mb-1">Category</label>
                 <DynamicSelect
                   value={newAppCategory}
-                  options={allAppCategories}
-                  onChange={(val) => setNewAppCategory(val as any)}
-                  onAddCustom={onAddCustomAppCategory}
-                  addCustomLabel="+ Add Custom Category..."
-                  label="Category"
-                  selectClassName="py-1.5 text-xs bg-[#F2F2F7]"
+                  options={allCategories}
+                  onChange={(cat) => setNewAppCategory(cat as any)}
+                  onAddCustom={(cat) => {
+                    onAddCustomAppCategory?.(cat);
+                    setNewAppCategory(cat as any);
+                  }}
+                  customPlaceholder="+ Add Category..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 font-medium mb-1">Role / Function</label>
+                <textarea
+                  rows={2}
+                  value={newAppRole}
+                  onChange={(e) => setNewAppRole(e.target.value)}
+                  placeholder="e.g. Campus messaging, VPN backup..."
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-[#007AFF]"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
-                Role & Setup Instructions
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. Literature translation, offline map"
-                value={newAppRole}
-                onChange={(e) => setNewAppRole(e.target.value)}
-                className="w-full px-3 py-2 text-xs border border-black/10 rounded-xl bg-[#F2F2F7]"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-black/5">
+            <div className="pt-2 flex gap-2">
               <button
                 type="button"
-                onClick={() => setShowAddAppModal(false)}
-                className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-medium"
+                onClick={() => setShowAddModal(false)}
+                className="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
-                type="submit"
-                className="px-4 py-1.5 rounded-lg bg-[#007AFF] text-white font-semibold shadow-xs"
+                type="button"
+                onClick={handleSaveApp}
+                disabled={!newAppName.trim()}
+                className="flex-1 py-2 rounded-xl bg-[#007AFF] hover:bg-blue-600 disabled:opacity-50 text-white font-semibold text-xs transition-colors cursor-pointer"
               >
-                Save App
+                Add App
               </button>
             </div>
-          </form>
+          </div>
         </div>
       )}
     </div>

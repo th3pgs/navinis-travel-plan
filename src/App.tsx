@@ -37,8 +37,9 @@ import {
 } from './cloudSync';
 
 import { AuthGate } from './components/AuthGate';
-import { StudentProfileCard } from './components/StudentProfileCard';
-import { FlightItineraryCard } from './components/FlightItineraryCard';
+import { TopDockedProfileAirline } from './components/TopDockedProfileAirline';
+import { HardwareShowcaseWidgets } from './components/HardwareShowcaseWidgets';
+import { UniversityBuddyCard } from './components/UniversityBuddyCard';
 import { PhysicalHub } from './components/PhysicalHub';
 import { DocumentationHub } from './components/DocumentationHub';
 import { CommunicationHub } from './components/CommunicationHub';
@@ -46,6 +47,7 @@ import { TimelineOverview } from './components/TimelineOverview';
 import { AppleSidebar } from './components/AppleSidebar';
 import { TaxiCardModal } from './components/TaxiCardModal';
 import { OfflineBackupModal } from './components/OfflineBackupModal';
+import { LuggageContentsModal } from './components/LuggageContentsModal';
 
 export function App() {
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
@@ -65,8 +67,9 @@ export function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showTaxiModal, setShowTaxiModal] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
+  const [selectedInspectBag, setSelectedInspectBag] = useState<BagAsset | null>(null);
 
-  // Live Supabase Status (Requirement #1)
+  // Live Supabase Status
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false);
 
   // Synchronize hash with currentView
@@ -95,7 +98,7 @@ export function App() {
     expiryDate: string;
     photoUrl?: string;
   }>(() => {
-    const saved = localStorage.getItem('navini_passport_profile_v5');
+    const saved = localStorage.getItem('navini_passport_profile_v6');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -109,7 +112,7 @@ export function App() {
   });
 
   const [bags, setBags] = useState<BagAsset[]>(() => {
-    const saved = localStorage.getItem('navini_bags_v5');
+    const saved = localStorage.getItem('navini_bags_v6');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -120,7 +123,7 @@ export function App() {
   });
 
   const [devices, setDevices] = useState<DeviceAsset[]>(() => {
-    const saved = localStorage.getItem('navini_devices_v5');
+    const saved = localStorage.getItem('navini_devices_v6');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -131,7 +134,7 @@ export function App() {
   });
 
   const [wardrobe, setWardrobe] = useState<WardrobeItem[]>(() => {
-    const saved = localStorage.getItem('navini_wardrobe_v5');
+    const saved = localStorage.getItem('navini_wardrobe_v6');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -142,7 +145,7 @@ export function App() {
   });
 
   const [documents, setDocuments] = useState<DocumentItem[]>(() => {
-    const saved = localStorage.getItem('navini_docs_v5');
+    const saved = localStorage.getItem('navini_docs_v6');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -152,41 +155,8 @@ export function App() {
     return INITIAL_DOCUMENTS;
   });
 
-  const [procedureSteps, setProcedureSteps] = useState<ProcedureStep[]>(() => {
-    const saved = localStorage.getItem('navini_procedure_steps_v5');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {}
-    }
-    return INITIAL_PROCEDURE_STEPS;
-  });
-
-  const [bankingTasks, setBankingTasks] = useState<BankingTaskItem[]>(() => {
-    const saved = localStorage.getItem('navini_banking_tasks_v5');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {}
-    }
-    return INITIAL_BANKING_TASKS;
-  });
-
-  const [gifts, setGifts] = useState<GiftItem[]>(() => {
-    const saved = localStorage.getItem('navini_gifts_v5');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {}
-    }
-    return INITIAL_GIFTS;
-  });
-
   const [apps, setApps] = useState<AppConfigItem[]>(() => {
-    const saved = localStorage.getItem('navini_apps_v5');
+    const saved = localStorage.getItem('navini_apps_v6');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -197,7 +167,7 @@ export function App() {
   });
 
   const [milestones, setMilestones] = useState<TimelineMilestone[]>(() => {
-    const saved = localStorage.getItem('navini_milestones_v5');
+    const saved = localStorage.getItem('navini_milestones_v6');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -207,6 +177,9 @@ export function App() {
     return INITIAL_MILESTONES;
   });
 
+  const [procedureSteps, setProcedureSteps] = useState<ProcedureStep[]>(INITIAL_PROCEDURE_STEPS);
+  const [bankingTasks, setBankingTasks] = useState<BankingTaskItem[]>(INITIAL_BANKING_TASKS);
+  const [gifts, setGifts] = useState<GiftItem[]>(INITIAL_GIFTS);
   const [confirmedCampusChat, setConfirmedCampusChat] = useState<boolean>(() => {
     return localStorage.getItem('navini_campus_chat_confirmed') === 'true';
   });
@@ -214,7 +187,7 @@ export function App() {
   // Dynamic Custom Dropdown Options State
   const [customCategories, setCustomCategories] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('navini_custom_categories_v5');
+      const saved = localStorage.getItem('navini_custom_categories_v6');
       if (saved) return JSON.parse(saved);
     } catch {}
     return [];
@@ -222,23 +195,16 @@ export function App() {
 
   const [customLocations, setCustomLocations] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('navini_custom_locations_v5');
+      const saved = localStorage.getItem('navini_custom_locations_v6');
       if (saved) return JSON.parse(saved);
     } catch {}
     return [];
   });
 
-  const [customBanks, setCustomBanks] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('navini_custom_banks_v5');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [];
-  });
-
+  const [customBanks, setCustomBanks] = useState<string[]>([]);
   const [customAppCategories, setCustomAppCategories] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('navini_custom_app_categories_v5');
+      const saved = localStorage.getItem('navini_custom_app_categories_v6');
       if (saved) return JSON.parse(saved);
     } catch {}
     return [];
@@ -246,7 +212,7 @@ export function App() {
 
   const [customAppDevices, setCustomAppDevices] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('navini_custom_app_devices_v5');
+      const saved = localStorage.getItem('navini_custom_app_devices_v6');
       if (saved) return JSON.parse(saved);
     } catch {}
     return [];
@@ -267,14 +233,10 @@ export function App() {
         if (remote.devices?.length) setDevices(remote.devices);
         if (remote.wardrobe?.length) setWardrobe(remote.wardrobe);
         if (remote.documents?.length) setDocuments(remote.documents);
-        if (remote.procedureSteps?.length) setProcedureSteps(remote.procedureSteps);
-        if (remote.bankingTasks?.length) setBankingTasks(remote.bankingTasks);
-        if (remote.gifts?.length) setGifts(remote.gifts);
         if (remote.apps?.length) setApps(remote.apps);
         if (remote.milestones?.length) setMilestones(remote.milestones);
         if (remote.customCategories?.length) setCustomCategories(remote.customCategories);
         if (remote.customLocations?.length) setCustomLocations(remote.customLocations);
-        if (remote.customBanks?.length) setCustomBanks(remote.customBanks);
         if (remote.customAppCategories?.length) setCustomAppCategories(remote.customAppCategories);
         if (remote.customAppDevices?.length) setCustomAppDevices(remote.customAppDevices);
         if (typeof remote.confirmedCampusChat === 'boolean') {
@@ -294,14 +256,10 @@ export function App() {
       if (incoming.devices?.length) setDevices(incoming.devices);
       if (incoming.wardrobe?.length) setWardrobe(incoming.wardrobe);
       if (incoming.documents?.length) setDocuments(incoming.documents);
-      if (incoming.procedureSteps?.length) setProcedureSteps(incoming.procedureSteps);
-      if (incoming.bankingTasks?.length) setBankingTasks(incoming.bankingTasks);
-      if (incoming.gifts?.length) setGifts(incoming.gifts);
       if (incoming.apps?.length) setApps(incoming.apps);
       if (incoming.milestones?.length) setMilestones(incoming.milestones);
       if (incoming.customCategories?.length) setCustomCategories(incoming.customCategories);
       if (incoming.customLocations?.length) setCustomLocations(incoming.customLocations);
-      if (incoming.customBanks?.length) setCustomBanks(incoming.customBanks);
       if (incoming.customAppCategories?.length) setCustomAppCategories(incoming.customAppCategories);
       if (incoming.customAppDevices?.length) setCustomAppDevices(incoming.customAppDevices);
       if (typeof incoming.confirmedCampusChat === 'boolean') {
@@ -324,39 +282,47 @@ export function App() {
 
   // Sync state to local storage & push to Supabase
   const syncAllState = (overrides?: Partial<AppMasterState>) => {
-    const bTasks = overrides?.bankingTasks || bankingTasks;
-    const gItems = overrides?.gifts || gifts;
     const cCats = overrides?.customCategories || customCategories;
     const cLocs = overrides?.customLocations || customLocations;
-    const cBanks = overrides?.customBanks || customBanks;
     const cAppCats = overrides?.customAppCategories || customAppCategories;
     const cAppDevs = overrides?.customAppDevices || customAppDevices;
+    const wItems = overrides?.wardrobe || wardrobe;
+    const bAssets = overrides?.bags || bags;
+    const dAssets = overrides?.devices || devices;
+    const docItems = overrides?.documents || documents;
+    const appItems = overrides?.apps || apps;
+    const mStones = overrides?.milestones || milestones;
+    const pInfo = overrides?.passportInfo || passportInfo;
 
-    localStorage.setItem('navini_banking_tasks_v5', JSON.stringify(bTasks));
-    localStorage.setItem('navini_gifts_v5', JSON.stringify(gItems));
-    localStorage.setItem('navini_custom_categories_v5', JSON.stringify(cCats));
-    localStorage.setItem('navini_custom_locations_v5', JSON.stringify(cLocs));
-    localStorage.setItem('navini_custom_banks_v5', JSON.stringify(cBanks));
-    localStorage.setItem('navini_custom_app_categories_v5', JSON.stringify(cAppCats));
-    localStorage.setItem('navini_custom_app_devices_v5', JSON.stringify(cAppDevs));
+    localStorage.setItem('navini_passport_profile_v6', JSON.stringify(pInfo));
+    localStorage.setItem('navini_bags_v6', JSON.stringify(bAssets));
+    localStorage.setItem('navini_devices_v6', JSON.stringify(dAssets));
+    localStorage.setItem('navini_wardrobe_v6', JSON.stringify(wItems));
+    localStorage.setItem('navini_docs_v6', JSON.stringify(docItems));
+    localStorage.setItem('navini_apps_v6', JSON.stringify(appItems));
+    localStorage.setItem('navini_milestones_v6', JSON.stringify(mStones));
+    localStorage.setItem('navini_custom_categories_v6', JSON.stringify(cCats));
+    localStorage.setItem('navini_custom_locations_v6', JSON.stringify(cLocs));
+    localStorage.setItem('navini_custom_app_categories_v6', JSON.stringify(cAppCats));
+    localStorage.setItem('navini_custom_app_devices_v6', JSON.stringify(cAppDevs));
 
     const masterState: AppMasterState = {
-      version: '5.2',
+      version: '6.0',
       lastUpdated: new Date().toISOString(),
-      passportInfo: overrides?.passportInfo || passportInfo,
-      bags: overrides?.bags || bags,
-      devices: overrides?.devices || devices,
-      wardrobe: overrides?.wardrobe || wardrobe,
-      documents: overrides?.documents || documents,
-      procedureSteps: overrides?.procedureSteps || procedureSteps,
-      bankingTasks: bTasks,
-      gifts: gItems,
-      apps: overrides?.apps || apps,
-      milestones: overrides?.milestones || milestones,
+      passportInfo: pInfo,
+      bags: bAssets,
+      devices: dAssets,
+      wardrobe: wItems,
+      documents: docItems,
+      procedureSteps,
+      bankingTasks,
+      gifts,
+      apps: appItems,
+      milestones: mStones,
       confirmedCampusChat: overrides?.confirmedCampusChat ?? confirmedCampusChat,
       customCategories: cCats,
       customLocations: cLocs,
-      customBanks: cBanks,
+      customBanks,
       customAppCategories: cAppCats,
       customAppDevices: cAppDevs,
     };
@@ -382,7 +348,6 @@ export function App() {
       setCustomLocations(updatedLocations);
     }
 
-    // Auto-create location card in bags if not already present
     const exists = bags.some(
       (b) => b.name.toLowerCase() === trimmed.toLowerCase() || b.id === trimmed
     );
@@ -404,14 +369,6 @@ export function App() {
       setBags(updatedBags);
     }
     syncAllState({ bags: updatedBags, customLocations: updatedLocations });
-  };
-
-  const handleAddCustomBank = (bank: string) => {
-    const trimmed = bank.trim();
-    if (!trimmed || customBanks.includes(trimmed)) return;
-    const updated = [...customBanks, trimmed];
-    setCustomBanks(updated);
-    syncAllState({ customBanks: updated });
   };
 
   const handleAddCustomAppCategory = (cat: string) => {
@@ -530,7 +487,7 @@ export function App() {
     syncAllState({ wardrobe: updated });
   };
 
-  // Handlers for Documentation
+  // Handlers for Official Documents
   const toggleDocReady = (id: string) => {
     const updated = documents.map((d) => (d.id === id ? { ...d, isReady: !d.isReady } : d));
     setDocuments(updated);
@@ -545,7 +502,7 @@ export function App() {
 
   const handleAddDoc = (doc: Omit<DocumentItem, 'id'>) => {
     const newDoc: DocumentItem = { ...doc, id: 'doc-custom-' + Date.now() };
-    const updated = [newDoc, ...documents];
+    const updated = [...documents, newDoc];
     setDocuments(updated);
     syncAllState({ documents: updated });
   };
@@ -562,92 +519,39 @@ export function App() {
     syncAllState({ documents: updated });
   };
 
-  const toggleStepDone = (id: string) => {
-    const updated = procedureSteps.map((s) => (s.id === id ? { ...s, isDone: !s.isDone } : s));
-    setProcedureSteps(updated);
-    syncAllState({ procedureSteps: updated });
-  };
-
-  const handleAddStep = (step: Omit<ProcedureStep, 'id' | 'isDone'>) => {
-    const newStep: ProcedureStep = { ...step, id: 'step-custom-' + Date.now(), isDone: false };
-    const updated = [...procedureSteps, newStep];
-    setProcedureSteps(updated);
-    syncAllState({ procedureSteps: updated });
-  };
-
-  const handleUpdateStep = (id: string, partial: Partial<ProcedureStep>) => {
-    const updated = procedureSteps.map((s) => (s.id === id ? { ...s, ...partial } : s));
-    setProcedureSteps(updated);
-    syncAllState({ procedureSteps: updated });
-  };
-
-  const handleDeleteStep = (id: string) => {
-    const updated = procedureSteps.filter((s) => s.id !== id);
-    setProcedureSteps(updated);
-    syncAllState({ procedureSteps: updated });
-  };
-
-  // Handlers for Banking Tasks
-  const toggleBankingTask = (id: string) => {
-    const updated = bankingTasks.map((t) => (t.id === id ? { ...t, isDone: !t.isDone } : t));
-    setBankingTasks(updated);
-    syncAllState({ bankingTasks: updated });
-  };
-
-  const handleAddBankingTask = (task: Omit<BankingTaskItem, 'id'>) => {
-    const newT: BankingTaskItem = { ...task, id: 'bank-' + Date.now() };
-    const updated = [...bankingTasks, newT];
-    setBankingTasks(updated);
-    syncAllState({ bankingTasks: updated });
-  };
-
-  const handleUpdateBankingTask = (id: string, partial: Partial<BankingTaskItem>) => {
-    const updated = bankingTasks.map((t) => (t.id === id ? { ...t, ...partial } : t));
-    setBankingTasks(updated);
-    syncAllState({ bankingTasks: updated });
-  };
-
-  const handleDeleteBankingTask = (id: string) => {
-    const updated = bankingTasks.filter((t) => t.id !== id);
-    setBankingTasks(updated);
-    syncAllState({ bankingTasks: updated });
-  };
-
-  // Handlers for Gifts & Souvenirs
-  const toggleGiftPacked = (id: string) => {
-    const updated = gifts.map((g) => (g.id === id ? { ...g, isPacked: !g.isPacked } : g));
-    setGifts(updated);
-    syncAllState({ gifts: updated });
-  };
-
-  const handleAddGift = (gift: Omit<GiftItem, 'id'>) => {
-    const newG: GiftItem = { ...gift, id: 'gift-' + Date.now() };
-    const updated = [...gifts, newG];
-    setGifts(updated);
-    syncAllState({ gifts: updated });
-  };
-
-  const handleUpdateGift = (id: string, partial: Partial<GiftItem>) => {
-    const updated = gifts.map((g) => (g.id === id ? { ...g, ...partial } : g));
-    setGifts(updated);
-    syncAllState({ gifts: updated });
-  };
-
-  const handleDeleteGift = (id: string) => {
-    const updated = gifts.filter((g) => g.id !== id);
-    setGifts(updated);
-    syncAllState({ gifts: updated });
-  };
-
-  // Handlers for Apps
+  // Handlers for Apps & 3 Checkpoints
   const toggleAppInstalled = (id: string) => {
     const updated = apps.map((a) => (a.id === id ? { ...a, isInstalled: !a.isInstalled } : a));
     setApps(updated);
     syncAllState({ apps: updated });
   };
 
+  const toggleAppLoggedIn = (id: string) => {
+    const updated = apps.map((a) => (a.id === id ? { ...a, isLoggedIn: !a.isLoggedIn } : a));
+    setApps(updated);
+    syncAllState({ apps: updated });
+  };
+
+  const toggleAppVerified = (id: string) => {
+    const updated = apps.map((a) => {
+      if (a.id === id) {
+        const next = !a.isVerified;
+        return { ...a, isVerified: next, isConfigured: next };
+      }
+      return a;
+    });
+    setApps(updated);
+    syncAllState({ apps: updated });
+  };
+
   const toggleAppConfigured = (id: string) => {
-    const updated = apps.map((a) => (a.id === id ? { ...a, isConfigured: !a.isConfigured } : a));
+    const updated = apps.map((a) => {
+      if (a.id === id) {
+        const next = !a.isConfigured;
+        return { ...a, isConfigured: next, isVerified: next };
+      }
+      return a;
+    });
     setApps(updated);
     syncAllState({ apps: updated });
   };
@@ -672,19 +576,11 @@ export function App() {
     syncAllState({ milestones: updated });
   };
 
-  // Toggle master campus chat confirmed
-  const toggleCampusChatMaster = () => {
-    const next = !confirmedCampusChat;
-    setConfirmedCampusChat(next);
-    localStorage.setItem('navini_campus_chat_confirmed', String(next));
-    syncAllState({ confirmedCampusChat: next });
-  };
-
   if (!isUnlocked) {
     return <AuthGate onUnlock={() => setIsUnlocked(true)} />;
   }
 
-  // Inventory stats - Standard 0-100% Math (Requirement #4)
+  // Inventory stats
   const totalPhysicalItems = bags.length + devices.length + wardrobe.length;
   const totalPackedItems =
     bags.filter((b) => b.isPacked).length +
@@ -697,26 +593,23 @@ export function App() {
     devices.filter((d) => !d.isBought).length +
     wardrobe.filter((w) => !w.isBought).length;
 
-  const packedDocs = documents.filter((d) => d.isPacked).length;
-  const docPercent = Math.round((packedDocs / (documents.length || 1)) * 100);
-  const doneSteps = procedureSteps.filter((s) => s.isDone).length;
-  const doneBankingTasks = bankingTasks.filter((t) => t.isDone).length;
+  const inHandDocs = documents.filter((d) => d.isReady || d.isPacked).length;
+  const docPercent = Math.round((inHandDocs / (documents.length || 1)) * 100);
 
-  const configuredApps = apps.filter((a) => a.isConfigured).length;
-  const appPercent = Math.round((configuredApps / (apps.length || 1)) * 100);
+  const verifiedApps = apps.filter((a) => a.isVerified || a.isConfigured).length;
+  const appPercent = Math.round((verifiedApps / (apps.length || 1)) * 100);
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] text-slate-900 pb-20 font-sans overflow-x-hidden">
-      {/* 1. TOP HEADER (Chinese Flag Branding & Live Supabase Rippling Indicator, Requirement #1) */}
+      {/* 1. TOP HEADER (China Flag PNG Branding & Live Supabase Rippling Indicator) */}
       <header className="bg-white/90 backdrop-blur-md border-b border-black/10 sticky top-0 z-40 w-full transition-all">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between gap-3">
-          {/* Logo & Brand with China Flag PNG (Requirement #1) */}
+          {/* Logo & Brand with China Flag PNG */}
           <button
             type="button"
             onClick={() => navigateToView('overview')}
             className="flex items-center gap-2.5 text-left group cursor-pointer"
           >
-            {/* Crisp China Flag PNG without red wrapper or emoji */}
             <img
               src="https://flagcdn.com/w80/cn.png"
               alt="China Flag"
@@ -731,7 +624,7 @@ export function App() {
                   Navini's Travel Plan
                 </span>
 
-                {/* Live Supabase Rippling Green Indicator (Requirement #1) */}
+                {/* Live Supabase Rippling Green Indicator */}
                 {isSupabaseConnected && (
                   <span
                     className="ripple-green-dot shrink-0"
@@ -773,28 +666,30 @@ export function App() {
         {/* OVERVIEW VIEW */}
         {currentView === 'overview' && (
           <div className="space-y-5 animate-in fade-in duration-200">
-            {/* SECTION 1: MODERN SCHOLAR PROFILE CARD */}
-            <section>
-              <StudentProfileCard
-                passportInfo={passportInfo}
-                onUpdatePassportInfo={handleUpdatePassportInfo}
-                isCloudSynced={isSupabaseConnected}
-              />
-            </section>
+            {/* SECTION 1: TOP DOCKED PROFILE & AIRLINE ACCORDION (Requirement #1) */}
+            <TopDockedProfileAirline
+              passportInfo={passportInfo}
+              onUpdatePassportInfo={handleUpdatePassportInfo}
+              isCloudSynced={isSupabaseConnected}
+            />
 
-            {/* SECTION 2: TRIP.COM FLIGHT CARD (Collapsible Accordion, Requirement #3) */}
-            <section>
-              <FlightItineraryCard />
-            </section>
+            {/* SECTION 2: 10 HARDWARE & LUGGAGE SHOWCASE WIDGETS (Requirement #2) */}
+            <HardwareShowcaseWidgets
+              bags={bags}
+              devices={devices}
+              onToggleBagBought={toggleBagBought}
+              onToggleDeviceBought={toggleDeviceBought}
+              onInspectBag={(bag) => setSelectedInspectBag(bag)}
+            />
 
-            {/* SECTION 3: THREE MAIN INTERACTIVE PORTALS (Requirement #4) */}
+            {/* SECTION 3: THREE MAIN INTERACTIVE PORTALS */}
             <section className="space-y-2">
               <span className="text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider px-1 block">
                 Main Interactive Portals
               </span>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                {/* Portal 1: Physical Gear & Wardrobe */}
+                {/* Portal 1: Wardrobe & Packing Studio */}
                 <button
                   type="button"
                   onClick={() => navigateToView('physical')}
@@ -814,10 +709,10 @@ export function App() {
                     </div>
 
                     <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#007AFF] transition-colors">
-                      Luggage & Wardrobe
+                      Wardrobe & Packing Studio
                     </h3>
                     <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
-                      4 bags allocation, visual wardrobe emoji grid, and electronics.
+                      9-category physical packing, photo orientation controls, and 🖨️ PDF catalog.
                     </p>
                   </div>
 
@@ -837,7 +732,7 @@ export function App() {
                   </div>
                 </button>
 
-                {/* Portal 2: Documents & Banking (Requirement #2) */}
+                {/* Portal 2: Document Checker */}
                 <button
                   type="button"
                   onClick={() => navigateToView('documents')}
@@ -857,24 +752,24 @@ export function App() {
                     </div>
 
                     <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#F59E0B] transition-colors">
-                      Documents & Banking
+                      Document Checker
                     </h3>
                     <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
-                      Original credentials, Friday morning bank run (BOC, PB, NSB), and campus arrival action cards.
+                      Binary verification checklist confirming credentials exist & are in hand.
                     </p>
                   </div>
 
                   <div className="mt-3.5 pt-2.5 border-t border-black/5 flex items-center justify-between text-xs">
                     <span className="font-semibold text-slate-700">
-                      {packedDocs}/{documents.length} Docs Packed
+                      {inHandDocs}/{documents.length} In Hand
                     </span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
-                      {doneBankingTasks}/{bankingTasks.length} Bank Tasks
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900">
+                      Ready for Border
                     </span>
                   </div>
                 </button>
 
-                {/* Portal 3: Internet, Apps & Buddy Chat */}
+                {/* Portal 3: Internet & Applications */}
                 <button
                   type="button"
                   onClick={() => navigateToView('connectivity')}
@@ -894,26 +789,29 @@ export function App() {
                     </div>
 
                     <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-[#10B981] transition-colors">
-                      Internet, Apps & Chat
+                      Internet & Applications
                     </h3>
                     <p className="text-xs text-[#8E8E93] mt-0.5 line-clamp-2">
-                      Bypass proxies, stock academic AI apps, and pre-written WeChat templates.
+                      3-Tier architecture, Hiddify setup, and square verification matrix.
                     </p>
                   </div>
 
                   <div className="mt-3.5 pt-2.5 border-t border-black/5 flex items-center justify-between text-xs">
                     <span className="font-semibold text-slate-700">
-                      {configuredApps}/{apps.length} Apps Ready
+                      {verifiedApps}/{apps.length} Verified
                     </span>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${confirmedCampusChat ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
-                      {confirmedCampusChat ? 'Chat Confirmed ✓' : 'WeChat Ready'}
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      CMLink 5G + Hiddify
                     </span>
                   </div>
                 </button>
               </div>
             </section>
 
-            {/* SECTION 4: SCHEDULE & TRAVEL STEPS (Collapsible by Default, Requirement #4) */}
+            {/* SECTION 4: SEPARATE BUBBLE: CONTACTING UNIVERSITY & WECHAT SUGGESTIONS (Requirement #7) */}
+            <UniversityBuddyCard />
+
+            {/* SECTION 5: SCHEDULE & TRAVEL STEPS */}
             <section>
               <TimelineOverview
                 milestones={milestones}
@@ -924,14 +822,13 @@ export function App() {
           </div>
         )}
 
-        {/* SUB-HUB 1: PHYSICAL GEAR, WARDROBE & GIFTS (FULL VIEW) */}
+        {/* SUB-HUB 1: WARDROBE & PACKING STUDIO (FULL VIEW) */}
         {currentView === 'physical' && (
           <PhysicalHub
             onBack={() => navigateToView('overview')}
             wardrobe={wardrobe}
             bags={bags}
             devices={devices}
-            gifts={gifts}
             documents={documents}
             customLocations={customLocations}
             customCategories={customCategories}
@@ -952,10 +849,6 @@ export function App() {
             onAddDevice={handleAddDevice}
             onUpdateDevice={handleUpdateDevice}
             onDeleteDevice={handleDeleteDevice}
-            onToggleGiftPacked={toggleGiftPacked}
-            onAddGift={handleAddGift}
-            onUpdateGift={handleUpdateGift}
-            onDeleteGift={handleDeleteGift}
             onToggleDocPacked={toggleDocPacked}
             onAddDoc={handleAddDoc}
             onUpdateDoc={handleUpdateDoc}
@@ -963,34 +856,22 @@ export function App() {
           />
         )}
 
-        {/* SUB-HUB 2: DOCUMENTS & BANKING (FULL VIEW) */}
+        {/* SUB-HUB 2: DOCUMENT CHECKER (FULL VIEW) */}
         {currentView === 'documents' && (
           <DocumentationHub
             onBack={() => navigateToView('overview')}
             documents={documents}
-            procedureSteps={procedureSteps}
-            bankingTasks={bankingTasks}
             customLocations={customLocations}
-            customBanks={customBanks}
             onAddCustomLocation={handleAddCustomLocation}
-            onAddCustomBank={handleAddCustomBank}
             onToggleDocReady={toggleDocReady}
             onToggleDocPacked={toggleDocPacked}
             onAddDoc={handleAddDoc}
             onUpdateDoc={handleUpdateDoc}
             onDeleteDoc={handleDeleteDoc}
-            onToggleStepDone={toggleStepDone}
-            onAddStep={handleAddStep}
-            onUpdateStep={handleUpdateStep}
-            onDeleteStep={handleDeleteStep}
-            onToggleBankingTask={toggleBankingTask}
-            onAddBankingTask={handleAddBankingTask}
-            onUpdateBankingTask={handleUpdateBankingTask}
-            onDeleteBankingTask={handleDeleteBankingTask}
           />
         )}
 
-        {/* SUB-HUB 3: CONNECTIVITY, APPS & CHAT (FULL VIEW) */}
+        {/* SUB-HUB 3: CONNECTIVITY & APPLICATIONS MATRIX (FULL VIEW) */}
         {currentView === 'connectivity' && (
           <CommunicationHub
             onBack={() => navigateToView('overview')}
@@ -1000,12 +881,13 @@ export function App() {
             onAddCustomAppCategory={handleAddCustomAppCategory}
             onAddCustomAppDevice={handleAddCustomAppDevice}
             onToggleAppInstalled={toggleAppInstalled}
+            onToggleAppLoggedIn={toggleAppLoggedIn}
+            onToggleAppVerified={toggleAppVerified}
             onToggleAppConfigured={toggleAppConfigured}
             onAddApp={handleAddApp}
             onDeleteApp={handleDeleteApp}
             onOpenTaxiModal={() => setShowTaxiModal(true)}
             confirmedCampusChat={confirmedCampusChat}
-            onToggleCampusChatMaster={toggleCampusChatMaster}
           />
         )}
       </main>
@@ -1039,16 +921,28 @@ export function App() {
       <OfflineBackupModal
         isOpen={showBackupModal}
         onClose={() => setShowBackupModal(false)}
-        checklistItems={procedureSteps.map((p) => ({
-          id: p.id,
-          category: p.stage,
-          label: p.title,
-          detail: p.detail,
-          tag: p.carryBag,
-          isChecked: p.isDone,
+        checklistItems={documents.map((d) => ({
+          id: d.id,
+          category: 'Documents',
+          label: d.title,
+          detail: d.notes,
+          tag: d.carryLocation,
+          isChecked: d.isReady || d.isPacked,
         }))}
         wardrobeItems={wardrobe}
         onImportJson={() => {}}
+      />
+
+      {/* LUGGAGE CONTENTS MODAL (TRIGGERED FROM SHOWCASE WIDGETS) */}
+      <LuggageContentsModal
+        isOpen={selectedInspectBag !== null}
+        onClose={() => setSelectedInspectBag(null)}
+        bag={selectedInspectBag}
+        wardrobeItems={wardrobe}
+        deviceItems={devices}
+        documentItems={documents}
+        giftItems={[]}
+        onToggleWardrobePacked={toggleWardrobePacked}
       />
     </div>
   );

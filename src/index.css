@@ -97,3 +97,25 @@
 .animate-shake {
   animation: shake 0.35s ease-in-out;
 }
+
+/* Dedicated Print Styles for Visual Packing Catalog & Taxi Card */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .no-print,
+  header,
+  footer,
+  .ios-back-button {
+    display: none !important;
+  }
+
+  .break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

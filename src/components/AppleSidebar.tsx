@@ -115,13 +115,13 @@ export const AppleSidebar: React.FC<AppleSidebarProps> = ({
               }}
               className={`w-full p-3 rounded-2xl flex items-center justify-between text-xs font-bold transition-all ${
                 currentView === 'physical'
-                  ? 'bg-[#003580] text-white shadow-xs'
+                  ? 'bg-[#007AFF] text-white shadow-xs'
                   : 'text-slate-700 hover:bg-slate-100'
               }`}
             >
               <div className="flex items-center gap-3">
-                <Luggage className="w-4 h-4 text-[#003580]" />
-                <span>Luggage, Clothes & Tech</span>
+                <Luggage className="w-4 h-4 text-[#007AFF]" />
+                <span>Wardrobe & Packing Studio</span>
               </div>
               <ChevronRight className="w-4 h-4 opacity-60" />
             </button>
@@ -134,13 +134,13 @@ export const AppleSidebar: React.FC<AppleSidebarProps> = ({
               }}
               className={`w-full p-3 rounded-2xl flex items-center justify-between text-xs font-bold transition-all ${
                 currentView === 'documents'
-                  ? 'bg-[#003580] text-white shadow-xs'
+                  ? 'bg-[#007AFF] text-white shadow-xs'
                   : 'text-slate-700 hover:bg-slate-100'
               }`}
             >
               <div className="flex items-center gap-3">
                 <FileText className="w-4 h-4 text-amber-600" />
-                <span>Documents & Banking</span>
+                <span>Document Checker</span>
               </div>
               <ChevronRight className="w-4 h-4 opacity-60" />
             </button>
@@ -153,13 +153,13 @@ export const AppleSidebar: React.FC<AppleSidebarProps> = ({
               }}
               className={`w-full p-3 rounded-2xl flex items-center justify-between text-xs font-bold transition-all ${
                 currentView === 'connectivity'
-                  ? 'bg-[#003580] text-white shadow-xs'
+                  ? 'bg-[#007AFF] text-white shadow-xs'
                   : 'text-slate-700 hover:bg-slate-100'
               }`}
             >
               <div className="flex items-center gap-3">
                 <Globe2 className="w-4 h-4 text-emerald-600" />
-                <span>Internet, Apps & Chat</span>
+                <span>Internet & Applications</span>
               </div>
               <ChevronRight className="w-4 h-4 opacity-60" />
             </button>
