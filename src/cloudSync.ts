@@ -22,6 +22,11 @@ export interface AppMasterState {
   buddyMessages?: any[];
   confirmedCampusChat?: boolean;
   confirmedChatTopics?: Record<string, boolean>;
+  customCategories?: string[];
+  customLocations?: string[];
+  customBanks?: string[];
+  customAppCategories?: string[];
+  customAppDevices?: string[];
 }
 
 let syncDebounceTimer: any = null;
@@ -186,6 +191,21 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
     localStorage.setItem('navini_procedure_steps_v5', JSON.stringify(state.procedureSteps));
     localStorage.setItem('navini_apps_v5', JSON.stringify(state.apps));
     localStorage.setItem('navini_milestones_v5', JSON.stringify(state.milestones));
+    if (state.customCategories) {
+      localStorage.setItem('navini_custom_categories_v5', JSON.stringify(state.customCategories));
+    }
+    if (state.customLocations) {
+      localStorage.setItem('navini_custom_locations_v5', JSON.stringify(state.customLocations));
+    }
+    if (state.customBanks) {
+      localStorage.setItem('navini_custom_banks_v5', JSON.stringify(state.customBanks));
+    }
+    if (state.customAppCategories) {
+      localStorage.setItem('navini_custom_app_categories_v5', JSON.stringify(state.customAppCategories));
+    }
+    if (state.customAppDevices) {
+      localStorage.setItem('navini_custom_app_devices_v5', JSON.stringify(state.customAppDevices));
+    }
   } catch (e) {
     console.warn('Local storage write warning', e);
   }

@@ -211,6 +211,47 @@ export function App() {
     return localStorage.getItem('navini_campus_chat_confirmed') === 'true';
   });
 
+  // Dynamic Custom Dropdown Options State
+  const [customCategories, setCustomCategories] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('navini_custom_categories_v5');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  const [customLocations, setCustomLocations] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('navini_custom_locations_v5');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  const [customBanks, setCustomBanks] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('navini_custom_banks_v5');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  const [customAppCategories, setCustomAppCategories] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('navini_custom_app_categories_v5');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  const [customAppDevices, setCustomAppDevices] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('navini_custom_app_devices_v5');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
   // Live Supabase Lifecycle: Fetch initial + Realtime Subscribe + Periodic Ping
   useEffect(() => {
     let isMounted = true;
@@ -231,6 +272,11 @@ export function App() {
         if (remote.gifts?.length) setGifts(remote.gifts);
         if (remote.apps?.length) setApps(remote.apps);
         if (remote.milestones?.length) setMilestones(remote.milestones);
+        if (remote.customCategories?.length) setCustomCategories(remote.customCategories);
+        if (remote.customLocations?.length) setCustomLocations(remote.customLocations);
+        if (remote.customBanks?.length) setCustomBanks(remote.customBanks);
+        if (remote.customAppCategories?.length) setCustomAppCategories(remote.customAppCategories);
+        if (remote.customAppDevices?.length) setCustomAppDevices(remote.customAppDevices);
         if (typeof remote.confirmedCampusChat === 'boolean') {
           setConfirmedCampusChat(remote.confirmedCampusChat);
         }
@@ -253,6 +299,11 @@ export function App() {
       if (incoming.gifts?.length) setGifts(incoming.gifts);
       if (incoming.apps?.length) setApps(incoming.apps);
       if (incoming.milestones?.length) setMilestones(incoming.milestones);
+      if (incoming.customCategories?.length) setCustomCategories(incoming.customCategories);
+      if (incoming.customLocations?.length) setCustomLocations(incoming.customLocations);
+      if (incoming.customBanks?.length) setCustomBanks(incoming.customBanks);
+      if (incoming.customAppCategories?.length) setCustomAppCategories(incoming.customAppCategories);
+      if (incoming.customAppDevices?.length) setCustomAppDevices(incoming.customAppDevices);
       if (typeof incoming.confirmedCampusChat === 'boolean') {
         setConfirmedCampusChat(incoming.confirmedCampusChat);
       }
@@ -275,8 +326,19 @@ export function App() {
   const syncAllState = (overrides?: Partial<AppMasterState>) => {
     const bTasks = overrides?.bankingTasks || bankingTasks;
     const gItems = overrides?.gifts || gifts;
+    const cCats = overrides?.customCategories || customCategories;
+    const cLocs = overrides?.customLocations || customLocations;
+    const cBanks = overrides?.customBanks || customBanks;
+    const cAppCats = overrides?.customAppCategories || customAppCategories;
+    const cAppDevs = overrides?.customAppDevices || customAppDevices;
+
     localStorage.setItem('navini_banking_tasks_v5', JSON.stringify(bTasks));
     localStorage.setItem('navini_gifts_v5', JSON.stringify(gItems));
+    localStorage.setItem('navini_custom_categories_v5', JSON.stringify(cCats));
+    localStorage.setItem('navini_custom_locations_v5', JSON.stringify(cLocs));
+    localStorage.setItem('navini_custom_banks_v5', JSON.stringify(cBanks));
+    localStorage.setItem('navini_custom_app_categories_v5', JSON.stringify(cAppCats));
+    localStorage.setItem('navini_custom_app_devices_v5', JSON.stringify(cAppDevs));
 
     const masterState: AppMasterState = {
       version: '5.2',
@@ -292,9 +354,80 @@ export function App() {
       apps: overrides?.apps || apps,
       milestones: overrides?.milestones || milestones,
       confirmedCampusChat: overrides?.confirmedCampusChat ?? confirmedCampusChat,
+      customCategories: cCats,
+      customLocations: cLocs,
+      customBanks: cBanks,
+      customAppCategories: cAppCats,
+      customAppDevices: cAppDevs,
     };
 
     pushCloudState(masterState);
+  };
+
+  // Dynamic classification handlers
+  const handleAddCustomCategory = (cat: string) => {
+    const trimmed = cat.trim();
+    if (!trimmed || customCategories.includes(trimmed)) return;
+    const updated = [...customCategories, trimmed];
+    setCustomCategories(updated);
+    syncAllState({ customCategories: updated });
+  };
+
+  const handleAddCustomLocation = (loc: string) => {
+    const trimmed = loc.trim();
+    if (!trimmed) return;
+    let updatedLocations = customLocations;
+    if (!customLocations.includes(trimmed)) {
+      updatedLocations = [...customLocations, trimmed];
+      setCustomLocations(updatedLocations);
+    }
+
+    // Auto-create location card in bags if not already present
+    const exists = bags.some(
+      (b) => b.name.toLowerCase() === trimmed.toLowerCase() || b.id === trimmed
+    );
+    let updatedBags = bags;
+    if (!exists) {
+      const newBag: BagAsset = {
+        id: `bag-custom-${Date.now()}`,
+        name: trimmed,
+        type: 'Custom Storage Container',
+        dimensions: 'Flexible Container',
+        weightLimit: 'Personal Carry',
+        targetBag: trimmed,
+        recommendedContents: 'User designated packing parcel / container',
+        isBought: true,
+        isPacked: false,
+        kind: 'custom',
+      };
+      updatedBags = [...bags, newBag];
+      setBags(updatedBags);
+    }
+    syncAllState({ bags: updatedBags, customLocations: updatedLocations });
+  };
+
+  const handleAddCustomBank = (bank: string) => {
+    const trimmed = bank.trim();
+    if (!trimmed || customBanks.includes(trimmed)) return;
+    const updated = [...customBanks, trimmed];
+    setCustomBanks(updated);
+    syncAllState({ customBanks: updated });
+  };
+
+  const handleAddCustomAppCategory = (cat: string) => {
+    const trimmed = cat.trim();
+    if (!trimmed || customAppCategories.includes(trimmed)) return;
+    const updated = [...customAppCategories, trimmed];
+    setCustomAppCategories(updated);
+    syncAllState({ customAppCategories: updated });
+  };
+
+  const handleAddCustomAppDevice = (dev: string) => {
+    const trimmed = dev.trim();
+    if (!trimmed || customAppDevices.includes(trimmed)) return;
+    const updated = [...customAppDevices, trimmed];
+    setCustomAppDevices(updated);
+    syncAllState({ customAppDevices: updated });
   };
 
   // Profile Update Handler (Synced to database)
@@ -316,6 +449,25 @@ export function App() {
     syncAllState({ bags: updated });
   };
 
+  const handleAddBag = (bag: Omit<BagAsset, 'id'>) => {
+    const newBag: BagAsset = { ...bag, id: `bag-custom-${Date.now()}` };
+    const updated = [...bags, newBag];
+    setBags(updated);
+    syncAllState({ bags: updated });
+  };
+
+  const handleUpdateBag = (id: string, partial: Partial<BagAsset>) => {
+    const updated = bags.map((b) => (b.id === id ? { ...b, ...partial } : b));
+    setBags(updated);
+    syncAllState({ bags: updated });
+  };
+
+  const handleDeleteBag = (id: string) => {
+    const updated = bags.filter((b) => b.id !== id);
+    setBags(updated);
+    syncAllState({ bags: updated });
+  };
+
   const toggleDeviceBought = (id: string) => {
     const updated = devices.map((d) => (d.id === id ? { ...d, isBought: !d.isBought } : d));
     setDevices(updated);
@@ -324,6 +476,25 @@ export function App() {
 
   const toggleDevicePacked = (id: string) => {
     const updated = devices.map((d) => (d.id === id ? { ...d, isPacked: !d.isPacked } : d));
+    setDevices(updated);
+    syncAllState({ devices: updated });
+  };
+
+  const handleAddDevice = (device: Omit<DeviceAsset, 'id'>) => {
+    const newDev: DeviceAsset = { ...device, id: `dev-custom-${Date.now()}` };
+    const updated = [...devices, newDev];
+    setDevices(updated);
+    syncAllState({ devices: updated });
+  };
+
+  const handleUpdateDevice = (id: string, partial: Partial<DeviceAsset>) => {
+    const updated = devices.map((d) => (d.id === id ? { ...d, ...partial } : d));
+    setDevices(updated);
+    syncAllState({ devices: updated });
+  };
+
+  const handleDeleteDevice = (id: string) => {
+    const updated = devices.filter((d) => d.id !== id);
     setDevices(updated);
     syncAllState({ devices: updated });
   };
@@ -761,6 +932,11 @@ export function App() {
             bags={bags}
             devices={devices}
             gifts={gifts}
+            documents={documents}
+            customLocations={customLocations}
+            customCategories={customCategories}
+            onAddCustomLocation={handleAddCustomLocation}
+            onAddCustomCategory={handleAddCustomCategory}
             onToggleWardrobeBought={toggleWardrobeBought}
             onToggleWardrobePacked={toggleWardrobePacked}
             onAddWardrobeItem={handleAddWardrobeItem}
@@ -768,12 +944,22 @@ export function App() {
             onDeleteWardrobeItem={handleDeleteWardrobeItem}
             onToggleBagBought={toggleBagBought}
             onToggleBagPacked={toggleBagPacked}
+            onAddBag={handleAddBag}
+            onUpdateBag={handleUpdateBag}
+            onDeleteBag={handleDeleteBag}
             onToggleDeviceBought={toggleDeviceBought}
             onToggleDevicePacked={toggleDevicePacked}
+            onAddDevice={handleAddDevice}
+            onUpdateDevice={handleUpdateDevice}
+            onDeleteDevice={handleDeleteDevice}
             onToggleGiftPacked={toggleGiftPacked}
             onAddGift={handleAddGift}
             onUpdateGift={handleUpdateGift}
             onDeleteGift={handleDeleteGift}
+            onToggleDocPacked={toggleDocPacked}
+            onAddDoc={handleAddDoc}
+            onUpdateDoc={handleUpdateDoc}
+            onDeleteDoc={handleDeleteDoc}
           />
         )}
 
@@ -784,6 +970,10 @@ export function App() {
             documents={documents}
             procedureSteps={procedureSteps}
             bankingTasks={bankingTasks}
+            customLocations={customLocations}
+            customBanks={customBanks}
+            onAddCustomLocation={handleAddCustomLocation}
+            onAddCustomBank={handleAddCustomBank}
             onToggleDocReady={toggleDocReady}
             onToggleDocPacked={toggleDocPacked}
             onAddDoc={handleAddDoc}
@@ -805,6 +995,10 @@ export function App() {
           <CommunicationHub
             onBack={() => navigateToView('overview')}
             apps={apps}
+            customAppCategories={customAppCategories}
+            customAppDevices={customAppDevices}
+            onAddCustomAppCategory={handleAddCustomAppCategory}
+            onAddCustomAppDevice={handleAddCustomAppDevice}
             onToggleAppInstalled={toggleAppInstalled}
             onToggleAppConfigured={toggleAppConfigured}
             onAddApp={handleAddApp}

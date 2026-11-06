@@ -1,5 +1,15 @@
 import React, { useState } from 'react';
-import { WardrobeItem, BagAsset, DeviceAsset, GiftItem, INITIAL_GIFTS } from '../data';
+import {
+  WardrobeItem,
+  BagAsset,
+  DeviceAsset,
+  GiftItem,
+  DocumentItem,
+  INITIAL_GIFTS,
+  DEFAULT_WARDROBE_CATEGORIES,
+  DEFAULT_BAG_LOCATIONS,
+  isItemInBag,
+} from '../data';
 import {
   ChevronLeft,
   Plus,
@@ -20,6 +30,8 @@ import {
   Package,
 } from 'lucide-react';
 import { uploadPhotoToSupabase } from '../cloudSync';
+import { DynamicSelect } from './DynamicSelect';
+import { LuggageContentsModal } from './LuggageContentsModal';
 
 interface PhysicalHubProps {
   onBack: () => void;
@@ -27,6 +39,11 @@ interface PhysicalHubProps {
   bags: BagAsset[];
   devices: DeviceAsset[];
   gifts?: GiftItem[];
+  documents?: DocumentItem[];
+  customLocations?: string[];
+  customCategories?: string[];
+  onAddCustomLocation?: (name: string) => void;
+  onAddCustomCategory?: (cat: string) => void;
   onToggleWardrobeBought: (id: string) => void;
   onToggleWardrobePacked: (id: string) => void;
   onAddWardrobeItem: (item: Omit<WardrobeItem, 'id'>) => void;
@@ -34,16 +51,26 @@ interface PhysicalHubProps {
   onDeleteWardrobeItem: (id: string) => void;
   onToggleBagBought: (id: string) => void;
   onToggleBagPacked?: (id: string) => void;
+  onAddBag?: (bag: Omit<BagAsset, 'id'>) => void;
+  onUpdateBag?: (id: string, updated: Partial<BagAsset>) => void;
+  onDeleteBag?: (id: string) => void;
   onToggleDeviceBought: (id: string) => void;
   onToggleDevicePacked?: (id: string) => void;
+  onAddDevice?: (device: Omit<DeviceAsset, 'id'>) => void;
+  onUpdateDevice?: (id: string, updated: Partial<DeviceAsset>) => void;
+  onDeleteDevice?: (id: string) => void;
   onToggleGiftPacked?: (id: string) => void;
   onAddGift?: (gift: Omit<GiftItem, 'id'>) => void;
   onUpdateGift?: (id: string, updated: Partial<GiftItem>) => void;
   onDeleteGift?: (id: string) => void;
+  onToggleDocPacked?: (id: string) => void;
+  onAddDoc?: (doc: Omit<DocumentItem, 'id'>) => void;
+  onUpdateDoc?: (id: string, updated: Partial<DocumentItem>) => void;
+  onDeleteDoc?: (id: string) => void;
 }
 
 // Reusable Bag Icon Graphic for Overview & Sub-Views
-export function renderBagIcon(kind: BagAsset['kind'], sizeClass = 'w-10 h-14') {
+export function renderBagIcon(kind: BagAsset['kind'] | string, sizeClass = 'w-10 h-14', title?: string) {
   if (kind === 'rolling-large') {
     return (
       <div className={`${sizeClass} rounded-lg border-2 border-slate-700 bg-slate-100 flex flex-col items-center justify-between p-1 shadow-2xs shrink-0`}>
@@ -86,20 +113,40 @@ export function renderBagIcon(kind: BagAsset['kind'], sizeClass = 'w-10 h-14') {
       </div>
     );
   }
-  // Crossbody / Fanny Pack - Clean recognizable crossbody sling / waist bag with diagonal strap & buckle
+  if (kind === 'fannypack') {
+    return (
+      <div className="w-12 h-10 flex items-center justify-center shrink-0">
+        <svg viewBox="0 0 48 32" className="w-11 h-7" fill="none">
+          {/* Adjustable Crossbody Strap with Buckle */}
+          <path d="M4 11 C10 3, 38 3, 44 11" stroke="#475569" strokeWidth="2.5" strokeLinecap="round" />
+          <rect x="22" y="3" width="4" height="4" rx="1" fill="#94A3B8" />
+          {/* Curved Sling Pouch Body */}
+          <path d="M8 12 C8 8, 40 8, 40 12 L38 24 C38 27, 10 27, 10 24 Z" fill="#E11D48" stroke="#9F1239" strokeWidth="1.5" />
+          {/* Front Zipper line and slider */}
+          <path d="M12 16 L36 16" stroke="#FFFFFF" strokeWidth="1.2" strokeLinecap="round" strokeDasharray="1 1" />
+          <circle cx="24" cy="16" r="1.5" fill="#FFE4E6" />
+          <path d="M14 20 L34 20" stroke="#BE123C" strokeWidth="1" strokeLinecap="round" />
+        </svg>
+      </div>
+    );
+  }
+  // Mutual Common Luggage / Container SVG Icon for custom locations
+  const displayLabel = title ? title.trim().substring(0, 10) : 'Parcel';
   return (
-    <div className="w-12 h-10 flex items-center justify-center shrink-0">
-      <svg viewBox="0 0 48 32" className="w-11 h-7" fill="none">
-        {/* Adjustable Crossbody Strap with Buckle */}
-        <path d="M4 11 C10 3, 38 3, 44 11" stroke="#475569" strokeWidth="2.5" strokeLinecap="round" />
-        <rect x="22" y="3" width="4" height="4" rx="1" fill="#94A3B8" />
-        {/* Curved Sling Pouch Body */}
-        <path d="M8 12 C8 8, 40 8, 40 12 L38 24 C38 27, 10 27, 10 24 Z" fill="#E11D48" stroke="#9F1239" strokeWidth="1.5" />
-        {/* Front Zipper line and slider */}
-        <path d="M12 16 L36 16" stroke="#FFFFFF" strokeWidth="1.2" strokeLinecap="round" strokeDasharray="1 1" />
-        <circle cx="24" cy="16" r="1.5" fill="#FFE4E6" />
-        <path d="M14 20 L34 20" stroke="#BE123C" strokeWidth="1" strokeLinecap="round" />
-      </svg>
+    <div className={`${sizeClass} rounded-lg border-2 border-indigo-700 bg-gradient-to-b from-indigo-50 to-indigo-100/90 flex flex-col items-center justify-between p-1 shadow-2xs shrink-0 relative overflow-hidden`}>
+      <div className="w-4 h-1.5 border border-indigo-600 rounded-t-xs -mt-0.5 bg-indigo-200" />
+      <div className="w-full flex-1 flex flex-col items-center justify-center relative my-0.5">
+        <svg viewBox="0 0 24 24" className="w-5 h-5 text-indigo-700" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+          <path d="m3.3 7 8.7 5 8.7-5" stroke="#4F46E5" strokeWidth="1.5" />
+          <path d="M12 22V12" stroke="#4F46E5" strokeWidth="1.5" />
+        </svg>
+      </div>
+      <div className="w-full bg-indigo-700 text-white rounded-xs py-0.2 px-0.5 text-center truncate">
+        <span className="text-[6.5px] font-bold uppercase tracking-tight block truncate">
+          {displayLabel}
+        </span>
+      </div>
     </div>
   );
 }
@@ -221,24 +268,51 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   bags,
   devices,
   gifts: propsGifts,
+  documents = [],
+  customLocations = [],
+  customCategories = [],
+  onAddCustomLocation,
+  onAddCustomCategory,
+  onToggleWardrobeBought,
   onToggleWardrobePacked,
   onAddWardrobeItem,
   onUpdateWardrobeItem,
   onDeleteWardrobeItem,
   onToggleBagBought,
   onToggleBagPacked,
+  onAddBag,
+  onUpdateBag,
+  onDeleteBag,
   onToggleDeviceBought,
   onToggleDevicePacked,
+  onAddDevice,
+  onUpdateDevice,
+  onDeleteDevice,
   onToggleGiftPacked: propsToggleGift,
   onAddGift: propsAddGift,
   onUpdateGift: propsUpdateGift,
   onDeleteGift: propsDeleteGift,
+  onToggleDocPacked,
+  onAddDoc,
+  onUpdateDoc,
+  onDeleteDoc,
 }) => {
   // Navigation: 'overview' (widgets + 4 portals) | 'wardrobe' | 'luggage' | 'electronics' | 'gifts'
   const [currentSubView, setCurrentSubView] = useState<'overview' | 'wardrobe' | 'luggage' | 'electronics' | 'gifts'>('overview');
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [isSectionEditMode, setIsSectionEditMode] = useState(false);
   const [uploadingItemId, setUploadingItemId] = useState<string | null>(null);
+
+  // Luggage inspection drawer / modal state
+  const [inspectedBag, setInspectedBag] = useState<BagAsset | null>(null);
+  const [isLuggageModalOpen, setIsLuggageModalOpen] = useState(false);
+
+  // Add Custom Location / Bag Modal
+  const [showAddBagModal, setShowAddBagModal] = useState(false);
+  const [newBagName, setNewBagName] = useState('');
+  const [newBagDimensions, setNewBagDimensions] = useState('Flexible Size');
+  const [newBagWeight, setNewBagWeight] = useState('Personal Carry');
+  const [newBagNotes, setNewBagNotes] = useState('');
 
   // Local state fallback for gifts
   const [localGifts, setLocalGifts] = useState<GiftItem[]>(() => {
@@ -253,6 +327,27 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   });
 
   const activeGifts = propsGifts || localGifts;
+
+  // Unified dynamic options
+  const allLocations = React.useMemo(() => {
+    const base = bags.map((b) => b.name);
+    return Array.from(new Set([...DEFAULT_BAG_LOCATIONS, ...base, ...customLocations]));
+  }, [bags, customLocations]);
+
+  const allCategories = React.useMemo(() => {
+    const inWardrobe = wardrobe.map((w) => w.category);
+    return Array.from(new Set([...DEFAULT_WARDROBE_CATEGORIES, ...customCategories, ...inWardrobe]));
+  }, [wardrobe, customCategories]);
+
+  const filterCategories = ['All', ...allCategories];
+
+  const handleAddCustomLocationInternal = (loc: string) => {
+    if (onAddCustomLocation) onAddCustomLocation(loc);
+  };
+
+  const handleAddCustomCategoryInternal = (cat: string) => {
+    if (onAddCustomCategory) onAddCustomCategory(cat);
+  };
 
   const handleToggleGift = (id: string) => {
     if (propsToggleGift) {
@@ -299,22 +394,22 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   const [showAddGift, setShowAddGift] = useState(false);
   const [newGiftName, setNewGiftName] = useState('');
   const [newGiftQuantity, setNewGiftQuantity] = useState(1);
-  const [newGiftTargetBag, setNewGiftTargetBag] = useState<GiftItem['targetBag']>('Main Large Suitcase (30×40×70cm)');
+  const [newGiftTargetBag, setNewGiftTargetBag] = useState<string>('Main Large Suitcase (30×40×70cm)');
   const [newGiftRecipient, setNewGiftRecipient] = useState('');
   const [newGiftNote, setNewGiftNote] = useState('');
 
   const [editingGiftId, setEditingGiftId] = useState<string | null>(null);
   const [editGiftName, setEditGiftName] = useState('');
   const [editGiftQuantity, setEditGiftQuantity] = useState(1);
-  const [editGiftTargetBag, setEditGiftTargetBag] = useState<GiftItem['targetBag']>('Main Large Suitcase (30×40×70cm)');
+  const [editGiftTargetBag, setEditGiftTargetBag] = useState<string>('Main Large Suitcase (30×40×70cm)');
   const [editGiftRecipient, setEditGiftRecipient] = useState('');
   const [editGiftNote, setEditGiftNote] = useState('');
 
   // New Wardrobe item form
   const [showAddForm, setShowAddForm] = useState(false);
   const [name, setName] = useState('');
-  const [category, setCategory] = useState<WardrobeItem['category']>('Dresses');
-  const [targetBag, setTargetBag] = useState<WardrobeItem['targetBag']>('Main Large Suitcase (30×40×70cm)');
+  const [category, setCategory] = useState<string>('Dresses');
+  const [targetBag, setTargetBag] = useState<string>('Main Large Suitcase (30×40×70cm)');
   const [quantity, setQuantity] = useState(1);
   const [newPhotoUrl, setNewPhotoUrl] = useState<string>('');
   const [isNewPhotoUploading, setIsNewPhotoUploading] = useState(false);
@@ -322,11 +417,9 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   // Edit item form
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
-  const [editCategory, setEditCategory] = useState<WardrobeItem['category']>('Dresses');
-  const [editTargetBag, setEditTargetBag] = useState<WardrobeItem['targetBag']>('Main Large Suitcase (30×40×70cm)');
+  const [editCategory, setEditCategory] = useState<string>('Dresses');
+  const [editTargetBag, setEditTargetBag] = useState<string>('Main Large Suitcase (30×40×70cm)');
   const [editQuantity, setEditQuantity] = useState(1);
-
-  const categories = ['All', 'Dresses', 'Tops', 'Bottoms', 'Outerwear', 'Footwear', 'Essentials', 'Gifts & Packaging'];
 
   // Live completion metrics
   const wardrobePacked = wardrobe.filter((w) => w.isPacked).length;
@@ -340,6 +433,30 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
 
   const giftsPacked = activeGifts.filter((g) => g.isPacked).length;
   const giftsPercent = Math.round((giftsPacked / (activeGifts.length || 1)) * 100);
+
+  // Handle proactive creation of custom bag
+  const handleAddBagSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBagName.trim()) return;
+    const trimmed = newBagName.trim();
+    if (onAddBag) {
+      onAddBag({
+        name: trimmed,
+        type: 'Custom Storage Container',
+        dimensions: newBagDimensions.trim() || 'Flexible Container',
+        weightLimit: newBagWeight.trim() || 'Personal Carry',
+        targetBag: trimmed,
+        recommendedContents: newBagNotes.trim() || 'Allocated packing essentials.',
+        isBought: true,
+        isPacked: false,
+        kind: 'custom',
+      });
+    }
+    handleAddCustomLocationInternal(trimmed);
+    setNewBagName('');
+    setNewBagNotes('');
+    setShowAddBagModal(false);
+  };
 
   // Camera capture / photo upload for specific item
   const handleItemPhotoUpload = async (itemId: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -506,26 +623,32 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
               Connected Hardware & Scale Showcase
             </span>
 
-            {/* 4 Luggage Bags Scaled Carousel */}
+            {/* Luggage Bags Scaled Carousel - Click to Inspect */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {bags.map((b) => (
                 <div
                   key={b.id}
-                  onClick={() => setCurrentSubView('luggage')}
-                  className="ios-card p-3 flex flex-col justify-between hover:border-[#007AFF]/40 cursor-pointer transition-all active:scale-98"
+                  onClick={() => {
+                    setInspectedBag(b);
+                    setIsLuggageModalOpen(true);
+                  }}
+                  className="ios-card p-3 flex flex-col justify-between hover:border-[#007AFF]/50 cursor-pointer transition-all active:scale-98 group"
                 >
                   <div className="flex items-center justify-between text-[10px] text-[#8E8E93] mb-1">
                     <span className="font-mono font-bold text-slate-800">{b.dimensions}</span>
                     <span className={`w-2 h-2 rounded-full ${b.isPacked ? 'bg-[#34C759]' : 'bg-slate-300'}`} />
                   </div>
 
-                  <div className="py-2 flex items-center justify-center text-slate-700">
-                    {renderBagIcon(b.kind)}
+                  <div className="py-2 flex items-center justify-center text-slate-700 group-hover:scale-105 transition-transform">
+                    {renderBagIcon(b.kind, 'w-10 h-14', b.name)}
                   </div>
 
                   <div className="text-center pt-1 border-t border-black/5">
-                    <span className="text-xs font-bold text-slate-900 block truncate">{b.name}</span>
-                    <span className="text-[10px] text-[#8E8E93]">{b.isPacked ? 'Packed' : 'Pending'}</span>
+                    <span className="text-xs font-bold text-slate-900 block truncate group-hover:text-[#007AFF] transition-colors">{b.name}</span>
+                    <span className="text-[10px] text-[#007AFF] font-medium flex items-center justify-center gap-0.5 mt-0.5">
+                      <span>View Contents</span>
+                      <ChevronRight className="w-2.5 h-2.5" />
+                    </span>
                   </div>
                 </div>
               ))}
@@ -742,7 +865,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
 
           {/* iOS Segmented Category Switcher */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {categories.map((cat) => (
+            {filterCategories.map((cat) => (
               <button
                 key={cat}
                 type="button"
@@ -786,35 +909,27 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Category</label>
-                  <select
+                  <DynamicSelect
                     value={category}
-                    onChange={(e) => setCategory(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 focus:outline-[#007AFF]"
-                  >
-                    <option value="Dresses">Dresses</option>
-                    <option value="Tops">Tops</option>
-                    <option value="Bottoms">Bottoms</option>
-                    <option value="Outerwear">Outerwear</option>
-                    <option value="Footwear">Footwear</option>
-                    <option value="Essentials">Essentials</option>
-                    <option value="Gifts & Packaging">Gifts & Packaging</option>
-                  </select>
+                    options={allCategories}
+                    onChange={setCategory}
+                    onAddCustom={handleAddCustomCategoryInternal}
+                    addCustomLabel="+ Add Custom Category..."
+                    label="Category"
+                    selectClassName="py-2"
+                  />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Target Bag</label>
-                  <select
+                  <DynamicSelect
                     value={targetBag}
-                    onChange={(e) => setTargetBag(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 focus:outline-[#007AFF]"
-                  >
-                    <option value="Main Large Suitcase (30×40×70cm)">Main Large Suitcase (30×40×70cm)</option>
-                    <option value="Medium Suitcase (27×41×57cm)">Medium Suitcase (27×41×57cm)</option>
-                    <option value="Cabin Laptop Backpack">Cabin Laptop Backpack</option>
-                    <option value="Fanny Pack">Fanny Pack</option>
-                    <option value="Wear on Flight">Wear on Flight</option>
-                  </select>
+                    options={allLocations}
+                    onChange={setTargetBag}
+                    onAddCustom={handleAddCustomLocationInternal}
+                    addCustomLabel="+ Add Custom Location / Bag..."
+                    label="Target Bag / Location"
+                    selectClassName="py-2"
+                  />
                 </div>
 
                 <div>
@@ -859,108 +974,181 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
               const visual = getCategoryVisual(item.name, item.category);
               const isUploadingThis = uploadingItemId === item.id;
 
+              const isEditing = editingId === item.id;
+
               return (
                 <div
                   key={item.id}
                   className="ios-card p-3.5 flex flex-col justify-between hover:border-[#007AFF]/40 transition-all bg-white"
                 >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        {isSectionEditMode && (
-                          <button
-                            type="button"
-                            onClick={() => onDeleteWardrobeItem(item.id)}
-                            className="w-5 h-5 rounded-full bg-[#FF3B30] text-white flex items-center justify-center shrink-0 active:opacity-60 transition-opacity"
-                            title="Delete item"
-                          >
-                            <Minus className="w-3 h-3 stroke-[3]" />
-                          </button>
-                        )}
+                  {isEditing ? (
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Item Name</label>
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs border border-black/10 rounded-xl bg-white focus:outline-[#007AFF]"
+                          required
+                        />
+                      </div>
 
-                        {/* Thumbnail: Real Photo if uploaded, else visual emoji thumbnail */}
-                        <div className="relative group shrink-0">
-                          {item.photoUrl ? (
-                            <img
-                              src={item.photoUrl}
-                              alt={item.name}
-                              className="w-12 h-12 rounded-xl object-cover border border-black/10 shadow-2xs"
-                            />
-                          ) : (
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-2xs ${visual.bg}`}>
-                              {visual.emoji}
-                            </div>
-                          )}
-
-                          {/* Quick camera icon button overlay to snap/replace photo */}
-                          <label
-                            className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-slate-900/80 text-white flex items-center justify-center shadow-xs cursor-pointer hover:bg-[#007AFF] transition-colors"
-                            title="Snap / Upload real photo"
-                          >
-                            <Camera className="w-3 h-3" />
-                            <input
-                              type="file"
-                              accept="image/*"
-                              capture="environment"
-                              className="hidden"
-                              disabled={isUploadingThis}
-                              onChange={(e) => handleItemPhotoUpload(item.id, e)}
-                            />
-                          </label>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <DynamicSelect
+                            value={editCategory}
+                            options={allCategories}
+                            onChange={setEditCategory}
+                            onAddCustom={handleAddCustomCategoryInternal}
+                            addCustomLabel="+ Add Custom Category..."
+                            label="Category"
+                            selectClassName="py-1 text-xs"
+                          />
                         </div>
 
-                        <div className="min-w-0 flex-1">
-                          <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
-                            {item.name}
-                          </h4>
-                          <span className="text-[11px] text-[#8E8E93] block truncate">
-                            Qty: <strong className="text-slate-700">{item.quantity}</strong> • {item.category}
-                          </span>
+                        <div>
+                          <DynamicSelect
+                            value={editTargetBag}
+                            options={allLocations}
+                            onChange={setEditTargetBag}
+                            onAddCustom={handleAddCustomLocationInternal}
+                            addCustomLabel="+ Add Custom Location / Bag..."
+                            label="Target Bag"
+                            selectClassName="py-1 text-xs"
+                          />
                         </div>
                       </div>
 
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F2F2F7] text-slate-600 shrink-0">
-                        {item.targetBag.split(' ')[0]}
-                      </span>
+                      <div className="flex items-center justify-between pt-1">
+                        <div className="flex items-center gap-1.5 text-xs">
+                          <label className="text-[11px] font-semibold text-slate-700">Qty:</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={editQuantity}
+                            onChange={(e) => setEditQuantity(parseInt(e.target.value) || 1)}
+                            className="w-14 px-2 py-1 text-xs border border-black/10 rounded-lg text-center"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(null)}
+                            className="px-3 py-1 rounded-full text-xs text-[#8E8E93] hover:text-slate-700"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEdit(item.id)}
+                            className="px-3.5 py-1 rounded-full bg-[#007AFF] text-white text-xs font-semibold shadow-xs"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
                     </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {isSectionEditMode && (
+                            <button
+                              type="button"
+                              onClick={() => onDeleteWardrobeItem(item.id)}
+                              className="w-5 h-5 rounded-full bg-[#FF3B30] text-white flex items-center justify-center shrink-0 active:opacity-60 transition-opacity cursor-pointer"
+                              title="Delete item"
+                            >
+                              <Minus className="w-3 h-3 stroke-[3]" />
+                            </button>
+                          )}
 
-                    {item.notes && (
-                      <p className="text-[11px] text-slate-500 italic line-clamp-1">
-                        {item.notes}
-                      </p>
-                    )}
+                          {/* Thumbnail: Real Photo if uploaded, else visual emoji thumbnail */}
+                          <div className="relative group shrink-0">
+                            {item.photoUrl ? (
+                              <img
+                                src={item.photoUrl}
+                                alt={item.name}
+                                className="w-12 h-12 rounded-xl object-cover border border-black/10 shadow-2xs"
+                              />
+                            ) : (
+                              <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-2xs ${visual.bg}`}>
+                                {visual.emoji}
+                              </div>
+                            )}
 
-                    {/* Bottom Row: Checkbox & Edit Toggle */}
-                    <div className="pt-2 border-t border-black/5 flex items-center justify-between">
-                      {isSectionEditMode ? (
-                        <button
-                          type="button"
-                          onClick={() => handleStartEdit(item)}
-                          className="text-[#007AFF] text-xs font-semibold flex items-center gap-0.5"
-                        >
-                          <Edit3 className="w-3 h-3" />
-                          <span>Edit</span>
-                        </button>
-                      ) : (
-                        <span className={`text-[11px] font-semibold ${item.isPacked ? 'text-[#34C759]' : 'text-[#8E8E93]'}`}>
-                          {item.isPacked ? 'Packed' : 'Unpacked'}
+                            {/* Quick camera icon button overlay to snap/replace photo */}
+                            <label
+                              className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-slate-900/80 text-white flex items-center justify-center shadow-xs cursor-pointer hover:bg-[#007AFF] transition-colors"
+                              title="Snap / Upload real photo"
+                            >
+                              <Camera className="w-3 h-3" />
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                className="hidden"
+                                disabled={isUploadingThis}
+                                onChange={(e) => handleItemPhotoUpload(item.id, e)}
+                              />
+                            </label>
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
+                              {item.name}
+                            </h4>
+                            <span className="text-[11px] text-[#8E8E93] block truncate">
+                              Qty: <strong className="text-slate-700">{item.quantity}</strong> • {item.category}
+                            </span>
+                          </div>
+                        </div>
+
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F2F2F7] text-slate-600 shrink-0">
+                          {item.targetBag.split(' ')[0]}
                         </span>
+                      </div>
+
+                      {item.notes && (
+                        <p className="text-[11px] text-slate-500 italic line-clamp-1">
+                          {item.notes}
+                        </p>
                       )}
 
-                      {/* Single Circular iOS Checkmark Circle */}
-                      <button
-                        type="button"
-                        onClick={() => onToggleWardrobePacked(item.id)}
-                        className={`w-6 h-6 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                          item.isPacked
-                            ? 'bg-[#007AFF] text-white shadow-xs'
-                            : 'border-2 border-slate-300 hover:border-[#007AFF] bg-white'
-                        }`}
-                      >
-                        {item.isPacked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                      </button>
+                      {/* Bottom Row: Checkbox & Edit Toggle */}
+                      <div className="pt-2 border-t border-black/5 flex items-center justify-between">
+                        {isSectionEditMode ? (
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(item)}
+                            className="text-[#007AFF] text-xs font-semibold flex items-center gap-0.5 cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        ) : (
+                          <span className={`text-[11px] font-semibold ${item.isPacked ? 'text-[#34C759]' : 'text-[#8E8E93]'}`}>
+                            {item.isPacked ? 'Packed' : 'Unpacked'}
+                          </span>
+                        )}
+
+                        {/* Single Circular iOS Checkmark Circle */}
+                        <button
+                          type="button"
+                          onClick={() => onToggleWardrobePacked(item.id)}
+                          className={`w-6 h-6 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                            item.isPacked
+                              ? 'bg-[#007AFF] text-white shadow-xs'
+                              : 'border-2 border-slate-300 hover:border-[#007AFF] bg-white'
+                          }`}
+                        >
+                          {item.isPacked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
@@ -994,68 +1182,138 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                 style={{ width: `${bagsPercent}%` }}
               />
             </div>
+
+            <div className="flex items-center justify-between text-xs text-[#8E8E93] pt-1">
+              <span>Tap any bag to view and manage its packed contents</span>
+              <button
+                type="button"
+                onClick={() => setShowAddBagModal(true)}
+                className="text-[#007AFF] font-semibold flex items-center gap-1 active:opacity-60 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Custom Bag / Location</span>
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
-            {bags.map((b) => (
-              <div key={b.id} className="ios-card p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  {/* Reused custom bag icon on left (Requirement #4B) */}
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="p-1 rounded-xl bg-[#F2F2F7] border border-black/5 flex items-center justify-center shrink-0">
-                      {renderBagIcon(b.kind)}
+            {bags.map((b) => {
+              const inBagWardrobe = wardrobe.filter((w) => isItemInBag(w.targetBag, b));
+              const inBagGifts = activeGifts.filter((g) => isItemInBag(g.targetBag, b));
+              const inBagDevices = devices.filter((d) => isItemInBag(d.carryLocation, b));
+              const inBagDocs = documents.filter((doc) => isItemInBag(doc.carryLocation, b));
+
+              const inBagTotal = inBagWardrobe.length + inBagGifts.length + inBagDevices.length + inBagDocs.length;
+              const inBagPacked =
+                inBagWardrobe.filter((w) => w.isPacked).length +
+                inBagGifts.filter((g) => g.isPacked).length +
+                inBagDevices.filter((d) => d.isPacked).length +
+                inBagDocs.filter((doc) => doc.isPacked).length;
+
+              const isCustom = b.kind === 'custom' || !['rolling-large', 'rolling-medium', 'backpack', 'fannypack'].includes(b.kind);
+
+              return (
+                <div key={b.id} className="ios-card p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div
+                      onClick={() => {
+                        setInspectedBag(b);
+                        setIsLuggageModalOpen(true);
+                      }}
+                      className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer group"
+                    >
+                      {isSectionEditMode && isCustom && onDeleteBag && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteBag(b.id);
+                          }}
+                          className="w-5 h-5 rounded-full bg-[#FF3B30] text-white flex items-center justify-center shrink-0 active:opacity-60 transition-opacity cursor-pointer mr-1"
+                          title="Delete custom location"
+                        >
+                          <Minus className="w-3 h-3 stroke-[3]" />
+                        </button>
+                      )}
+
+                      <div className="p-1 rounded-xl bg-[#F2F2F7] border border-black/5 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        {renderBagIcon(b.kind, 'w-10 h-14', b.name)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="font-bold text-sm sm:text-base text-slate-900 truncate group-hover:text-[#007AFF] transition-colors">
+                            {b.name}
+                          </h3>
+                        </div>
+                        <p className="text-xs text-[#8E8E93] mt-0.5">
+                          {b.dimensions} • Limit: <strong className="text-slate-800">{b.weightLimit}</strong>
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-bold text-sm sm:text-base text-slate-900 truncate">{b.name}</h3>
-                      <p className="text-xs text-[#8E8E93] mt-0.5">
-                        {b.dimensions} • Limit: <strong className="text-slate-800">{b.weightLimit}</strong>
-                      </p>
-                    </div>
+
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${b.kind.includes('rolling') ? 'bg-blue-100 text-[#007AFF]' : 'bg-amber-100 text-amber-900'}`}>
+                      {b.kind.includes('rolling') ? 'Checked (23kg)' : isCustom ? 'Custom Parcel' : 'Cabin / Chest'}
+                    </span>
                   </div>
 
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${b.kind.includes('rolling') ? 'bg-blue-100 text-[#007AFF]' : 'bg-amber-100 text-amber-900'}`}>
-                    {b.kind.includes('rolling') ? 'Checked (23kg)' : 'Cabin / Chest'}
-                  </span>
-                </div>
+                  <div className="p-2.5 rounded-xl bg-[#F2F2F7] text-xs text-slate-700 leading-relaxed">
+                    <strong>Recommended Contents:</strong> {b.recommendedContents}
+                  </div>
 
-                <div className="p-2.5 rounded-xl bg-[#F2F2F7] text-xs text-slate-700 leading-relaxed">
-                  <strong>Recommended Contents:</strong> {b.recommendedContents}
-                </div>
+                  {/* Interactive Inspect Contents Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInspectedBag(b);
+                      setIsLuggageModalOpen(true);
+                    }}
+                    className="w-full py-2.5 px-3 rounded-xl bg-[#007AFF]/10 text-[#007AFF] font-semibold text-xs flex items-center justify-between hover:bg-[#007AFF]/20 active:scale-98 transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5" />
+                      <span>Inspect Bag Contents ({inBagTotal} Items)</span>
+                    </div>
+                    <div className="flex items-center gap-1 font-mono text-[11px] font-bold">
+                      <span>{inBagPacked}/{inBagTotal} Packed</span>
+                      <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </button>
 
-                {/* Dual Checkboxes for Luggage */}
-                <div className="pt-2 border-t border-black/5 flex items-center justify-between text-xs">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <button
-                      type="button"
-                      onClick={() => onToggleBagBought(b.id)}
-                      className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${
-                        b.isBought
-                          ? 'bg-[#34C759] text-white shadow-xs'
-                          : 'border-2 border-slate-300 bg-white'
-                      }`}
-                    >
-                      {b.isBought && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                    </button>
-                    <span className="text-slate-700 font-medium">Owned / Ready</span>
-                  </label>
+                  {/* Dual Checkboxes for Luggage */}
+                  <div className="pt-2 border-t border-black/5 flex items-center justify-between text-xs">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <button
+                        type="button"
+                        onClick={() => onToggleBagBought(b.id)}
+                        className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${
+                          b.isBought
+                            ? 'bg-[#34C759] text-white shadow-xs'
+                            : 'border-2 border-slate-300 bg-white'
+                        }`}
+                      >
+                        {b.isBought && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                      </button>
+                      <span className="text-slate-700 font-medium">Owned / Ready</span>
+                    </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <button
-                      type="button"
-                      onClick={() => onToggleBagPacked && onToggleBagPacked(b.id)}
-                      className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${
-                        b.isPacked
-                          ? 'bg-[#007AFF] text-white shadow-xs'
-                          : 'border-2 border-slate-300 bg-white'
-                      }`}
-                    >
-                      {b.isPacked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                    </button>
-                    <span className="text-slate-700 font-medium">Fully Packed</span>
-                  </label>
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <button
+                        type="button"
+                        onClick={() => onToggleBagPacked && onToggleBagPacked(b.id)}
+                        className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${
+                          b.isPacked
+                            ? 'bg-[#007AFF] text-white shadow-xs'
+                            : 'border-2 border-slate-300 bg-white'
+                        }`}
+                      >
+                        {b.isPacked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                      </button>
+                      <span className="text-slate-700 font-medium">Fully Packed</span>
+                    </label>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -1231,17 +1489,15 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Target Bag</label>
-                  <select
+                  <DynamicSelect
                     value={newGiftTargetBag}
-                    onChange={(e) => setNewGiftTargetBag(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 focus:outline-[#007AFF]"
-                  >
-                    <option value="Main Large Suitcase (30×40×70cm)">Main Large Suitcase (30×40×70cm)</option>
-                    <option value="Medium Suitcase (27×41×57cm)">Medium Suitcase (27×41×57cm)</option>
-                    <option value="Cabin Laptop Backpack">Cabin Laptop Backpack</option>
-                    <option value="Fanny Pack">Fanny Pack</option>
-                  </select>
+                    options={allLocations}
+                    onChange={setNewGiftTargetBag}
+                    onAddCustom={handleAddCustomLocationInternal}
+                    addCustomLabel="+ Add Custom Location / Bag..."
+                    label="Target Bag"
+                    selectClassName="py-2"
+                  />
                 </div>
 
                 <div>
@@ -1293,6 +1549,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                           value={editGiftName}
                           onChange={(e) => setEditGiftName(e.target.value)}
                           className="px-2.5 py-1.5 rounded-lg border border-black/10"
+                          placeholder="Gift Name"
                         />
                         <input
                           type="text"
@@ -1302,12 +1559,39 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                           className="px-2.5 py-1.5 rounded-lg border border-black/10"
                         />
                       </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <DynamicSelect
+                            value={editGiftTargetBag}
+                            options={allLocations}
+                            onChange={setEditGiftTargetBag}
+                            onAddCustom={handleAddCustomLocationInternal}
+                            addCustomLabel="+ Add Custom Bag..."
+                            label="Target Bag"
+                            selectClassName="py-1 text-xs"
+                          />
+                        </div>
+                        <div className="flex items-center gap-1.5 pt-4">
+                          <label className="text-[11px] font-semibold text-slate-700">Qty:</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={editGiftQuantity}
+                            onChange={(e) => setEditGiftQuantity(parseInt(e.target.value) || 1)}
+                            className="w-16 px-2 py-1 text-xs border border-black/10 rounded-lg text-center"
+                          />
+                        </div>
+                      </div>
+
                       <textarea
                         value={editGiftNote}
                         onChange={(e) => setEditGiftNote(e.target.value)}
                         className="w-full px-2.5 py-1.5 rounded-lg border border-black/10 text-xs"
                         rows={2}
+                        placeholder="Packaging & cushioning note"
                       />
+
                       <div className="flex justify-end gap-2">
                         <button
                           type="button"
@@ -1398,6 +1682,133 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Interactive Luggage Inspection Drawer / Modal */}
+      <LuggageContentsModal
+        isOpen={isLuggageModalOpen}
+        onClose={() => setIsLuggageModalOpen(false)}
+        bag={inspectedBag}
+        bags={bags}
+        wardrobe={wardrobe}
+        gifts={activeGifts}
+        devices={devices}
+        documents={documents}
+        locationOptions={allLocations}
+        wardrobeCategories={allCategories}
+        onAddCustomLocation={handleAddCustomLocationInternal}
+        onAddCustomCategory={handleAddCustomCategoryInternal}
+        onToggleWardrobePacked={onToggleWardrobePacked}
+        onToggleGiftPacked={handleToggleGift}
+        onToggleDevicePacked={onToggleDevicePacked || (() => {})}
+        onToggleDocPacked={onToggleDocPacked || (() => {})}
+        onUpdateWardrobeItem={onUpdateWardrobeItem}
+        onUpdateGift={handleUpdateGiftSubmit}
+        onUpdateDevice={onUpdateDevice || (() => {})}
+        onUpdateDoc={onUpdateDoc || (() => {})}
+        onDeleteWardrobeItem={onDeleteWardrobeItem}
+        onDeleteGift={handleDeleteGiftSubmit}
+        onDeleteDevice={onDeleteDevice}
+        onDeleteDoc={onDeleteDoc}
+        onAddWardrobeItem={onAddWardrobeItem}
+        onAddGift={handleAddGiftSubmit}
+        onAddDevice={onAddDevice || (() => {})}
+        onAddDoc={onAddDoc || (() => {})}
+        renderBagIcon={renderBagIcon}
+      />
+
+      {/* Add Custom Bag / Location Modal */}
+      {showAddBagModal && (
+        <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <form
+            onSubmit={handleAddBagSubmit}
+            className="w-full max-w-sm bg-white rounded-2xl p-5 shadow-2xl border border-black/10 space-y-3.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm sm:text-base text-slate-900">Add Custom Bag / Location</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddBagModal(false)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                Bag / Location Name
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Duty-Free Hand Carry, Vacuum Cube A"
+                value={newBagName}
+                onChange={(e) => setNewBagName(e.target.value)}
+                className="w-full px-3 py-2 text-xs border border-black/10 rounded-xl bg-[#F2F2F7] focus:outline-[#007AFF]"
+                required
+                autoFocus
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Dimensions / Type
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Medium Cube"
+                  value={newBagDimensions}
+                  onChange={(e) => setNewBagDimensions(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs border border-black/10 rounded-xl bg-[#F2F2F7]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Weight Limit
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Personal Carry"
+                  value={newBagWeight}
+                  onChange={(e) => setNewBagWeight(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs border border-black/10 rounded-xl bg-[#F2F2F7]"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                Recommended Contents / Notes
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Toiletries, winter layer"
+                value={newBagNotes}
+                onChange={(e) => setNewBagNotes(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs border border-black/10 rounded-xl bg-[#F2F2F7]"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-black/5">
+              <button
+                type="button"
+                onClick={() => setShowAddBagModal(false)}
+                className="px-3 py-1.5 rounded-full text-xs text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-full bg-[#007AFF] text-white text-xs font-semibold shadow-xs hover:bg-[#007AFF]/90 cursor-pointer"
+              >
+                Save Location
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

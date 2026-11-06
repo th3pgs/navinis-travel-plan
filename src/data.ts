@@ -1,9 +1,9 @@
 export interface WardrobeItem {
   id: string;
   name: string;
-  category: 'Dresses' | 'Tops' | 'Bottoms' | 'Outerwear' | 'Footwear' | 'Essentials' | 'Luggage' | 'Gifts & Packaging';
+  category: string;
   quantity: number;
-  targetBag: 'Main Large Suitcase (30×40×70cm)' | 'Medium Suitcase (27×41×57cm)' | 'Cabin Laptop Backpack' | 'Fanny Pack' | 'Wear on Flight';
+  targetBag: string;
   isBought: boolean;
   isPacked: boolean;
   colorHex?: string;
@@ -15,7 +15,7 @@ export interface GiftItem {
   id: string;
   name: string;
   quantity: number;
-  targetBag: 'Main Large Suitcase (30×40×70cm)' | 'Medium Suitcase (27×41×57cm)' | 'Cabin Laptop Backpack' | 'Fanny Pack';
+  targetBag: string;
   packagingNote: string;
   recipient: string;
   isPacked: boolean;
@@ -23,7 +23,7 @@ export interface GiftItem {
 
 export interface BankingTaskItem {
   id: string;
-  bank: 'General / Cash Stash' | 'Bank of Ceylon (BOC)' | "People's Bank" | 'National Savings Bank (NSB)';
+  bank: string;
   title: string;
   detail: string;
   isDone: boolean;
@@ -40,7 +40,7 @@ export interface BagAsset {
   recommendedContents: string;
   isBought: boolean;
   isPacked: boolean;
-  kind: 'rolling-large' | 'rolling-medium' | 'backpack' | 'fannypack';
+  kind: 'rolling-large' | 'rolling-medium' | 'backpack' | 'fannypack' | 'custom' | string;
 }
 
 export interface DeviceAsset {
@@ -143,6 +143,114 @@ export interface TimelineEvent {
     targetBag?: string;
     mustContactBuddy?: boolean;
   }[];
+}
+
+// Default Options for Classification & Dropdowns
+export const DEFAULT_WARDROBE_CATEGORIES: string[] = [
+  'Dresses',
+  'Tops',
+  'Bottoms',
+  'Outerwear',
+  'Footwear',
+  'Essentials',
+  'Undergarments',
+  'Bottles & Liquids',
+  'Wearables & Accessories',
+  'Lab Coats & Gear',
+  'Luggage',
+  'Gifts & Packaging',
+];
+
+export const DEFAULT_BAG_LOCATIONS: string[] = [
+  'Main Large Rolling Suitcase',
+  'Medium Rolling Suitcase',
+  'Structured Tech Laptop Backpack',
+  'Compact Fanny Pack / Crossbody',
+  'Wear on Flight',
+];
+
+export const DEFAULT_BANKS: string[] = [
+  'Bank of Ceylon (BOC)',
+  "People's Bank",
+  'National Savings Bank (NSB)',
+  'General / Cash Stash',
+];
+
+export const DEFAULT_APP_CATEGORIES: string[] = [
+  'Stock AI & Academic',
+  'Proxy & Bypass',
+  'Essential Daily',
+  'Transit & Maps',
+];
+
+export const DEFAULT_APP_DEVICES: string[] = [
+  'iPhone 17',
+  'Samsung S20 FE',
+  'Dell Laptop',
+  'Apple iPad 11',
+];
+
+/**
+ * Universal matcher for cross-portal inventory in luggage inspection.
+ * Accurately matches items against a BagAsset even with slight naming differences.
+ */
+export function isItemInBag(itemLocation: string | undefined, bag: BagAsset): boolean {
+  if (!itemLocation) return false;
+  const loc = itemLocation.trim().toLowerCase();
+  const bagName = bag.name.trim().toLowerCase();
+  const bagId = bag.id.trim().toLowerCase();
+
+  // Direct exact match
+  if (loc === bagName || loc === bagId) return true;
+
+  // Normalized matching for core bags
+  if (bag.kind === 'rolling-large' || bagName.includes('large')) {
+    if (
+      loc.includes('large') ||
+      loc.includes('30×40×70') ||
+      loc.includes('checked bag 1') ||
+      loc === 'checked at colombo'
+    ) {
+      return true;
+    }
+  }
+  if (bag.kind === 'rolling-medium' || bagName.includes('medium')) {
+    if (
+      loc.includes('medium') ||
+      loc.includes('27×41×57') ||
+      loc.includes('checked bag 2')
+    ) {
+      return true;
+    }
+  }
+  if (bag.kind === 'backpack' || bagName.includes('backpack')) {
+    if (
+      loc.includes('backpack') ||
+      loc.includes('cabin laptop') ||
+      loc.includes('a4 waterproof folder') ||
+      loc.includes('cabin carry-on')
+    ) {
+      return true;
+    }
+  }
+  if (bag.kind === 'fannypack' || bagName.includes('fanny') || bagName.includes('crossbody')) {
+    if (
+      loc.includes('fanny') ||
+      loc.includes('crossbody') ||
+      loc.includes('worn on chest') ||
+      loc.includes('chest') ||
+      loc.includes('lifeline')
+    ) {
+      return true;
+    }
+  }
+
+  // Custom location substring / equality
+  if (loc.length > 2 && (loc.includes(bagName) || bagName.includes(loc))) {
+    return true;
+  }
+
+  return false;
 }
 
 // Initial 4 Bags

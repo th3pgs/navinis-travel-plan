@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
-import { DocumentItem, ProcedureStep, BankingTaskItem, INITIAL_BANKING_TASKS } from '../data';
+import {
+  DocumentItem,
+  ProcedureStep,
+  BankingTaskItem,
+  INITIAL_BANKING_TASKS,
+  DEFAULT_BAG_LOCATIONS,
+  DEFAULT_BANKS,
+} from '../data';
+import { DynamicSelect } from './DynamicSelect';
 import {
   ChevronLeft,
   ChevronRight,
@@ -26,6 +34,10 @@ interface DocumentationHubProps {
   documents: DocumentItem[];
   procedureSteps: ProcedureStep[];
   bankingTasks?: BankingTaskItem[];
+  customLocations?: string[];
+  customBanks?: string[];
+  onAddCustomLocation?: (loc: string) => void;
+  onAddCustomBank?: (bank: string) => void;
   onToggleDocReady: (id: string) => void;
   onToggleDocPacked: (id: string) => void;
   onAddDoc: (doc: Omit<DocumentItem, 'id'>) => void;
@@ -81,6 +93,10 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
   documents,
   procedureSteps,
   bankingTasks: propsBankingTasks,
+  customLocations = [],
+  customBanks = [],
+  onAddCustomLocation,
+  onAddCustomBank,
   onToggleDocReady,
   onToggleDocPacked,
   onAddDoc,
@@ -98,6 +114,15 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
   // Navigation: 'overview' | 'banking' | 'vault' | 'steps'
   const [currentSubView, setCurrentSubView] = useState<'overview' | 'banking' | 'vault' | 'steps'>('overview');
   const [isSectionEditMode, setIsSectionEditMode] = useState(false);
+
+  // Dynamic Options
+  const allLocations = React.useMemo(() => {
+    return Array.from(new Set([...DEFAULT_BAG_LOCATIONS, ...customLocations]));
+  }, [customLocations]);
+
+  const allBanks = React.useMemo(() => {
+    return Array.from(new Set([...DEFAULT_BANKS, ...customBanks]));
+  }, [customBanks]);
 
   // Local Banking Tasks state fallback
   const [localBankingTasks, setLocalBankingTasks] = useState<BankingTaskItem[]>(() => {
@@ -559,17 +584,15 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Target Institution</label>
-                  <select
+                  <DynamicSelect
                     value={newBank}
-                    onChange={(e) => setNewBank(e.target.value as any)}
-                    className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 focus:outline-[#007AFF]"
-                  >
-                    <option value="General / Cash Stash">General / Cash Stash</option>
-                    <option value="Bank of Ceylon (BOC)">Bank of Ceylon (BOC)</option>
-                    <option value="People's Bank">People's Bank</option>
-                    <option value="National Savings Bank (NSB)">National Savings Bank (NSB)</option>
-                  </select>
+                    options={allBanks}
+                    onChange={setNewBank}
+                    onAddCustom={onAddCustomBank}
+                    addCustomLabel="+ Add Custom Bank..."
+                    label="Target Institution"
+                    selectClassName="py-2"
+                  />
                 </div>
 
                 <div>
@@ -799,12 +822,14 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Carry Location</label>
-                  <input
-                    type="text"
+                  <DynamicSelect
                     value={newDocLocation}
-                    onChange={(e) => setNewDocLocation(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-white border border-black/10 focus:outline-[#007AFF]"
+                    options={allLocations}
+                    onChange={setNewDocLocation}
+                    onAddCustom={onAddCustomLocation}
+                    addCustomLabel="+ Add Custom Location / Bag..."
+                    label="Carry Location"
+                    selectClassName="py-2"
                   />
                 </div>
 
@@ -866,12 +891,13 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                           placeholder="Issuer"
                           className="px-3 py-1.5 rounded-lg border border-black/10"
                         />
-                        <input
-                          type="text"
+                        <DynamicSelect
                           value={editDocLocation}
-                          onChange={(e) => setEditDocLocation(e.target.value)}
-                          placeholder="Location"
-                          className="px-3 py-1.5 rounded-lg border border-black/10"
+                          options={allLocations}
+                          onChange={setEditDocLocation}
+                          onAddCustom={onAddCustomLocation}
+                          addCustomLabel="+ Add Custom Location / Bag..."
+                          selectClassName="py-1.5 text-xs"
                         />
                       </div>
                       <textarea

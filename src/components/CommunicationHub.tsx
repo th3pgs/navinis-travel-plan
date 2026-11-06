@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
-import { AppConfigItem } from '../data';
+import {
+  AppConfigItem,
+  DEFAULT_APP_CATEGORIES,
+  DEFAULT_APP_DEVICES,
+} from '../data';
 import { AppIcon } from './AppIcon';
+import { DynamicSelect } from './DynamicSelect';
 import {
   ChevronLeft,
   ChevronRight,
@@ -24,6 +29,10 @@ import {
 interface CommunicationHubProps {
   onBack: () => void;
   apps: AppConfigItem[];
+  customAppCategories?: string[];
+  customAppDevices?: string[];
+  onAddCustomAppCategory?: (cat: string) => void;
+  onAddCustomAppDevice?: (dev: string) => void;
   onToggleAppInstalled: (id: string) => void;
   onToggleAppConfigured: (id: string) => void;
   onAddApp: (app: Omit<AppConfigItem, 'id'>) => void;
@@ -38,6 +47,10 @@ interface CommunicationHubProps {
 export const CommunicationHub: React.FC<CommunicationHubProps> = ({
   onBack,
   apps,
+  customAppCategories = [],
+  customAppDevices = [],
+  onAddCustomAppCategory,
+  onAddCustomAppDevice,
   onToggleAppInstalled,
   onToggleAppConfigured,
   onAddApp,
@@ -53,6 +66,15 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
   const [selectedDevice, setSelectedDevice] = useState<string>('all');
   const [isSectionEditMode, setIsSectionEditMode] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Dynamic Options
+  const allAppCategories = React.useMemo(() => {
+    return Array.from(new Set([...DEFAULT_APP_CATEGORIES, ...customAppCategories]));
+  }, [customAppCategories]);
+
+  const allAppDevices = React.useMemo(() => {
+    return Array.from(new Set([...DEFAULT_APP_DEVICES, ...customAppDevices]));
+  }, [customAppDevices]);
 
   // New App Modal State
   const [showAddAppModal, setShowAddAppModal] = useState(false);
@@ -769,36 +791,29 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
-                <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
-                  Device
-                </label>
-                <select
+                <DynamicSelect
                   value={newAppPlatform}
-                  onChange={(e) => setNewAppPlatform(e.target.value as any)}
-                  className="w-full px-2 py-2 text-xs border border-black/10 rounded-xl bg-[#F2F2F7]"
-                >
-                  <option value="iOS">iPhone / iPad</option>
-                  <option value="Android">Samsung S20</option>
-                  <option value="Windows">Dell Laptop</option>
-                </select>
+                  options={allAppDevices}
+                  onChange={(val) => setNewAppPlatform(val as any)}
+                  onAddCustom={onAddCustomAppDevice}
+                  addCustomLabel="+ Add Custom Device..."
+                  label="Device"
+                  selectClassName="py-1.5 text-xs bg-[#F2F2F7]"
+                />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-[#8E8E93] uppercase tracking-wider mb-1">
-                  Category
-                </label>
-                <select
+                <DynamicSelect
                   value={newAppCategory}
-                  onChange={(e) => setNewAppCategory(e.target.value as any)}
-                  className="w-full px-2 py-2 text-xs border border-black/10 rounded-xl bg-[#F2F2F7]"
-                >
-                  <option value="Stock AI & Academic">Stock AI</option>
-                  <option value="Proxy & Bypass">Proxy / VPN</option>
-                  <option value="Essential Daily">Essential Daily</option>
-                  <option value="Transit & Maps">Transit & Maps</option>
-                </select>
+                  options={allAppCategories}
+                  onChange={(val) => setNewAppCategory(val as any)}
+                  onAddCustom={onAddCustomAppCategory}
+                  addCustomLabel="+ Add Custom Category..."
+                  label="Category"
+                  selectClassName="py-1.5 text-xs bg-[#F2F2F7]"
+                />
               </div>
             </div>
 
