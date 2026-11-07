@@ -40,11 +40,14 @@ import {
   subscribeToCloudState,
   checkSupabaseConnection,
   uploadWardrobeItemPhotoAtomic,
+  isOfflineLocked as getIsOfflineLocked,
+  setOfflineLocked as saveIsOfflineLocked,
+  mergeItemsByTimestamp,
 } from './cloudSync';
 
 import { AuthGate } from './components/AuthGate';
 import { RecoveryScanner } from './components/RecoveryScanner';
-import { saveWardrobeItemsIDB, getWardrobeItemsIDB } from './db';
+import { saveWardrobeItemsIDB, getWardrobeItemsIDB, saveMasterStateIDB } from './db';
 import { TopDockedProfileAirline } from './components/TopDockedProfileAirline';
 import { HardwareShowcaseWidgets } from './components/HardwareShowcaseWidgets';
 import { PhysicalHub } from './components/PhysicalHub';
@@ -271,6 +274,23 @@ export function App() {
     }
   });
 
+  // Offline Mode / Downloaded Mode Lock State (Requirement #1)
+  const [isOfflineLocked, setIsOfflineLocked] = useState<boolean>(() => {
+    return localStorage.getItem('navini_offline_locked') === 'true';
+  });
+
+  // Tombstone Deleted Item IDs (Requirement #3 - prevents deleted items from resurrecting)
+  const [deletedItemIds, setDeletedItemIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('navini_deleted_item_ids_v8');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const realtimeUnsubRef = useRef<(() => void) | null>(null);
+
   // Background Non-Blocking Upload Queue State
   const [uploadingCount, setUploadingCount] = useState<number>(0);
   const [showSyncedPill, setShowSyncedPill] = useState<boolean>(false);
@@ -294,133 +314,13 @@ export function App() {
     return [];
   });
 
-  // Live Supabase Lifecycle: Fetch initial + Realtime Subscribe + Periodic Ping
-  useEffect(() => {
-    let isMounted = true;
-
-    const initSupabase = async () => {
-      const isAlive = await checkSupabaseConnection();
-      if (isMounted) setIsSupabaseConnected(isAlive);
-
-      // Check durable multi-gigabyte IndexedDB local vault first
-      try {
-        const idbWardrobe = await getWardrobeItemsIDB();
-        if (idbWardrobe && idbWardrobe.length > 0 && isMounted) {
-          setWardrobe((prev) => (idbWardrobe.length >= prev.length ? idbWardrobe : prev));
-        }
-      } catch (e) {
-        console.warn('IDB startup check:', e);
-      }
-
-      const remote = await fetchCloudState();
-      if (remote && isMounted) {
-        if (remote.passportInfo) setPassportInfo(remote.passportInfo);
-        if (remote.bags?.length) {
-          setBags(remote.bags.map((b) => ({ ...b, name: normalizeBagLocation(b.name) })));
-        }
-        if (remote.devices?.length) setDevices(remote.devices);
-        if (remote.wardrobe?.length) {
-          const migrated = migrateWardrobeItems(remote.wardrobe);
-          setWardrobe((prev) => {
-            if (prev.length > migrated.length) {
-              const map = new Map<string, WardrobeItem>();
-              migrated.forEach((w) => map.set(w.id, w));
-              prev.forEach((w) => {
-                if (!map.has(w.id)) map.set(w.id, w);
-              });
-              return Array.from(map.values());
-            }
-            return migrated;
-          });
-          const hadLegacyCategory = migrated.some((m, idx) => m.category !== remote.wardrobe[idx]?.category);
-          if (hadLegacyCategory) {
-            syncAllState({ wardrobe: migrated });
-          }
-        }
-        if (remote.documents?.length) setDocuments(remote.documents);
-        if (remote.apps?.length) setApps(migrateLegacyApps(remote.apps));
-        if (remote.milestones?.length) setMilestones(remote.milestones);
-        if (remote.categories?.length) {
-          const del = remote.deletedCategories || [];
-          setCategories(remote.categories.filter((c: string) => !del.includes(c)));
-        }
-        if (remote.deletedCategories?.length) {
-          setDeletedCategories(remote.deletedCategories);
-        }
-        if (remote.locations?.length) {
-          const del = remote.deletedLocations || [];
-          setLocations(remote.locations.filter((l: string) => !del.includes(l)));
-        }
-        if (remote.deletedLocations?.length) {
-          setDeletedLocations(remote.deletedLocations);
-        }
-        if (remote.customCategories?.length) setCustomCategories(remote.customCategories);
-        if (remote.customLocations?.length) setCustomLocations(remote.customLocations);
-        if (remote.customAppCategories?.length) setCustomAppCategories(remote.customAppCategories);
-        if (remote.customAppDevices?.length) setCustomAppDevices(remote.customAppDevices);
-        if (typeof remote.confirmedCampusChat === 'boolean') {
-          setConfirmedCampusChat(remote.confirmedCampusChat);
-        }
-      }
-    };
-
-    initSupabase();
-
-    // Subscribe to realtime changes on `app_state` (row `id = 'main_plan'`)
-    const unsubscribe = subscribeToCloudState((incoming) => {
-      if (!isMounted) return;
-      setIsSupabaseConnected(true);
-      if (incoming.passportInfo) setPassportInfo(incoming.passportInfo);
-      if (incoming.bags?.length) {
-        setBags(incoming.bags.map((b) => ({ ...b, name: normalizeBagLocation(b.name) })));
-      }
-      if (incoming.devices?.length) setDevices(incoming.devices);
-      if (incoming.wardrobe?.length) setWardrobe(migrateWardrobeItems(incoming.wardrobe));
-      if (incoming.documents?.length) setDocuments(incoming.documents);
-      if (incoming.apps?.length) setApps(migrateLegacyApps(incoming.apps));
-      if (incoming.milestones?.length) setMilestones(incoming.milestones);
-      if (incoming.categories?.length) {
-        const del = incoming.deletedCategories || [];
-        setCategories(incoming.categories.filter((c: string) => !del.includes(c)));
-      }
-      if (incoming.deletedCategories?.length) {
-        setDeletedCategories(incoming.deletedCategories);
-      }
-      if (incoming.locations?.length) {
-        const del = incoming.deletedLocations || [];
-        setLocations(incoming.locations.filter((l: string) => !del.includes(l)));
-      }
-      if (incoming.deletedLocations?.length) {
-        setDeletedLocations(incoming.deletedLocations);
-      }
-      if (incoming.customCategories?.length) setCustomCategories(incoming.customCategories);
-      if (incoming.customLocations?.length) setCustomLocations(incoming.customLocations);
-      if (incoming.customAppCategories?.length) setCustomAppCategories(incoming.customAppCategories);
-      if (incoming.customAppDevices?.length) setCustomAppDevices(incoming.customAppDevices);
-      if (typeof incoming.confirmedCampusChat === 'boolean') {
-        setConfirmedCampusChat(incoming.confirmedCampusChat);
-      }
-    });
-
-    // Check connection health every 12 seconds
-    const pingTimer = setInterval(async () => {
-      const isAlive = await checkSupabaseConnection();
-      if (isMounted) setIsSupabaseConnected(isAlive);
-    }, 12000);
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-      clearInterval(pingTimer);
-    };
-  }, []);
-
-  // Sync state to local storage & push to Supabase
-  const syncAllState = (overrides?: Partial<AppMasterState>) => {
+  // Helper to package the current master state snapshot
+  const buildCurrentMasterState = (overrides?: Partial<AppMasterState>): AppMasterState => {
     const cats = overrides?.categories || categories;
     const delCats = overrides?.deletedCategories || deletedCategories;
     const locs = overrides?.locations || locations;
     const delLocs = overrides?.deletedLocations || deletedLocations;
+    const delItemIds = overrides?.deletedItemIds || deletedItemIds;
     const cCats = overrides?.customCategories || customCategories;
     const cLocs = overrides?.customLocations || customLocations;
     const cAppCats = overrides?.customAppCategories || customAppCategories;
@@ -433,35 +333,10 @@ export function App() {
     const mStones = overrides?.milestones || milestones;
     const pInfo = overrides?.passportInfo || passportInfo;
 
-    try {
-      saveWardrobeItemsIDB(wItems);
-    } catch (e) {
-      console.warn('IDB write warning in syncAllState:', e);
-    }
-
-    try {
-      localStorage.setItem('navini_passport_profile_v7', JSON.stringify(pInfo));
-      localStorage.setItem('navini_bags_v7', JSON.stringify(bAssets));
-      localStorage.setItem('navini_devices_v7', JSON.stringify(dAssets));
-      localStorage.setItem('navini_wardrobe_v7', JSON.stringify(wItems));
-      localStorage.setItem('navini_docs_v7', JSON.stringify(docItems));
-      localStorage.setItem('navini_apps_v7', JSON.stringify(appItems));
-      localStorage.setItem('navini_milestones_v7', JSON.stringify(mStones));
-      localStorage.setItem('navini_categories_v8', JSON.stringify(cats));
-      localStorage.setItem('navini_deleted_categories_v8', JSON.stringify(delCats));
-      localStorage.setItem('navini_locations_v8', JSON.stringify(locs));
-      localStorage.setItem('navini_deleted_locations_v8', JSON.stringify(delLocs));
-      localStorage.setItem('navini_custom_categories_v7', JSON.stringify(cCats));
-      localStorage.setItem('navini_custom_locations_v7', JSON.stringify(cLocs));
-      localStorage.setItem('navini_custom_app_categories_v7', JSON.stringify(cAppCats));
-      localStorage.setItem('navini_custom_app_devices_v7', JSON.stringify(cAppDevs));
-    } catch (e) {
-      console.warn('LocalStorage write warning or quota exceeded:', e);
-    }
-
-    const masterState: AppMasterState = {
+    return {
       version: '8.0',
       lastUpdated: new Date().toISOString(),
+      lastUpdatedAt: Date.now(),
       passportInfo: pInfo,
       bags: bAssets,
       devices: dAssets,
@@ -477,16 +352,255 @@ export function App() {
       deletedCategories: delCats,
       locations: locs,
       deletedLocations: delLocs,
+      deletedItemIds: delItemIds,
       customCategories: cCats,
       customLocations: cLocs,
       customBanks,
       customAppCategories: cAppCats,
       customAppDevices: cAppDevs,
     };
-
-    const isImmediate = !!overrides?.wardrobe;
-    pushCloudState(masterState, isImmediate);
   };
+
+  // Sync state to local storage & push to Supabase
+  const syncAllState = (overrides?: Partial<AppMasterState>) => {
+    const masterState = buildCurrentMasterState(overrides);
+
+    try {
+      saveWardrobeItemsIDB(masterState.wardrobe);
+      saveMasterStateIDB(masterState);
+    } catch (e) {
+      console.warn('IDB write warning in syncAllState:', e);
+    }
+
+    try {
+      localStorage.setItem('navini_passport_profile_v7', JSON.stringify(masterState.passportInfo));
+      localStorage.setItem('navini_bags_v7', JSON.stringify(masterState.bags));
+      localStorage.setItem('navini_devices_v7', JSON.stringify(masterState.devices));
+      localStorage.setItem('navini_wardrobe_v7', JSON.stringify(masterState.wardrobe));
+      localStorage.setItem('navini_docs_v7', JSON.stringify(masterState.documents));
+      localStorage.setItem('navini_apps_v7', JSON.stringify(masterState.apps));
+      localStorage.setItem('navini_milestones_v7', JSON.stringify(masterState.milestones));
+      localStorage.setItem('navini_categories_v8', JSON.stringify(masterState.categories));
+      localStorage.setItem('navini_deleted_categories_v8', JSON.stringify(masterState.deletedCategories));
+      localStorage.setItem('navini_locations_v8', JSON.stringify(masterState.locations));
+      localStorage.setItem('navini_deleted_locations_v8', JSON.stringify(masterState.deletedLocations));
+      localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(masterState.deletedItemIds));
+      localStorage.setItem('navini_custom_categories_v7', JSON.stringify(masterState.customCategories));
+      localStorage.setItem('navini_custom_locations_v7', JSON.stringify(masterState.customLocations));
+      localStorage.setItem('navini_custom_app_categories_v7', JSON.stringify(masterState.customAppCategories));
+      localStorage.setItem('navini_custom_app_devices_v7', JSON.stringify(masterState.customAppDevices));
+    } catch (e) {
+      console.warn('LocalStorage write warning or quota exceeded:', e);
+    }
+
+    // Push immediately to Supabase and broadcast over WebSocket
+    pushCloudState(masterState, true);
+  };
+
+  // Reconciles incoming remote state cleanly by timestamp and tombstones
+  const applyRemoteMasterState = (remote: AppMasterState) => {
+    if (isOfflineLocked) return;
+
+    // Merge tombstones
+    const remoteDelItemIds = remote.deletedItemIds || [];
+    const mergedDeletedIds = Array.from(new Set([...deletedItemIds, ...remoteDelItemIds]));
+    setDeletedItemIds(mergedDeletedIds);
+    try {
+      localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(mergedDeletedIds));
+    } catch {}
+
+    if (remote.passportInfo) {
+      setPassportInfo(remote.passportInfo);
+    }
+
+    if (remote.bags?.length) {
+      setBags((prev) => {
+        const normalized = remote.bags.map((b) => ({ ...b, name: normalizeBagLocation(b.name) }));
+        return mergeItemsByTimestamp(prev, normalized, mergedDeletedIds);
+      });
+    }
+
+    if (remote.devices?.length) {
+      setDevices((prev) => mergeItemsByTimestamp(prev, remote.devices, mergedDeletedIds));
+    }
+
+    if (remote.documents?.length) {
+      setDocuments((prev) => mergeItemsByTimestamp(prev, remote.documents, mergedDeletedIds));
+    }
+
+    if (remote.wardrobe?.length) {
+      const cleanRemote = migrateWardrobeItems(remote.wardrobe);
+      setWardrobe((prev) => {
+        const merged = mergeItemsByTimestamp(prev, cleanRemote, mergedDeletedIds);
+        saveWardrobeItemsIDB(merged);
+        return merged;
+      });
+    }
+
+    if (remote.apps?.length) {
+      setApps(migrateLegacyApps(remote.apps));
+    }
+
+    if (remote.milestones?.length) {
+      setMilestones(remote.milestones);
+    }
+
+    if (remote.categories?.length) {
+      const del = remote.deletedCategories || [];
+      setCategories(remote.categories.filter((c: string) => !del.includes(c)));
+    }
+    if (remote.deletedCategories?.length) {
+      setDeletedCategories(remote.deletedCategories);
+    }
+
+    if (remote.locations?.length) {
+      const del = remote.deletedLocations || [];
+      setLocations(remote.locations.filter((l: string) => !del.includes(l)));
+    }
+    if (remote.deletedLocations?.length) {
+      setDeletedLocations(remote.deletedLocations);
+    }
+
+    if (typeof remote.confirmedCampusChat === 'boolean') {
+      setConfirmedCampusChat(remote.confirmedCampusChat);
+    }
+  };
+
+  // Pulls latest state from Supabase and merges cleanly
+  const pullAndMergeFromCloud = async () => {
+    if (isOfflineLocked) return;
+    try {
+      const isAlive = await checkSupabaseConnection();
+      setIsSupabaseConnected(isAlive);
+      if (!isAlive) return;
+
+      const remote = await fetchCloudState();
+      if (remote) {
+        applyRemoteMasterState(remote);
+      }
+    } catch (err) {
+      console.warn('pullAndMergeFromCloud error:', err);
+    }
+  };
+
+  // Toggle Download / Offline Lock (Requirement #1)
+  const handleToggleOfflineLock = async () => {
+    if (!isOfflineLocked) {
+      // Switching from Live -> Offline Locked (ON)
+      try {
+        const snapshot = buildCurrentMasterState();
+        saveMasterStateIDB(snapshot);
+        saveWardrobeItemsIDB(wardrobe);
+        saveIsOfflineLocked(true);
+      } catch (err) {
+        console.warn('Offline snapshot warning:', err);
+      }
+      setIsOfflineLocked(true);
+      saveIsOfflineLocked(true);
+
+      // Disconnect realtime
+      if (realtimeUnsubRef.current) {
+        realtimeUnsubRef.current();
+        realtimeUnsubRef.current = null;
+      }
+      setIsSupabaseConnected(false);
+    } else {
+      // Switching from Offline Locked -> Live (OFF)
+      setIsOfflineLocked(false);
+      saveIsOfflineLocked(false);
+
+      // 1. Immediately push queued local changes to Supabase
+      syncAllState();
+
+      // 2. Re-establish live realtime sync channel (Broadcast + Postgres changes)
+      if (realtimeUnsubRef.current) {
+        realtimeUnsubRef.current();
+      }
+      realtimeUnsubRef.current = subscribeToCloudState((incoming) => {
+        applyRemoteMasterState(incoming);
+      });
+
+      // 3. Pull latest remote state from Supabase and merge
+      await pullAndMergeFromCloud();
+    }
+  };
+
+  // Auto-Sync on Tab Focus / Visibility Change (Requirement #2.3)
+  useEffect(() => {
+    const handleVisibilityOrFocus = async () => {
+      if (document.visibilityState === 'visible' && !isOfflineLocked) {
+        console.log('[LiveSync] Tab became visible/focused, auto-syncing from cloud...');
+        await pullAndMergeFromCloud();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+    };
+  }, [isOfflineLocked, deletedItemIds]);
+
+  // Live Supabase Lifecycle: Fetch initial + Realtime Subscribe + Periodic Ping
+  useEffect(() => {
+    let isMounted = true;
+
+    const initSupabase = async () => {
+      // Load from durable multi-gigabyte IndexedDB local vault first
+      try {
+        const idbWardrobe = await getWardrobeItemsIDB();
+        if (idbWardrobe && idbWardrobe.length > 0 && isMounted) {
+          setWardrobe((prev) => (idbWardrobe.length >= prev.length ? idbWardrobe : prev));
+        }
+      } catch (e) {
+        console.warn('IDB startup check:', e);
+      }
+
+      // If offline locked, strictly isolate to local storage
+      if (isOfflineLocked) {
+        console.log('[App] Offline lock active on load. Purely local IndexedDB.');
+        if (isMounted) setIsSupabaseConnected(false);
+        return;
+      }
+
+      const isAlive = await checkSupabaseConnection();
+      if (isMounted) setIsSupabaseConnected(isAlive);
+
+      const remote = await fetchCloudState();
+      if (remote && isMounted) {
+        applyRemoteMasterState(remote);
+      }
+    };
+
+    initSupabase();
+
+    if (!isOfflineLocked) {
+      // Subscribe to Realtime (BOTH WebSocket broadcast + Postgres changes)
+      realtimeUnsubRef.current = subscribeToCloudState((incoming) => {
+        if (!isMounted || isOfflineLocked) return;
+        setIsSupabaseConnected(true);
+        applyRemoteMasterState(incoming);
+      });
+    }
+
+    // Check connection health every 12 seconds
+    const pingTimer = setInterval(async () => {
+      if (!isOfflineLocked) {
+        const isAlive = await checkSupabaseConnection();
+        if (isMounted) setIsSupabaseConnected(isAlive);
+      }
+    }, 12000);
+
+    return () => {
+      isMounted = false;
+      if (realtimeUnsubRef.current) {
+        realtimeUnsubRef.current();
+        realtimeUnsubRef.current = null;
+      }
+      clearInterval(pingTimer);
+    };
+  }, [isOfflineLocked]);
 
   // Background Upload Queue Worker
   const processItemUpload = async (item: WardrobeItem) => {
@@ -600,8 +714,9 @@ export function App() {
     setDeletedCategories(updatedDeleted);
 
     // Cascade rename to all wardrobe items
+    const now = Date.now();
     const updatedWardrobe = wardrobe.map((w) =>
-      w.category === oldCategory ? { ...w, category: trimmed } : w
+      w.category === oldCategory ? { ...w, category: trimmed, updatedAt: now } : w
     );
     setWardrobe(updatedWardrobe);
     saveWardrobeItemsIDB(updatedWardrobe);
@@ -621,9 +736,10 @@ export function App() {
     setDeletedCategories(updatedDeleted);
 
     // Reassign items in deleted category to first available category
+    const now = Date.now();
     const fallbackCategory = updatedCategories[0] || 'Uncategorized';
     const updatedWardrobe = wardrobe.map((w) =>
-      w.category === catToDelete ? { ...w, category: fallbackCategory } : w
+      w.category === catToDelete ? { ...w, category: fallbackCategory, updatedAt: now } : w
     );
     setWardrobe(updatedWardrobe);
     saveWardrobeItemsIDB(updatedWardrobe);
@@ -687,13 +803,14 @@ export function App() {
     setLocations(updatedLocations);
     setDeletedLocations(updatedDeleted);
 
+    const now = Date.now();
     const updatedWardrobe = wardrobe.map((w) =>
-      w.targetBag === oldLoc ? { ...w, targetBag: trimmed } : w
+      w.targetBag === oldLoc ? { ...w, targetBag: trimmed, updatedAt: now } : w
     );
     setWardrobe(updatedWardrobe);
     saveWardrobeItemsIDB(updatedWardrobe);
 
-    const updatedBags = bags.map((b) => (b.name === oldLoc ? { ...b, name: trimmed, targetBag: trimmed } : b));
+    const updatedBags = bags.map((b) => (b.name === oldLoc ? { ...b, name: trimmed, targetBag: trimmed, updatedAt: now } : b));
     setBags(updatedBags);
 
     syncAllState({
@@ -713,8 +830,9 @@ export function App() {
 
     const fallbackLoc = updatedLocations[0] || 'Main Large Rolling Suitcase';
 
+    const now = Date.now();
     const updatedWardrobe = wardrobe.map((w) =>
-      w.targetBag === locToDelete ? { ...w, targetBag: fallbackLoc } : w
+      w.targetBag === locToDelete ? { ...w, targetBag: fallbackLoc, updatedAt: now } : w
     );
     setWardrobe(updatedWardrobe);
     saveWardrobeItemsIDB(updatedWardrobe);
@@ -805,21 +923,23 @@ export function App() {
 
   // Handlers for Physical Gear
   const toggleBagBought = (id: string) => {
-    const updated = bags.map((b) => (b.id === id ? { ...b, isBought: !b.isBought } : b));
+    const now = Date.now();
+    const updated = bags.map((b) => (b.id === id ? { ...b, isBought: !b.isBought, updatedAt: now } : b));
     setBags(updated);
     syncAllState({ bags: updated });
   };
 
   const handleCycleBagStatus = (id: string) => {
+    const now = Date.now();
     const updated = bags.map((b) => {
       if (b.id !== id) return b;
       // Cycle: !isBought (Missing) -> isBought && !isPacked (Bought) -> isBought && isPacked (Packed) -> !isBought (Missing)
       if (!b.isBought) {
-        return { ...b, isBought: true, isPacked: false };
+        return { ...b, isBought: true, isPacked: false, updatedAt: now };
       } else if (b.isBought && !b.isPacked) {
-        return { ...b, isBought: true, isPacked: true };
+        return { ...b, isBought: true, isPacked: true, updatedAt: now };
       } else {
-        return { ...b, isBought: false, isPacked: false };
+        return { ...b, isBought: false, isPacked: false, updatedAt: now };
       }
     });
     setBags(updated);
@@ -827,46 +947,56 @@ export function App() {
   };
 
   const toggleBagPacked = (id: string) => {
-    const updated = bags.map((b) => (b.id === id ? { ...b, isPacked: !b.isPacked } : b));
+    const now = Date.now();
+    const updated = bags.map((b) => (b.id === id ? { ...b, isPacked: !b.isPacked, updatedAt: now } : b));
     setBags(updated);
     syncAllState({ bags: updated });
   };
 
   const handleAddBag = (bag: Omit<BagAsset, 'id'>) => {
-    const newBag: BagAsset = { ...bag, id: `bag-custom-${Date.now()}` };
+    const now = Date.now();
+    const newBag: BagAsset = { ...bag, id: `bag-custom-${now}`, updatedAt: now };
     const updated = [...bags, newBag];
     setBags(updated);
     syncAllState({ bags: updated });
   };
 
   const handleUpdateBag = (id: string, partial: Partial<BagAsset>) => {
-    const updated = bags.map((b) => (b.id === id ? { ...b, ...partial } : b));
+    const now = Date.now();
+    const updated = bags.map((b) => (b.id === id ? { ...b, ...partial, updatedAt: now } : b));
     setBags(updated);
     syncAllState({ bags: updated });
   };
 
   const handleDeleteBag = (id: string) => {
     const updated = bags.filter((b) => b.id !== id);
+    const nextDeleted = Array.from(new Set([...deletedItemIds, id]));
     setBags(updated);
-    syncAllState({ bags: updated });
+    setDeletedItemIds(nextDeleted);
+    try {
+      localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(nextDeleted));
+    } catch {}
+    syncAllState({ bags: updated, deletedItemIds: nextDeleted });
   };
 
   const toggleDeviceBought = (id: string) => {
-    const updated = devices.map((d) => (d.id === id ? { ...d, isBought: !d.isBought } : d));
+    const now = Date.now();
+    const updated = devices.map((d) => (d.id === id ? { ...d, isBought: !d.isBought, updatedAt: now } : d));
     setDevices(updated);
     syncAllState({ devices: updated });
   };
 
   const handleCycleDeviceStatus = (id: string) => {
+    const now = Date.now();
     const updated = devices.map((d) => {
       if (d.id !== id) return d;
       // Cycle: !isBought (Missing) -> isBought && !isPacked (Bought) -> isBought && isPacked (Packed) -> !isBought (Missing)
       if (!d.isBought) {
-        return { ...d, isBought: true, isPacked: false };
+        return { ...d, isBought: true, isPacked: false, updatedAt: now };
       } else if (d.isBought && !d.isPacked) {
-        return { ...d, isBought: true, isPacked: true };
+        return { ...d, isBought: true, isPacked: true, updatedAt: now };
       } else {
-        return { ...d, isBought: false, isPacked: false };
+        return { ...d, isBought: false, isPacked: false, updatedAt: now };
       }
     });
     setDevices(updated);
@@ -874,48 +1004,60 @@ export function App() {
   };
 
   const toggleDevicePacked = (id: string) => {
-    const updated = devices.map((d) => (d.id === id ? { ...d, isPacked: !d.isPacked } : d));
+    const now = Date.now();
+    const updated = devices.map((d) => (d.id === id ? { ...d, isPacked: !d.isPacked, updatedAt: now } : d));
     setDevices(updated);
     syncAllState({ devices: updated });
   };
 
   const handleAddDevice = (device: Omit<DeviceAsset, 'id'>) => {
-    const newDev: DeviceAsset = { ...device, id: `dev-custom-${Date.now()}` };
+    const now = Date.now();
+    const newDev: DeviceAsset = { ...device, id: `dev-custom-${now}`, updatedAt: now };
     const updated = [...devices, newDev];
     setDevices(updated);
     syncAllState({ devices: updated });
   };
 
   const handleUpdateDevice = (id: string, partial: Partial<DeviceAsset>) => {
-    const updated = devices.map((d) => (d.id === id ? { ...d, ...partial } : d));
+    const now = Date.now();
+    const updated = devices.map((d) => (d.id === id ? { ...d, ...partial, updatedAt: now } : d));
     setDevices(updated);
     syncAllState({ devices: updated });
   };
 
   const handleDeleteDevice = (id: string) => {
     const updated = devices.filter((d) => d.id !== id);
+    const nextDeleted = Array.from(new Set([...deletedItemIds, id]));
     setDevices(updated);
-    syncAllState({ devices: updated });
+    setDeletedItemIds(nextDeleted);
+    try {
+      localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(nextDeleted));
+    } catch {}
+    syncAllState({ devices: updated, deletedItemIds: nextDeleted });
   };
 
   const toggleWardrobeBought = (id: string) => {
-    const updated = wardrobe.map((w) => (w.id === id ? { ...w, isBought: !w.isBought } : w));
+    const now = Date.now();
+    const updated = wardrobe.map((w) => (w.id === id ? { ...w, isBought: !w.isBought, updatedAt: now } : w));
     setWardrobe(updated);
     syncAllState({ wardrobe: updated });
   };
 
   const toggleWardrobePacked = (id: string) => {
-    const updated = wardrobe.map((w) => (w.id === id ? { ...w, isPacked: !w.isPacked } : w));
+    const now = Date.now();
+    const updated = wardrobe.map((w) => (w.id === id ? { ...w, isPacked: !w.isPacked, updatedAt: now } : w));
     setWardrobe(updated);
     syncAllState({ wardrobe: updated });
   };
 
   const handleAddWardrobeItem = (item: Omit<WardrobeItem, 'id'>) => {
+    const now = Date.now();
     const newItem: WardrobeItem = {
       ...item,
-      id: 'w-custom-' + Date.now(),
+      id: 'w-custom-' + now,
       syncStatus: item.syncStatus || 'uploading',
       uploadProgress: item.uploadProgress || 15,
+      updatedAt: now,
     };
     const updated = [newItem, ...wardrobe];
     setWardrobe(updated);
@@ -924,7 +1066,8 @@ export function App() {
   };
 
   const handleUpdateWardrobeItem = (id: string, partial: Partial<WardrobeItem>) => {
-    const updated = wardrobe.map((w) => (w.id === id ? { ...w, ...partial } : w));
+    const now = Date.now();
+    const updated = wardrobe.map((w) => (w.id === id ? { ...w, ...partial, updatedAt: now } : w));
     setWardrobe(updated);
     saveWardrobeItemsIDB(updated);
     syncAllState({ wardrobe: updated });
@@ -932,67 +1075,89 @@ export function App() {
 
   const handleDeleteWardrobeItem = (id: string) => {
     const updated = wardrobe.filter((w) => w.id !== id);
+    const nextDeleted = Array.from(new Set([...deletedItemIds, id]));
     setWardrobe(updated);
+    setDeletedItemIds(nextDeleted);
     saveWardrobeItemsIDB(updated);
-    syncAllState({ wardrobe: updated });
+    try {
+      localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(nextDeleted));
+    } catch {}
+    syncAllState({ wardrobe: updated, deletedItemIds: nextDeleted });
   };
 
   const handleRestoreWardrobeItems = async (restoredItems: WardrobeItem[]) => {
-    setWardrobe(restoredItems);
-    await saveWardrobeItemsIDB(restoredItems);
-    syncAllState({ wardrobe: restoredItems });
+    const now = Date.now();
+    const withTimestamps = restoredItems.map((item) => ({
+      ...item,
+      updatedAt: item.updatedAt || now,
+    }));
+    setWardrobe(withTimestamps);
+    await saveWardrobeItemsIDB(withTimestamps);
+    syncAllState({ wardrobe: withTimestamps });
   };
 
   // Handlers for Official Documents
   const toggleDocReady = (id: string) => {
-    const updated = documents.map((d) => (d.id === id ? { ...d, isReady: !d.isReady } : d));
+    const now = Date.now();
+    const updated = documents.map((d) => (d.id === id ? { ...d, isReady: !d.isReady, updatedAt: now } : d));
     setDocuments(updated);
     syncAllState({ documents: updated });
   };
 
   const toggleDocPacked = (id: string) => {
-    const updated = documents.map((d) => (d.id === id ? { ...d, isPacked: !d.isPacked } : d));
+    const now = Date.now();
+    const updated = documents.map((d) => (d.id === id ? { ...d, isPacked: !d.isPacked, updatedAt: now } : d));
     setDocuments(updated);
     syncAllState({ documents: updated });
   };
 
   const handleAddDoc = (doc: Omit<DocumentItem, 'id'>) => {
-    const newDoc: DocumentItem = { ...doc, id: 'doc-custom-' + Date.now() };
+    const now = Date.now();
+    const newDoc: DocumentItem = { ...doc, id: 'doc-custom-' + now, updatedAt: now };
     const updated = [...documents, newDoc];
     setDocuments(updated);
     syncAllState({ documents: updated });
   };
 
   const handleUpdateDoc = (id: string, partial: Partial<DocumentItem>) => {
-    const updated = documents.map((d) => (d.id === id ? { ...d, ...partial } : d));
+    const now = Date.now();
+    const updated = documents.map((d) => (d.id === id ? { ...d, ...partial, updatedAt: now } : d));
     setDocuments(updated);
     syncAllState({ documents: updated });
   };
 
   const handleDeleteDoc = (id: string) => {
     const updated = documents.filter((d) => d.id !== id);
+    const nextDeleted = Array.from(new Set([...deletedItemIds, id]));
     setDocuments(updated);
-    syncAllState({ documents: updated });
+    setDeletedItemIds(nextDeleted);
+    try {
+      localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(nextDeleted));
+    } catch {}
+    syncAllState({ documents: updated, deletedItemIds: nextDeleted });
   };
 
   // Handlers for Apps & 3 Checkpoints
   const toggleAppInstalled = (id: string) => {
-    const updated = apps.map((a) => (a.id === id ? { ...a, isInstalled: !a.isInstalled } : a));
+    const now = Date.now();
+    const updated = apps.map((a) => (a.id === id ? { ...a, isInstalled: !a.isInstalled, updatedAt: now } : a));
     setApps(updated);
     syncAllState({ apps: updated });
   };
 
   const toggleAppLoggedIn = (id: string) => {
-    const updated = apps.map((a) => (a.id === id ? { ...a, isLoggedIn: !a.isLoggedIn } : a));
+    const now = Date.now();
+    const updated = apps.map((a) => (a.id === id ? { ...a, isLoggedIn: !a.isLoggedIn, updatedAt: now } : a));
     setApps(updated);
     syncAllState({ apps: updated });
   };
 
   const toggleAppVerified = (id: string) => {
+    const now = Date.now();
     const updated = apps.map((a) => {
       if (a.id === id) {
         const next = !a.isVerified;
-        return { ...a, isVerified: next, isConfigured: next };
+        return { ...a, isVerified: next, isConfigured: next, updatedAt: now };
       }
       return a;
     });
@@ -1001,10 +1166,11 @@ export function App() {
   };
 
   const toggleAppConfigured = (id: string) => {
+    const now = Date.now();
     const updated = apps.map((a) => {
       if (a.id === id) {
         const next = !a.isConfigured;
-        return { ...a, isConfigured: next, isVerified: next };
+        return { ...a, isConfigured: next, isVerified: next, updatedAt: now };
       }
       return a;
     });
@@ -1013,7 +1179,8 @@ export function App() {
   };
 
   const handleAddApp = (app: Omit<AppConfigItem, 'id'>) => {
-    const newApp: AppConfigItem = { ...app, id: 'app-custom-' + Date.now() };
+    const now = Date.now();
+    const newApp: AppConfigItem = { ...app, id: 'app-custom-' + now, updatedAt: now };
     const updated = [...apps, newApp];
     setApps(updated);
     syncAllState({ apps: updated });
@@ -1021,8 +1188,13 @@ export function App() {
 
   const handleDeleteApp = (id: string) => {
     const updated = apps.filter((a) => a.id !== id);
+    const nextDeleted = Array.from(new Set([...deletedItemIds, id]));
     setApps(updated);
-    syncAllState({ apps: updated });
+    setDeletedItemIds(nextDeleted);
+    try {
+      localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(nextDeleted));
+    } catch {}
+    syncAllState({ apps: updated, deletedItemIds: nextDeleted });
   };
 
   // Milestone Completion
@@ -1108,7 +1280,7 @@ export function App() {
                 </span>
 
                 {/* Live Supabase Rippling Green Indicator */}
-                {isSupabaseConnected && (
+                {isSupabaseConnected && !isOfflineLocked && (
                   <span
                     className="ripple-green-dot shrink-0"
                     title="Live Supabase Sync Active"
@@ -1131,6 +1303,36 @@ export function App() {
               title="Emergency Data Recovery & Raw Names Vault"
             >
               <span className="text-sm">🛡️</span>
+            </button>
+
+            {/* TOP-BAR DOWNLOAD / OFFLINE LOCK TOGGLE BUTTON (Requirement #1) */}
+            <button
+              type="button"
+              onClick={handleToggleOfflineLock}
+              className={`h-8 px-2.5 sm:px-3 rounded-full flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer select-none ${
+                isOfflineLocked
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white border border-blue-400 font-bold'
+                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300/80 font-bold'
+              }`}
+              title={
+                isOfflineLocked
+                  ? 'Offline Mode Active: Reading exclusively from local cache. Tap to activate Live Cloud Sync'
+                  : 'Live Cloud Sync Active: Changes sync instantly across devices. Tap to lock offline'
+              }
+            >
+              {isOfflineLocked ? (
+                <>
+                  <span className="text-sm leading-none">📥</span>
+                  <span className="text-[11px] font-bold hidden sm:inline tracking-tight">Locked Offline</span>
+                  <span className="text-[11px] font-bold sm:hidden">Locked</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span className="text-[11px] font-bold text-emerald-800 hidden sm:inline tracking-tight">☁️ Live</span>
+                  <span className="text-[11px] font-bold text-emerald-800 sm:hidden">Live</span>
+                </>
+              )}
             </button>
 
             <button
@@ -1163,7 +1365,7 @@ export function App() {
             <TopDockedProfileAirline
               passportInfo={passportInfo}
               onUpdatePassportInfo={handleUpdatePassportInfo}
-              isCloudSynced={isSupabaseConnected}
+              isCloudSynced={isSupabaseConnected && !isOfflineLocked}
             />
 
             {/* SECTION 2: 10 HARDWARE & LUGGAGE SHOWCASE WIDGETS (Strict 3-State Cycle) */}

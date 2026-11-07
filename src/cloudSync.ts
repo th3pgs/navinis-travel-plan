@@ -7,6 +7,7 @@ const LOCAL_STORAGE_KEY = 'navini_master_state_v5';
 export interface AppMasterState {
   version: string;
   lastUpdated: string;
+  lastUpdatedAt?: number;
   passportInfo: {
     passportNumber: string;
     expiryDate: string;
@@ -33,11 +34,29 @@ export interface AppMasterState {
   customBanks?: string[];
   customAppCategories?: string[];
   customAppDevices?: string[];
+  deletedItemIds?: string[];
+}
+
+export const CLIENT_ID = 'client_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
+
+export function isOfflineLocked(): boolean {
+  try {
+    return localStorage.getItem('navini_offline_locked') === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setOfflineLocked(locked: boolean): void {
+  try {
+    localStorage.setItem('navini_offline_locked', locked ? 'true' : 'false');
+  } catch {}
 }
 
 let syncDebounceTimer: any = null;
 let _pushInFlight = false;
 let _lastPushTimestamp = 0;
+let _activeRealtimeChannel: any = null;
 
 export function isPushInFlight(): boolean {
   return _pushInFlight;
@@ -45,6 +64,43 @@ export function isPushInFlight(): boolean {
 
 export function getLastPushTimestamp(): number {
   return _lastPushTimestamp;
+}
+
+/**
+ * Merges two item lists based on individual `updatedAt` timestamps and tombstone deletedIds.
+ * Newer timestamp always wins. Any item in deletedIds is completely purged.
+ */
+export function mergeItemsByTimestamp<T extends { id: string; updatedAt?: number }>(
+  localList: T[],
+  remoteList: T[],
+  deletedIds: string[] = []
+): T[] {
+  const deletedSet = new Set(deletedIds);
+  const map = new Map<string, T>();
+
+  // 1. Put local items (excluding deleted)
+  for (const item of localList) {
+    if (!deletedSet.has(item.id)) {
+      map.set(item.id, item);
+    }
+  }
+
+  // 2. Merge remote items
+  for (const item of remoteList) {
+    if (deletedSet.has(item.id)) continue;
+    const existing = map.get(item.id);
+    if (!existing) {
+      map.set(item.id, item);
+    } else {
+      const existingTime = existing.updatedAt || 0;
+      const remoteTime = item.updatedAt || 0;
+      if (remoteTime >= existingTime) {
+        map.set(item.id, item);
+      }
+    }
+  }
+
+  return Array.from(map.values());
 }
 
 /**
@@ -204,7 +260,7 @@ export async function uploadPhotoToSupabase(
 
 /**
  * Fetch the master plan state from Supabase `app_state` (row `id = 'main_plan'`)
- * with instant local cache fallback.
+ * with instant local cache fallback. Skips network when offline locked.
  */
 export async function fetchCloudState(): Promise<AppMasterState | null> {
   const localSaved = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -213,6 +269,12 @@ export async function fetchCloudState(): Promise<AppMasterState | null> {
     try {
       localState = JSON.parse(localSaved);
     } catch (e) {}
+  }
+
+  // If offline locked, strictly return local cached state with zero network
+  if (isOfflineLocked()) {
+    console.log('[CloudSync] Device is offline locked. Reading exclusively from local cache.');
+    return localState;
   }
 
   try {
@@ -224,7 +286,6 @@ export async function fetchCloudState(): Promise<AppMasterState | null> {
 
     if (!error && data && data.payload) {
       const remote = data.payload as AppMasterState;
-      // Accept remote if it has passportInfo or newer
       if (remote.passportInfo) {
         try {
           localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(remote));
@@ -240,13 +301,45 @@ export async function fetchCloudState(): Promise<AppMasterState | null> {
 }
 
 /**
- * Push master state to Supabase `app_state` (row `id = 'main_plan'`)
- * with instant local storage write and debounced cloud upsert.
+ * Broadcasts a state delta or complete master state to all connected peer tabs/devices
+ * over Supabase WebSockets Realtime broadcast channel (<100ms ultra-fast delivery).
  */
-export function pushCloudState(state: AppMasterState, immediate = false): Promise<boolean> {
-  state.lastUpdated = new Date().toISOString();
+export function broadcastLiveSync(delta: {
+  action: string;
+  item?: any;
+  itemId?: string;
+  masterState?: AppMasterState;
+  deletedItemIds?: string[];
+  timestamp?: number;
+}) {
+  if (isOfflineLocked()) return;
+  if (_activeRealtimeChannel) {
+    try {
+      _activeRealtimeChannel.send({
+        type: 'broadcast',
+        event: 'state_update',
+        payload: {
+          ...delta,
+          senderId: CLIENT_ID,
+          timestamp: delta.timestamp || Date.now(),
+        },
+      });
+    } catch (err) {
+      console.warn('Realtime broadcast error:', err);
+    }
+  }
+}
+
+/**
+ * Push master state to Supabase `app_state` (row `id = 'main_plan'`)
+ * with instant local storage write, WebSocket broadcast, and database upsert.
+ */
+export function pushCloudState(state: AppMasterState, immediate = true): Promise<boolean> {
+  const now = Date.now();
+  state.lastUpdated = new Date(now).toISOString();
+  state.lastUpdatedAt = now;
   _pushInFlight = true;
-  _lastPushTimestamp = Date.now();
+  _lastPushTimestamp = now;
 
   // Ensure wardrobe never contains apps or non-wardrobe artifacts
   if (Array.isArray(state.wardrobe)) {
@@ -265,25 +358,19 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
 
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
-    localStorage.setItem('navini_passport_profile_v5', JSON.stringify(state.passportInfo));
-    localStorage.setItem('navini_bags_v5', JSON.stringify(state.bags));
-    localStorage.setItem('navini_devices_v5', JSON.stringify(state.devices));
-    localStorage.setItem('navini_wardrobe_v5', JSON.stringify(state.wardrobe));
-    localStorage.setItem('navini_docs_v5', JSON.stringify(state.documents));
-    localStorage.setItem('navini_procedure_steps_v5', JSON.stringify(state.procedureSteps));
-    localStorage.setItem('navini_apps_v5', JSON.stringify(state.apps));
-    localStorage.setItem('navini_milestones_v5', JSON.stringify(state.milestones));
-    if (state.customCategories) {
-      localStorage.setItem('navini_custom_categories_v5', JSON.stringify(state.customCategories));
-    }
+    localStorage.setItem('navini_passport_profile_v7', JSON.stringify(state.passportInfo));
+    localStorage.setItem('navini_bags_v7', JSON.stringify(state.bags));
+    localStorage.setItem('navini_devices_v7', JSON.stringify(state.devices));
+    localStorage.setItem('navini_wardrobe_v7', JSON.stringify(state.wardrobe));
+    localStorage.setItem('navini_docs_v7', JSON.stringify(state.documents));
+    localStorage.setItem('navini_procedure_steps_v7', JSON.stringify(state.procedureSteps));
+    localStorage.setItem('navini_apps_v7', JSON.stringify(state.apps));
+    localStorage.setItem('navini_milestones_v7', JSON.stringify(state.milestones));
     if (state.categories) {
       localStorage.setItem('navini_categories_v8', JSON.stringify(state.categories));
     }
     if (state.deletedCategories) {
       localStorage.setItem('navini_deleted_categories_v8', JSON.stringify(state.deletedCategories));
-    }
-    if (state.customLocations) {
-      localStorage.setItem('navini_custom_locations_v5', JSON.stringify(state.customLocations));
     }
     if (state.locations) {
       localStorage.setItem('navini_locations_v8', JSON.stringify(state.locations));
@@ -291,19 +378,29 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
     if (state.deletedLocations) {
       localStorage.setItem('navini_deleted_locations_v8', JSON.stringify(state.deletedLocations));
     }
-    if (state.customBanks) {
-      localStorage.setItem('navini_custom_banks_v5', JSON.stringify(state.customBanks));
-    }
-    if (state.customAppCategories) {
-      localStorage.setItem('navini_custom_app_categories_v5', JSON.stringify(state.customAppCategories));
-    }
-    if (state.customAppDevices) {
-      localStorage.setItem('navini_custom_app_devices_v5', JSON.stringify(state.customAppDevices));
+    if (state.deletedItemIds) {
+      localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(state.deletedItemIds));
     }
   } catch (e) {
     console.warn('Local storage write warning', e);
   }
 
+  // If offline locked, DO NOT push to cloud or broadcast!
+  if (isOfflineLocked()) {
+    console.log('[CloudSync] Device is offline locked. Changes safely queued locally.');
+    _pushInFlight = false;
+    return Promise.resolve(true);
+  }
+
+  // 2. Broadcast immediately over WebSocket to peer devices in ~100ms
+  broadcastLiveSync({
+    action: 'state_update',
+    masterState: state,
+    deletedItemIds: state.deletedItemIds,
+    timestamp: now,
+  });
+
+  // 3. Write to Supabase database (zero slow debounce)
   return new Promise((resolve) => {
     if (syncDebounceTimer) {
       clearTimeout(syncDebounceTimer);
@@ -340,42 +437,88 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
     if (immediate) {
       doPush();
     } else {
-      syncDebounceTimer = setTimeout(doPush, 400);
+      syncDebounceTimer = setTimeout(doPush, 50); // fast coalesce
     }
   });
 }
 
 /**
- * Subscribe to realtime state updates from Supabase
+ * Subscribe to realtime state updates from Supabase:
+ * Subscribes to BOTH WebSocket Broadcast channel (`navini-live-sync`) for instant peer-to-peer sync (<100ms)
+ * AND Postgres database changes for durable background replication.
  */
 export function subscribeToCloudState(
-  onUpdate: (newState: AppMasterState) => void
-) {
-  const channel = supabase
-    .channel('app_state_live_sync')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: STATE_TABLE,
-        filter: `id=eq.${STATE_ROW_ID}`,
-      },
-      (payload) => {
-        if (payload.new && (payload.new as any).payload) {
-          // If a local push just occurred within 4 seconds, ignore to prevent echo race
-          if (Date.now() - _lastPushTimestamp < 4000) return;
-          const remoteState = (payload.new as any).payload as AppMasterState;
-          if (remoteState && remoteState.passportInfo) {
-            onUpdate(remoteState);
-          }
+  onUpdate: (newState: AppMasterState, source: 'postgres' | 'broadcast') => void,
+  onDelta?: (delta: any) => void
+): () => void {
+  if (isOfflineLocked()) {
+    console.log('[LiveSync] Device is offline locked. Skipping Realtime subscription.');
+    return () => {};
+  }
+
+  if (_activeRealtimeChannel) {
+    try {
+      supabase.removeChannel(_activeRealtimeChannel);
+    } catch {}
+    _activeRealtimeChannel = null;
+  }
+
+  const channel = supabase.channel('navini-live-sync', {
+    config: {
+      broadcast: { ack: false, self: false },
+    },
+  });
+
+  // 1. WebSocket Broadcast: Direct peer-to-peer tab/device sync in ~100ms
+  channel.on('broadcast', { event: 'state_update' }, (event) => {
+    if (isOfflineLocked()) return;
+    const payload = event.payload;
+    if (!payload || payload.senderId === CLIENT_ID) return;
+
+    console.log('[LiveSync] Ultra-fast WebSocket broadcast received from peer:', payload.action);
+    if (payload.masterState) {
+      onUpdate(payload.masterState, 'broadcast');
+    }
+    if (onDelta) {
+      onDelta(payload);
+    }
+  });
+
+  // 2. Postgres Database Changes: Durable fallback when database row is updated
+  channel.on(
+    'postgres_changes',
+    {
+      event: '*',
+      schema: 'public',
+      table: STATE_TABLE,
+      filter: `id=eq.${STATE_ROW_ID}`,
+    },
+    (payload) => {
+      if (isOfflineLocked()) return;
+      if (payload.new && (payload.new as any).payload) {
+        // Echo check: if local push happened within 500ms, skip duplicate
+        if (Date.now() - _lastPushTimestamp < 500) return;
+        const remoteState = (payload.new as any).payload as AppMasterState;
+        if (remoteState && remoteState.passportInfo) {
+          onUpdate(remoteState, 'postgres');
         }
       }
-    )
-    .subscribe();
+    }
+  );
+
+  channel.subscribe((status) => {
+    console.log('[LiveSync] Channel subscription status:', status);
+  });
+
+  _activeRealtimeChannel = channel;
 
   return () => {
-    supabase.removeChannel(channel);
+    if (_activeRealtimeChannel) {
+      try {
+        supabase.removeChannel(_activeRealtimeChannel);
+      } catch {}
+      _activeRealtimeChannel = null;
+    }
   };
 }
 

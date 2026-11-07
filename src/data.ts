@@ -13,6 +13,7 @@ export interface WardrobeItem {
   syncStatus?: 'uploading' | 'synced' | 'error';
   uploadProgress?: number;
   localPhotoPreview?: string;
+  updatedAt?: number;
 }
 
 export interface GiftItem {
@@ -23,6 +24,7 @@ export interface GiftItem {
   packagingNote: string;
   recipient: string;
   isPacked: boolean;
+  updatedAt?: number;
 }
 
 export interface BankingTaskItem {
@@ -32,6 +34,7 @@ export interface BankingTaskItem {
   detail: string;
   isDone: boolean;
   priority?: 'Critical' | 'High' | 'Medium';
+  updatedAt?: number;
 }
 
 export interface BagAsset {
@@ -45,6 +48,7 @@ export interface BagAsset {
   isBought: boolean;
   isPacked: boolean;
   kind: 'rolling-large' | 'rolling-medium' | 'backpack' | 'fannypack' | 'custom' | string;
+  updatedAt?: number;
 }
 
 export interface DeviceAsset {
@@ -57,6 +61,7 @@ export interface DeviceAsset {
   isBought: boolean;
   isPacked: boolean;
   type: 'phone-ios' | 'phone-android' | 'laptop' | 'tablet' | 'earbuds' | 'powerbank';
+  updatedAt?: number;
 }
 
 export interface DocumentItem {
@@ -68,6 +73,7 @@ export interface DocumentItem {
   isPacked: boolean;
   notes: string;
   priority: 'High' | 'Critical' | 'Medium';
+  updatedAt?: number;
 }
 
 export interface AppConfigItem {
@@ -82,6 +88,7 @@ export interface AppConfigItem {
   isVerified?: boolean;
   isConfigured: boolean;
   appIcon: string;
+  updatedAt?: number;
 }
 
 export type InternetAppItem = AppConfigItem;
