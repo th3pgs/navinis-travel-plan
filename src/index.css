@@ -130,6 +130,20 @@
     print-color-adjust: exact !important;
   }
 
+  /* Full-Screen Catalog Modal Print Override: switch from fixed/scroll to static document flow */
+  .catalog-modal-container {
+    position: static !important;
+    inset: auto !important;
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    background: #ffffff !important;
+  }
+
   .no-print,
   header,
   footer,
@@ -145,6 +159,43 @@
   .break-after-avoid {
     break-after: avoid !important;
     page-break-after: avoid !important;
+  }
+
+  /* Strict 5-Column Compact Print Grid (15-25 items per page) */
+  .catalog-print-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .catalog-print-card {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  .catalog-print-image-wrap {
+    aspect-ratio: 1 / 1 !important;
+    max-height: 105px !important;
+    width: 100% !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+  }
+
+  .catalog-print-image {
+    max-height: 105px !important;
+    width: 100% !important;
+    object-fit: cover !important;
+    border-radius: 8px !important;
+  }
+
+  .catalog-print-title {
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+  }
+
+  .catalog-print-bag {
+    font-size: 8.5px !important;
   }
 
   img {

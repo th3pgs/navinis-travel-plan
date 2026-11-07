@@ -24,6 +24,10 @@ import {
   Crop,
   Printer,
   X,
+  Search,
+  LayoutGrid,
+  List,
+  Image as ImageIcon,
   Luggage,
   Sparkles,
   ShoppingBag,
@@ -264,6 +268,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSuitcaseFilter, setSelectedSuitcaseFilter] = useState<string>('all');
   const [isPrintMode, setIsPrintMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [catalogViewMode, setCatalogViewMode] = useState<'detailed' | 'list' | 'pictures'>('detailed');
 
   // Luggage Inspection Drawer state
   const [inspectBag, setInspectBag] = useState<BagAsset | null>(null);
@@ -291,6 +297,18 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     window.addEventListener('beforeprint', handleBeforePrint);
     return () => window.removeEventListener('beforeprint', handleBeforePrint);
   }, []);
+
+  // Close full-screen preview with Escape key
+  React.useEffect(() => {
+    if (!isPrintMode) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsPrintMode(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPrintMode]);
 
   // All categories: standard 9 categories + user custom categories + any distinct categories on items
   const allCategories = React.useMemo(() => {
@@ -323,8 +341,34 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     });
   }, [wardrobe, selectedCategory, selectedSuitcaseFilter, bags]);
 
-  // Group all wardrobe items by category for the print catalog
-  // CRITICAL FIX: Groups all actual wardrobe items so 100% of items appear, never dropped or empty!
+  // Multi-keyword deep matching for the catalog preview
+  const filteredCatalogItems = React.useMemo(() => {
+    const rawQuery = searchQuery.trim().toLowerCase();
+    if (!rawQuery) return wardrobe;
+
+    const tokens = rawQuery.split(/\s+/).filter(Boolean);
+
+    return wardrobe.filter((item) => {
+      const searchBlob = [
+        item.name,
+        item.category,
+        normalizeCategoryName(item.category),
+        item.targetBag,
+        item.subType,
+        item.notes,
+        item.colorHex,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      // Deep keyword matching: all tokens must match
+      return tokens.every((token) => searchBlob.includes(token));
+    });
+  }, [wardrobe, searchQuery]);
+
+  // Group filtered wardrobe items by category for the print catalog
+  // CRITICAL: Derives from filtered items so all matched items appear and empty categories hide
   const printCategoryGroups = React.useMemo(() => {
     const map = new Map<string, WardrobeItem[]>();
 
@@ -333,8 +377,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
       map.set(cat, []);
     });
 
-    // Map each wardrobe item to its canonical group or custom category
-    wardrobe.forEach((item) => {
+    // Map each filtered wardrobe item to its canonical group or custom category
+    filteredCatalogItems.forEach((item) => {
       const normCat = normalizeCategoryName(item.category);
       if (!map.has(normCat)) {
         map.set(normCat, []);
@@ -352,7 +396,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     });
 
     return groups;
-  }, [wardrobe]);
+  }, [filteredCatalogItems]);
 
   const packedCount = wardrobe.filter((w) => w.isPacked).length;
   const packedPercent = Math.round((packedCount / (wardrobe.length || 1)) * 100);
@@ -452,148 +496,404 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     }
   };
 
-  // PRINT VIEW: Dedicated Full Clean Mode (Clothing Items Partitioned by Category ONLY)
+  // PRINT VIEW: Full-Screen In-App Preview Window with Search & View Mode Switcher
   if (isPrintMode) {
-    const totalPieces = wardrobe.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0);
+    const totalCatalogPieces = filteredCatalogItems.reduce((sum, i) => sum + (Number(i.quantity) || 1), 0);
 
     return (
-      <div className="min-h-screen bg-white text-slate-900 p-4 sm:p-6 max-w-5xl mx-auto space-y-6 print:p-0 print:m-0 print:max-w-none print:w-full">
-        {/* Floating Print Controls (Hidden on paper print) */}
-        <div className="no-print sticky top-4 z-50 bg-slate-900 text-white p-3 rounded-2xl shadow-xl flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Printer className="w-5 h-5 text-emerald-400" />
-            <span className="font-bold text-xs sm:text-sm">
-              Navini's Packing Catalog
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm active:scale-95"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Print / Save PDF</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsPrintMode(false)}
-              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors cursor-pointer"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-
-        {/* Minimal Single-Line Print Header */}
-        <div className="border-b-2 border-slate-900 pb-2 flex items-center justify-between">
-          <div>
-            <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
-              Navini's Packing Catalog
-            </h1>
-            <p className="text-[11px] text-slate-500 font-medium">
-              Physical inventory & suitcase allocation lookbook
-            </p>
-          </div>
-          <div className="text-right">
-            <span className="text-xs sm:text-sm text-slate-900 font-mono font-bold block">
-              {totalPieces} pieces ({wardrobe.length} items)
-            </span>
-            <span className="text-[10px] text-slate-500 font-mono">
-              China Eastern Airlines • Haikou
-            </span>
-          </div>
-        </div>
-
-        {/* Partitioned Categorized Clothing Photos Grid */}
-        {wardrobe.length === 0 ? (
-          <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-2xl p-8">
-            <p className="font-bold text-sm text-slate-800">Your packing list is currently empty</p>
-            <p className="text-xs text-slate-500 mt-1">Add items to Luggage & Wardrobe to generate your printable visual catalog.</p>
-            <button
-              type="button"
-              onClick={() => setIsPrintMode(false)}
-              className="mt-4 px-4 py-2 rounded-xl bg-[#007AFF] text-white text-xs font-bold cursor-pointer"
-            >
-              Back to Wardrobe
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-6 pt-1">
-            {printCategoryGroups.map(({ category, items, totalPieces: catPieces }) => (
-              <div key={category} className="space-y-2.5 print:break-inside-auto">
-                <div className="flex items-center justify-between border-b border-slate-900 pb-1 break-after-avoid">
-                  <h2 className="font-bold text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
-                    {category} ({catPieces} pcs)
-                  </h2>
-                  <span className="text-[11px] text-slate-500 font-mono">
-                    {items.length} {items.length === 1 ? 'item' : 'items'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 print:grid-cols-3 print:gap-2.5">
-                  {items.map((item) => {
-                    const visual = getCategoryVisual(item.name, item.category);
-                    return (
-                      <div
-                        key={item.id}
-                        className="rounded-xl border border-slate-200 bg-white overflow-hidden flex flex-col justify-between shadow-2xs break-inside-avoid print:border-slate-300"
-                      >
-                        {/* Large Square Photo (aspect-ratio: 1/1 with explicit min-height for print safety) */}
-                        <div className="w-full aspect-square min-h-[110px] bg-slate-100 relative overflow-hidden flex items-center justify-center border-b border-slate-100">
-                          {item.photoUrl ? (
-                            <img
-                              src={item.photoUrl}
-                              alt={item.name}
-                              crossOrigin="anonymous"
-                              loading="eager"
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                                const fallback = e.currentTarget.parentElement?.querySelector('.fallback-emoji');
-                                if (fallback) (fallback as HTMLElement).style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-
-                          <div
-                            className={`fallback-emoji flex flex-col items-center justify-center p-2 text-center w-full h-full ${
-                              item.photoUrl ? 'hidden' : 'flex'
-                            }`}
-                          >
-                            <span className="text-3xl mb-1">{visual.emoji}</span>
-                          </div>
-
-                          {/* Quantity Badge */}
-                          <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/75 text-white font-mono font-bold text-[10px]">
-                            x{item.quantity || 1}
-                          </div>
-
-                          {/* Medicine SubType Badge */}
-                          {item.subType && (
-                            <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-red-600 text-white font-bold text-[9px]">
-                              {item.subType}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Item Details right underneath photo */}
-                        <div className="p-2 space-y-0.5 flex-1 flex flex-col justify-between">
-                          <div className="font-bold text-xs text-slate-900 leading-tight line-clamp-2">
-                            {item.name}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-mono truncate pt-1 border-t border-slate-100">
-                            📍 {item.targetBag}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+      <div className="catalog-modal-container fixed inset-0 z-[9999] overflow-y-auto bg-white text-slate-900 flex flex-col">
+        {/* Top Sticky Control Bar Inside Full-Screen Preview (Hidden When Printing via @media print) */}
+        <div className="no-print sticky top-0 z-50 bg-slate-900 text-white px-3 sm:px-6 py-2.5 shadow-xl border-b border-slate-800">
+          <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+            {/* Center/Left: Instant Multi-Keyword Search Bar */}
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="hidden sm:flex items-center gap-1.5 shrink-0 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/10">
+                <Printer className="w-4 h-4 text-emerald-400" />
+                <span className="font-bold text-xs tracking-tight">Catalog</span>
               </div>
-            ))}
+
+              <div className="relative flex-1 min-w-[180px] max-w-xl">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search items, colors, patterns, bags (e.g., flower, red, skirt)..."
+                  className="w-full bg-slate-800 text-white placeholder-slate-400 text-xs rounded-xl pl-9 pr-8 py-2 border border-slate-700 focus:outline-hidden focus:border-[#007AFF] focus:ring-1 focus:ring-[#007AFF] transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5 rounded-full cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Layout View Switcher Icons + Action Buttons */}
+            <div className="flex items-center justify-between md:justify-end gap-2 shrink-0">
+              {/* 3-Icon Segmented View Switcher */}
+              <div className="bg-slate-800 p-0.5 rounded-xl border border-slate-700 flex items-center">
+                <button
+                  type="button"
+                  onClick={() => setCatalogViewMode('detailed')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    catalogViewMode === 'detailed'
+                      ? 'bg-[#007AFF] text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
+                  title="Detailed Grid View (5-Column Compact Cards)"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span className="text-[11px] font-medium hidden xs:inline">Grid</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCatalogViewMode('list')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    catalogViewMode === 'list'
+                      ? 'bg-[#007AFF] text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
+                  title="List View (Compact High-Density Rows)"
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span className="text-[11px] font-medium hidden xs:inline">List</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCatalogViewMode('pictures')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    catalogViewMode === 'pictures'
+                      ? 'bg-[#007AFF] text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
+                  title="Pictures-Only View (Pure Photo Matrix)"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  <span className="text-[11px] font-medium hidden xs:inline">Photos</span>
+                </button>
+              </div>
+
+              {/* Action Buttons: Print / Save PDF & Close */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs active:scale-95"
+                  title="Print or Save PDF"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Print / Save PDF</span>
+                  <span className="sm:hidden">Print</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPrintMode(false)}
+                  className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1"
+                  title="Close Preview"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline">Close</span>
+                </button>
+              </div>
+            </div>
           </div>
-        )}
+        </div>
+
+        {/* Full-Screen Catalog Body Container */}
+        <div className="flex-1 p-4 sm:p-6 max-w-6xl mx-auto w-full space-y-5 print:p-0 print:m-0 print:max-w-none print:w-full">
+          {/* Minimal Single-Line Print Header (Visible on Paper & Screen) */}
+          <div className="border-b-2 border-slate-900 pb-2 flex items-center justify-between gap-3">
+            <div>
+              <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+                Navini's Packing Catalog
+              </h1>
+              <p className="text-[11px] text-slate-500 font-medium">
+                Physical inventory & suitcase allocation lookbook
+              </p>
+            </div>
+            <div className="text-right">
+              <span className="text-xs sm:text-sm text-slate-900 font-mono font-bold block">
+                {totalCatalogPieces} pieces ({filteredCatalogItems.length} items)
+              </span>
+              <span className="text-[10px] text-slate-500 font-mono">
+                China Eastern Airlines • Haikou
+              </span>
+            </div>
+          </div>
+
+          {/* Search Results Summary Banner (Screen Only) */}
+          {searchQuery.trim() && filteredCatalogItems.length > 0 && (
+            <div className="no-print bg-blue-50 border border-blue-200 text-blue-900 px-3 py-1.5 rounded-xl text-xs flex items-center justify-between gap-2">
+              <span>
+                Found <strong>{filteredCatalogItems.length}</strong> matching {filteredCatalogItems.length === 1 ? 'item' : 'items'} for "<span className="font-semibold">{searchQuery.trim()}</span>"
+              </span>
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="text-[#007AFF] hover:underline font-bold text-xs shrink-0 cursor-pointer"
+              >
+                Clear filter
+              </button>
+            </div>
+          )}
+
+          {/* Partitioned Categorized Clothing Photos Grid */}
+          {filteredCatalogItems.length === 0 ? (
+            searchQuery.trim() ? (
+              <div className="text-center py-14 border-2 border-dashed border-slate-200 rounded-2xl p-6">
+                <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
+                  <Search className="w-6 h-6" />
+                </div>
+                <p className="font-bold text-sm text-slate-800">
+                  No items matching "{searchQuery.trim()}"
+                </p>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  Try searching for another keyword (e.g., dress, skirt, linen, large, paracetamol, or sky blue).
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="mt-3.5 px-3.5 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer"
+                >
+                  Clear Search
+                </button>
+              </div>
+            ) : (
+              <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-2xl p-8">
+                <p className="font-bold text-sm text-slate-800">Your packing list is currently empty</p>
+                <p className="text-xs text-slate-500 mt-1">Add items to Luggage & Wardrobe to generate your printable visual catalog.</p>
+                <button
+                  type="button"
+                  onClick={() => setIsPrintMode(false)}
+                  className="mt-4 px-4 py-2 rounded-xl bg-[#007AFF] text-white text-xs font-bold cursor-pointer"
+                >
+                  Back to Wardrobe
+                </button>
+              </div>
+            )
+          ) : (
+            <div className="space-y-6 pt-1">
+              {printCategoryGroups.map(({ category, items, totalPieces: catPieces }) => (
+                <div key={category} className="space-y-2.5 print:break-inside-auto">
+                  {/* Category Header */}
+                  <div className="flex items-center justify-between border-b border-slate-900 pb-1 break-after-avoid">
+                    <h2 className="font-bold text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
+                      {category} ({catPieces} pcs)
+                    </h2>
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      {items.length} {items.length === 1 ? 'item' : 'items'}
+                    </span>
+                  </div>
+
+                  {/* 1. VIEW MODE: DETAILED (Default 5-Column Compact Grid) */}
+                  {catalogViewMode === 'detailed' && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 catalog-print-grid">
+                      {items.map((item) => {
+                        const visual = getCategoryVisual(item.name, item.category);
+                        return (
+                          <div
+                            key={item.id}
+                            className="catalog-print-card rounded-xl border border-slate-200 bg-white overflow-hidden flex flex-col justify-between shadow-2xs break-inside-avoid hover:border-slate-300 transition-all"
+                          >
+                            {/* Photo Container */}
+                            <div className="catalog-print-image-wrap w-full aspect-square min-h-[90px] max-h-[110px] sm:max-h-[120px] bg-slate-100 relative overflow-hidden flex items-center justify-center border-b border-slate-100">
+                              {item.photoUrl ? (
+                                <img
+                                  src={item.photoUrl}
+                                  alt={item.name}
+                                  crossOrigin="anonymous"
+                                  loading="eager"
+                                  className="catalog-print-image w-full h-full object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    const fallback = e.currentTarget.parentElement?.querySelector('.fallback-emoji');
+                                    if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                                  }}
+                                />
+                              ) : null}
+
+                              <div
+                                className={`fallback-emoji flex flex-col items-center justify-center p-2 text-center w-full h-full ${
+                                  item.photoUrl ? 'hidden' : 'flex'
+                                }`}
+                              >
+                                <span className="text-2xl sm:text-3xl mb-0.5">{visual.emoji}</span>
+                              </div>
+
+                              {/* Quantity Badge */}
+                              <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/75 text-white font-mono font-bold text-[9px]">
+                                x{item.quantity || 1}
+                              </div>
+
+                              {/* Medicine SubType Badge */}
+                              {item.subType && (
+                                <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-red-600 text-white font-bold text-[8.5px]">
+                                  {item.subType}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Item Details */}
+                            <div className="p-2 space-y-0.5 flex-1 flex flex-col justify-between">
+                              <div className="catalog-print-title font-bold text-[11px] sm:text-xs text-slate-900 leading-tight line-clamp-2">
+                                {item.name}
+                              </div>
+                              {item.notes && (
+                                <div className="text-[9px] text-slate-400 truncate line-clamp-1">
+                                  {item.notes}
+                                </div>
+                              )}
+                              <div className="catalog-print-bag text-[9px] sm:text-[10px] text-slate-500 font-mono truncate pt-1 border-t border-slate-100">
+                                📍 {item.targetBag}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* 2. VIEW MODE: LIST (Ultra-Compact High-Density Rows) */}
+                  {catalogViewMode === 'list' && (
+                    <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white overflow-hidden shadow-2xs">
+                      {items.map((item) => {
+                        const visual = getCategoryVisual(item.name, item.category);
+                        return (
+                          <div
+                            key={item.id}
+                            className="catalog-print-card break-inside-avoid p-2 sm:px-3 sm:py-2 flex items-center justify-between gap-3 hover:bg-slate-50/70 transition-colors"
+                          >
+                            {/* Left: Thumbnail + Title + Notes */}
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <div className="w-9 h-9 rounded-lg bg-slate-100 shrink-0 overflow-hidden flex items-center justify-center border border-slate-200 relative">
+                                {item.photoUrl ? (
+                                  <img
+                                    src={item.photoUrl}
+                                    alt={item.name}
+                                    crossOrigin="anonymous"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                      const fb = e.currentTarget.parentElement?.querySelector('.list-fallback-emoji');
+                                      if (fb) (fb as HTMLElement).style.display = 'block';
+                                    }}
+                                  />
+                                ) : null}
+                                <span className={`list-fallback-emoji text-base ${item.photoUrl ? 'hidden' : 'block'}`}>
+                                  {visual.emoji}
+                                </span>
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-xs sm:text-sm text-slate-900 leading-tight truncate">
+                                    {item.name}
+                                  </span>
+                                  {item.subType && (
+                                    <span className="px-1.5 py-0.2 rounded bg-red-100 text-red-700 font-semibold text-[9px] shrink-0">
+                                      {item.subType}
+                                    </span>
+                                  )}
+                                </div>
+                                {item.notes && (
+                                  <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                                    {item.notes}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Right: Quantity + Target Bag */}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 font-mono font-bold text-xs">
+                                x{item.quantity || 1}
+                              </span>
+                              <span className="text-[10px] sm:text-xs text-slate-600 font-mono bg-slate-50 border border-slate-200/80 px-2 py-0.5 rounded-md max-w-[170px] truncate hidden xs:inline-block">
+                                📍 {item.targetBag}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* 3. VIEW MODE: PICTURES-ONLY (Tight Photo Matrix) */}
+                  {catalogViewMode === 'pictures' && (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 catalog-print-grid">
+                      {items.map((item) => {
+                        const visual = getCategoryVisual(item.name, item.category);
+                        return (
+                          <div
+                            key={item.id}
+                            className="catalog-print-card relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-2xs group break-inside-avoid hover:border-slate-400 transition-all"
+                          >
+                            {item.photoUrl ? (
+                              <img
+                                src={item.photoUrl}
+                                alt={item.name}
+                                crossOrigin="anonymous"
+                                loading="eager"
+                                className="catalog-print-image w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  const fb = e.currentTarget.parentElement?.querySelector('.pic-fallback-emoji');
+                                  if (fb) (fb as HTMLElement).style.display = 'flex';
+                                }}
+                              />
+                            ) : null}
+
+                            <div
+                              className={`pic-fallback-emoji flex flex-col items-center justify-center p-2 text-center w-full h-full ${
+                                item.photoUrl ? 'hidden' : 'flex'
+                              }`}
+                            >
+                              <span className="text-3xl mb-1">{visual.emoji}</span>
+                              <span className="text-[9px] font-bold text-slate-600 px-1 truncate max-w-full">
+                                {item.name}
+                              </span>
+                            </div>
+
+                            {/* Quantity Badge */}
+                            <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-black/75 text-white font-mono font-bold text-[9px] shadow-xs">
+                              x{item.quantity || 1}
+                            </div>
+
+                            {/* Medicine SubType Badge */}
+                            {item.subType && (
+                              <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-red-600 text-white font-bold text-[8.5px] shadow-xs">
+                                {item.subType}
+                              </div>
+                            )}
+
+                            {/* Bottom Title & Bag Overlay */}
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/50 to-transparent p-1.5 pt-4 text-white pointer-events-none">
+                              <div className="text-[10px] font-bold leading-tight line-clamp-1 drop-shadow-xs">
+                                {item.name}
+                              </div>
+                              <div className="text-[8.5px] text-slate-300 font-mono truncate">
+                                📍 {item.targetBag}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -612,14 +912,14 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         </button>
 
         <div className="flex items-center gap-2">
-          {/* Print Visual Packing Catalog Button */}
+          {/* Catalog / Print Button */}
           <button
             type="button"
             onClick={() => setIsPrintMode(true)}
             className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
           >
             <Printer className="w-4 h-4 text-emerald-400" />
-            <span>Print Catalog</span>
+            <span>Catalog / Print</span>
           </button>
 
           {/* Add Item Button */}
