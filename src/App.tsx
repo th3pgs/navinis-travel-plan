@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Menu,
   Luggage,
@@ -18,6 +18,7 @@ import {
   BankingTaskItem,
   GiftItem,
   DEFAULT_WARDROBE_CATEGORIES,
+  DEFAULT_BAG_LOCATIONS,
   INITIAL_BAGS,
   INITIAL_DEVICES,
   INITIAL_DOCUMENTS,
@@ -38,6 +39,7 @@ import {
   pushCloudState,
   subscribeToCloudState,
   checkSupabaseConnection,
+  uploadWardrobeItemPhotoAtomic,
 } from './cloudSync';
 
 import { AuthGate } from './components/AuthGate';
@@ -214,6 +216,67 @@ export function App() {
     return [];
   });
 
+  // Canonical Single Source of Truth for Categories & Locations (v8)
+  const [categories, setCategories] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('navini_categories_v8');
+      const deleted = JSON.parse(localStorage.getItem('navini_deleted_categories_v8') || '[]');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((c: string) => !deleted.includes(c));
+        }
+      }
+      const legacyCustom = JSON.parse(localStorage.getItem('navini_custom_categories_v7') || '[]');
+      const combined = Array.from(new Set([...DEFAULT_WARDROBE_CATEGORIES, ...legacyCustom]));
+      return combined.filter((c) => !deleted.includes(c));
+    } catch {
+      return DEFAULT_WARDROBE_CATEGORIES;
+    }
+  });
+
+  const [deletedCategories, setDeletedCategories] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('navini_deleted_categories_v8');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [locations, setLocations] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('navini_locations_v8');
+      const deleted = JSON.parse(localStorage.getItem('navini_deleted_locations_v8') || '[]');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((l: string) => !deleted.includes(l));
+        }
+      }
+      const legacyCustom = JSON.parse(localStorage.getItem('navini_custom_locations_v7') || '[]');
+      const combined = Array.from(new Set([...DEFAULT_BAG_LOCATIONS, ...legacyCustom]));
+      return combined.filter((l) => !deleted.includes(l));
+    } catch {
+      return DEFAULT_BAG_LOCATIONS;
+    }
+  });
+
+  const [deletedLocations, setDeletedLocations] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('navini_deleted_locations_v8');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Background Non-Blocking Upload Queue State
+  const [uploadingCount, setUploadingCount] = useState<number>(0);
+  const [showSyncedPill, setShowSyncedPill] = useState<boolean>(false);
+  const activeUploadsRef = useRef<Set<string>>(new Set());
+  const prevUploadingCountRef = useRef<number>(0);
+
   const [customBanks, setCustomBanks] = useState<string[]>([]);
   const [customAppCategories, setCustomAppCategories] = useState<string[]>(() => {
     try {
@@ -259,7 +322,6 @@ export function App() {
         if (remote.wardrobe?.length) {
           const migrated = migrateWardrobeItems(remote.wardrobe);
           setWardrobe((prev) => {
-            // If local state/IndexedDB already has more items, merge them instead of blindly wiping!
             if (prev.length > migrated.length) {
               const map = new Map<string, WardrobeItem>();
               migrated.forEach((w) => map.set(w.id, w));
@@ -278,6 +340,20 @@ export function App() {
         if (remote.documents?.length) setDocuments(remote.documents);
         if (remote.apps?.length) setApps(migrateLegacyApps(remote.apps));
         if (remote.milestones?.length) setMilestones(remote.milestones);
+        if (remote.categories?.length) {
+          const del = remote.deletedCategories || [];
+          setCategories(remote.categories.filter((c: string) => !del.includes(c)));
+        }
+        if (remote.deletedCategories?.length) {
+          setDeletedCategories(remote.deletedCategories);
+        }
+        if (remote.locations?.length) {
+          const del = remote.deletedLocations || [];
+          setLocations(remote.locations.filter((l: string) => !del.includes(l)));
+        }
+        if (remote.deletedLocations?.length) {
+          setDeletedLocations(remote.deletedLocations);
+        }
         if (remote.customCategories?.length) setCustomCategories(remote.customCategories);
         if (remote.customLocations?.length) setCustomLocations(remote.customLocations);
         if (remote.customAppCategories?.length) setCustomAppCategories(remote.customAppCategories);
@@ -303,6 +379,20 @@ export function App() {
       if (incoming.documents?.length) setDocuments(incoming.documents);
       if (incoming.apps?.length) setApps(migrateLegacyApps(incoming.apps));
       if (incoming.milestones?.length) setMilestones(incoming.milestones);
+      if (incoming.categories?.length) {
+        const del = incoming.deletedCategories || [];
+        setCategories(incoming.categories.filter((c: string) => !del.includes(c)));
+      }
+      if (incoming.deletedCategories?.length) {
+        setDeletedCategories(incoming.deletedCategories);
+      }
+      if (incoming.locations?.length) {
+        const del = incoming.deletedLocations || [];
+        setLocations(incoming.locations.filter((l: string) => !del.includes(l)));
+      }
+      if (incoming.deletedLocations?.length) {
+        setDeletedLocations(incoming.deletedLocations);
+      }
       if (incoming.customCategories?.length) setCustomCategories(incoming.customCategories);
       if (incoming.customLocations?.length) setCustomLocations(incoming.customLocations);
       if (incoming.customAppCategories?.length) setCustomAppCategories(incoming.customAppCategories);
@@ -327,6 +417,10 @@ export function App() {
 
   // Sync state to local storage & push to Supabase
   const syncAllState = (overrides?: Partial<AppMasterState>) => {
+    const cats = overrides?.categories || categories;
+    const delCats = overrides?.deletedCategories || deletedCategories;
+    const locs = overrides?.locations || locations;
+    const delLocs = overrides?.deletedLocations || deletedLocations;
     const cCats = overrides?.customCategories || customCategories;
     const cLocs = overrides?.customLocations || customLocations;
     const cAppCats = overrides?.customAppCategories || customAppCategories;
@@ -353,6 +447,10 @@ export function App() {
       localStorage.setItem('navini_docs_v7', JSON.stringify(docItems));
       localStorage.setItem('navini_apps_v7', JSON.stringify(appItems));
       localStorage.setItem('navini_milestones_v7', JSON.stringify(mStones));
+      localStorage.setItem('navini_categories_v8', JSON.stringify(cats));
+      localStorage.setItem('navini_deleted_categories_v8', JSON.stringify(delCats));
+      localStorage.setItem('navini_locations_v8', JSON.stringify(locs));
+      localStorage.setItem('navini_deleted_locations_v8', JSON.stringify(delLocs));
       localStorage.setItem('navini_custom_categories_v7', JSON.stringify(cCats));
       localStorage.setItem('navini_custom_locations_v7', JSON.stringify(cLocs));
       localStorage.setItem('navini_custom_app_categories_v7', JSON.stringify(cAppCats));
@@ -362,7 +460,7 @@ export function App() {
     }
 
     const masterState: AppMasterState = {
-      version: '7.0',
+      version: '8.0',
       lastUpdated: new Date().toISOString(),
       passportInfo: pInfo,
       bags: bAssets,
@@ -375,6 +473,10 @@ export function App() {
       apps: appItems,
       milestones: mStones,
       confirmedCampusChat: overrides?.confirmedCampusChat ?? confirmedCampusChat,
+      categories: cats,
+      deletedCategories: delCats,
+      locations: locs,
+      deletedLocations: delLocs,
       customCategories: cCats,
       customLocations: cLocs,
       customBanks,
@@ -386,28 +488,100 @@ export function App() {
     pushCloudState(masterState, isImmediate);
   };
 
-  // Dynamic classification handlers
-  const handleAddCustomCategory = (cat: string) => {
-    const trimmed = cat.trim();
-    if (!trimmed || customCategories.includes(trimmed)) return;
-    const updated = [...customCategories, trimmed];
-    setCustomCategories(updated);
-    syncAllState({ customCategories: updated });
+  // Background Upload Queue Worker
+  const processItemUpload = async (item: WardrobeItem) => {
+    if (activeUploadsRef.current.has(item.id)) return;
+    activeUploadsRef.current.add(item.id);
+
+    try {
+      const result = await uploadWardrobeItemPhotoAtomic(item, (progress) => {
+        setWardrobe((prev) =>
+          prev.map((w) => (w.id === item.id ? { ...w, uploadProgress: progress } : w))
+        );
+      });
+
+      if (result.success) {
+        const finalUrl = result.photoUrl || item.photoUrl;
+        setWardrobe((prev) => {
+          const updated = prev.map((w) =>
+            w.id === item.id
+              ? {
+                  ...w,
+                  photoUrl: finalUrl,
+                  syncStatus: 'synced' as const,
+                  uploadProgress: 100,
+                }
+              : w
+          );
+          saveWardrobeItemsIDB(updated);
+          syncAllState({ wardrobe: updated });
+          return updated;
+        });
+      } else {
+        setWardrobe((prev) =>
+          prev.map((w) =>
+            w.id === item.id
+              ? {
+                  ...w,
+                  syncStatus: 'error' as const,
+                }
+              : w
+          )
+        );
+      }
+    } catch (err) {
+      console.error('Background upload queue error for item:', item.id, err);
+      setWardrobe((prev) =>
+        prev.map((w) => (w.id === item.id ? { ...w, syncStatus: 'error' as const } : w))
+      );
+    } finally {
+      activeUploadsRef.current.delete(item.id);
+    }
   };
 
-  const handleDeleteCustomCategory = (catToDelete: string) => {
-    const updatedCustom = customCategories.filter((c) => c !== catToDelete);
-    setCustomCategories(updatedCustom);
-    // Move any items in that category to fallback
-    const fallbackCategory = 'Daily Essentials, Cutlery & Folders';
-    const updatedWardrobe = wardrobe.map((w) =>
-      w.category === catToDelete ? { ...w, category: fallbackCategory } : w
+  useEffect(() => {
+    const uploadingItems = wardrobe.filter((w) => w.syncStatus === 'uploading');
+    const count = uploadingItems.length;
+    setUploadingCount(count);
+
+    if (count > 0) {
+      uploadingItems.forEach((item) => {
+        if (!activeUploadsRef.current.has(item.id)) {
+          processItemUpload(item);
+        }
+      });
+    }
+  }, [wardrobe]);
+
+  useEffect(() => {
+    if (prevUploadingCountRef.current > 0 && uploadingCount === 0) {
+      setShowSyncedPill(true);
+      const timer = setTimeout(() => setShowSyncedPill(false), 3000);
+      return () => clearTimeout(timer);
+    }
+    prevUploadingCountRef.current = uploadingCount;
+  }, [uploadingCount]);
+
+  const handleRetryWardrobeItemSync = (id: string) => {
+    setWardrobe((prev) =>
+      prev.map((w) =>
+        w.id === id ? { ...w, syncStatus: 'uploading' as const, uploadProgress: 15 } : w
+      )
     );
-    setWardrobe(updatedWardrobe);
-    saveWardrobeItemsIDB(updatedWardrobe);
+  };
+
+  // Dynamic classification handlers (Cascade updates to all items)
+  const handleAddCategory = (newCat: string) => {
+    const trimmed = newCat.trim();
+    if (!trimmed || categories.includes(trimmed)) return;
+    const updatedCategories = [...categories, trimmed];
+    const updatedDeleted = deletedCategories.filter((c) => c !== trimmed);
+    setCategories(updatedCategories);
+    setDeletedCategories(updatedDeleted);
     syncAllState({
-      customCategories: updatedCustom,
-      wardrobe: updatedWardrobe,
+      categories: updatedCategories,
+      deletedCategories: updatedDeleted,
+      customCategories: updatedCategories.filter((c) => !DEFAULT_WARDROBE_CATEGORIES.includes(c)),
     });
   };
 
@@ -415,21 +589,144 @@ export function App() {
     const trimmed = newCategory.trim();
     if (!trimmed || oldCategory === trimmed) return;
 
-    let updatedCustom = [...customCategories];
-    if (updatedCustom.includes(oldCategory)) {
-      updatedCustom = updatedCustom.map((c) => (c === oldCategory ? trimmed : c));
-    } else if (!DEFAULT_WARDROBE_CATEGORIES.includes(trimmed)) {
-      updatedCustom.push(trimmed);
+    const updatedCategories = categories.map((c) => (c === oldCategory ? trimmed : c));
+    if (!updatedCategories.includes(trimmed)) {
+      updatedCategories.push(trimmed);
     }
-    setCustomCategories(updatedCustom);
+    const updatedDeleted = Array.from(new Set([...deletedCategories, oldCategory])).filter(
+      (c) => c !== trimmed
+    );
+    setCategories(updatedCategories);
+    setDeletedCategories(updatedDeleted);
 
+    // Cascade rename to all wardrobe items
     const updatedWardrobe = wardrobe.map((w) =>
       w.category === oldCategory ? { ...w, category: trimmed } : w
     );
     setWardrobe(updatedWardrobe);
     saveWardrobeItemsIDB(updatedWardrobe);
+
     syncAllState({
-      customCategories: updatedCustom,
+      categories: updatedCategories,
+      deletedCategories: updatedDeleted,
+      customCategories: updatedCategories.filter((c) => !DEFAULT_WARDROBE_CATEGORIES.includes(c)),
+      wardrobe: updatedWardrobe,
+    });
+  };
+
+  const handleDeleteCategory = (catToDelete: string) => {
+    const updatedCategories = categories.filter((c) => c !== catToDelete);
+    const updatedDeleted = Array.from(new Set([...deletedCategories, catToDelete]));
+    setCategories(updatedCategories);
+    setDeletedCategories(updatedDeleted);
+
+    // Reassign items in deleted category to first available category
+    const fallbackCategory = updatedCategories[0] || 'Uncategorized';
+    const updatedWardrobe = wardrobe.map((w) =>
+      w.category === catToDelete ? { ...w, category: fallbackCategory } : w
+    );
+    setWardrobe(updatedWardrobe);
+    saveWardrobeItemsIDB(updatedWardrobe);
+
+    syncAllState({
+      categories: updatedCategories,
+      deletedCategories: updatedDeleted,
+      customCategories: updatedCategories.filter((c) => !DEFAULT_WARDROBE_CATEGORIES.includes(c)),
+      wardrobe: updatedWardrobe,
+    });
+  };
+
+  const handleAddLocation = (newLoc: string) => {
+    const trimmed = newLoc.trim();
+    if (!trimmed || locations.includes(trimmed)) return;
+    const updatedLocations = [...locations, trimmed];
+    const updatedDeleted = deletedLocations.filter((l) => l !== trimmed);
+    setLocations(updatedLocations);
+    setDeletedLocations(updatedDeleted);
+
+    const exists = bags.some(
+      (b) => b.name.toLowerCase() === trimmed.toLowerCase() || b.id === trimmed
+    );
+    let updatedBags = bags;
+    if (!exists) {
+      const newBag: BagAsset = {
+        id: `bag-custom-${Date.now()}`,
+        name: trimmed,
+        type: 'Custom Storage Container',
+        dimensions: 'Flexible Container',
+        weightLimit: 'Personal Carry',
+        targetBag: trimmed,
+        recommendedContents: 'User designated packing parcel / container',
+        isBought: true,
+        isPacked: false,
+        kind: 'custom',
+      };
+      updatedBags = [...bags, newBag];
+      setBags(updatedBags);
+    }
+
+    syncAllState({
+      locations: updatedLocations,
+      deletedLocations: updatedDeleted,
+      customLocations: updatedLocations.filter((l) => !DEFAULT_BAG_LOCATIONS.includes(l)),
+      bags: updatedBags,
+    });
+  };
+
+  const handleRenameLocation = (oldLoc: string, newLoc: string) => {
+    const trimmed = newLoc.trim();
+    if (!trimmed || oldLoc === trimmed) return;
+
+    const updatedLocations = locations.map((l) => (l === oldLoc ? trimmed : l));
+    if (!updatedLocations.includes(trimmed)) {
+      updatedLocations.push(trimmed);
+    }
+    const updatedDeleted = Array.from(new Set([...deletedLocations, oldLoc])).filter(
+      (l) => l !== trimmed
+    );
+    setLocations(updatedLocations);
+    setDeletedLocations(updatedDeleted);
+
+    const updatedWardrobe = wardrobe.map((w) =>
+      w.targetBag === oldLoc ? { ...w, targetBag: trimmed } : w
+    );
+    setWardrobe(updatedWardrobe);
+    saveWardrobeItemsIDB(updatedWardrobe);
+
+    const updatedBags = bags.map((b) => (b.name === oldLoc ? { ...b, name: trimmed, targetBag: trimmed } : b));
+    setBags(updatedBags);
+
+    syncAllState({
+      locations: updatedLocations,
+      deletedLocations: updatedDeleted,
+      customLocations: updatedLocations.filter((l) => !DEFAULT_BAG_LOCATIONS.includes(l)),
+      bags: updatedBags,
+      wardrobe: updatedWardrobe,
+    });
+  };
+
+  const handleDeleteLocation = (locToDelete: string) => {
+    const updatedLocations = locations.filter((l) => l !== locToDelete);
+    const updatedDeleted = Array.from(new Set([...deletedLocations, locToDelete]));
+    setLocations(updatedLocations);
+    setDeletedLocations(updatedDeleted);
+
+    const fallbackLoc = updatedLocations[0] || 'Main Large Rolling Suitcase';
+
+    const updatedWardrobe = wardrobe.map((w) =>
+      w.targetBag === locToDelete ? { ...w, targetBag: fallbackLoc } : w
+    );
+    setWardrobe(updatedWardrobe);
+    saveWardrobeItemsIDB(updatedWardrobe);
+
+    const updatedBags = bags.filter((b) => b.name !== locToDelete);
+    setBags(updatedBags);
+
+    syncAllState({
+      locations: updatedLocations,
+      deletedLocations: updatedDeleted,
+      customLocations: updatedLocations.filter((l) => !DEFAULT_BAG_LOCATIONS.includes(l)),
+      bags: updatedBags,
       wardrobe: updatedWardrobe,
     });
   };
@@ -614,7 +911,12 @@ export function App() {
   };
 
   const handleAddWardrobeItem = (item: Omit<WardrobeItem, 'id'>) => {
-    const newItem: WardrobeItem = { ...item, id: 'w-custom-' + Date.now() };
+    const newItem: WardrobeItem = {
+      ...item,
+      id: 'w-custom-' + Date.now(),
+      syncStatus: item.syncStatus || 'uploading',
+      uploadProgress: item.uploadProgress || 15,
+    };
     const updated = [newItem, ...wardrobe];
     setWardrobe(updated);
     saveWardrobeItemsIDB(updated);
@@ -755,6 +1057,33 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] text-slate-900 pb-20 font-sans overflow-x-hidden print:bg-white print:pb-0 print:overflow-visible">
+      {/* COMPACT FLOATING SYNC PILL (TOP-RIGHT VIEWPORT) */}
+      {(uploadingCount > 0 || showSyncedPill) && (
+        <div
+          className={`fixed top-3 right-3 sm:top-4 sm:right-4 z-[100000] h-7 px-3 rounded-full flex items-center gap-1.5 backdrop-blur-md shadow-lg pointer-events-none transition-all duration-300 ${
+            uploadingCount > 0
+              ? 'bg-slate-900/90 text-white border border-slate-700/80 animate-in fade-in slide-in-from-top-2'
+              : 'bg-emerald-900/90 text-emerald-100 border border-emerald-500/50 animate-in fade-in slide-in-from-top-2'
+          }`}
+        >
+          {uploadingCount > 0 ? (
+            <>
+              <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
+              <span className="text-[11px] font-semibold">
+                Uploading {uploadingCount} item{uploadingCount > 1 ? 's' : ''} in background...
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-xs">☁️✓</span>
+              <span className="text-[11px] font-semibold text-emerald-200">
+                All items saved to database
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
       {/* 1. TOP HEADER (China Flag PNG Branding & Live Supabase Rippling Indicator) */}
       <header className="bg-white/90 backdrop-blur-md border-b border-black/10 sticky top-0 z-40 w-full transition-all">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between gap-3">
@@ -993,17 +1322,27 @@ export function App() {
             bags={bags}
             devices={devices}
             documents={documents}
+            categories={categories}
+            deletedCategories={deletedCategories}
+            locations={locations}
+            deletedLocations={deletedLocations}
             customLocations={customLocations}
             customCategories={customCategories}
-            onAddCustomLocation={handleAddCustomLocation}
-            onAddCustomCategory={handleAddCustomCategory}
-            onDeleteCustomCategory={handleDeleteCustomCategory}
+            onAddLocation={handleAddLocation}
+            onRenameLocation={handleRenameLocation}
+            onDeleteLocation={handleDeleteLocation}
+            onAddCategory={handleAddCategory}
             onRenameCategory={handleRenameCategory}
+            onDeleteCategory={handleDeleteCategory}
+            onAddCustomLocation={handleAddLocation}
+            onAddCustomCategory={handleAddCategory}
+            onDeleteCustomCategory={handleDeleteCategory}
             onToggleWardrobeBought={toggleWardrobeBought}
             onToggleWardrobePacked={toggleWardrobePacked}
             onAddWardrobeItem={handleAddWardrobeItem}
             onUpdateWardrobeItem={handleUpdateWardrobeItem}
             onDeleteWardrobeItem={handleDeleteWardrobeItem}
+            onRetryUpload={handleRetryWardrobeItemSync}
             onToggleBagBought={toggleBagBought}
             onToggleBagPacked={toggleBagPacked}
             onAddBag={handleAddBag}
@@ -1109,10 +1448,10 @@ export function App() {
         deviceItems={devices}
         documentItems={documents}
         giftItems={gifts}
-        locationOptions={Array.from(new Set([...bags.map((b) => b.name), ...customLocations]))}
-        wardrobeCategories={Array.from(new Set(['Dresses & Frocks', 'Tops & T-Shirts', 'Bottoms & Jeans', 'Undergarments & Innerwear', 'Footwear & Slippers', 'Bottles, Liquids & Toiletries', 'Medicine & First Aid', 'Gifts & Souvenirs', 'Daily Essentials, Cutlery & Folders', ...customCategories]))}
-        onAddCustomLocation={handleAddCustomLocation}
-        onAddCustomCategory={handleAddCustomCategory}
+        locationOptions={locations}
+        wardrobeCategories={categories}
+        onAddCustomLocation={handleAddLocation}
+        onAddCustomCategory={handleAddCategory}
         onToggleWardrobePacked={toggleWardrobePacked}
         onToggleDevicePacked={toggleDevicePacked}
         onToggleDocPacked={toggleDocPacked}

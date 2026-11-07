@@ -62,7 +62,7 @@ export const WardrobeManager: React.FC<WardrobeManagerProps> = ({
     setEditName(item.name);
     setEditCategory(item.category);
     setEditTargetBag(item.targetBag);
-    setEditQuantity(item.quantity);
+    setEditQuantity(Number(item.quantity) || 1);
     setEditNotes(item.notes || '');
   };
 

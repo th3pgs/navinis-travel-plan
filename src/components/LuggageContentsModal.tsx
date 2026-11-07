@@ -21,6 +21,8 @@ import {
   DeviceAsset,
   DocumentItem,
   isItemInBag,
+  parseTitleAndColor,
+  formatQuantityBadge,
 } from '../data';
 import { DynamicSelect } from './DynamicSelect';
 import { IOSConfirmModal } from './IOSConfirmModal';
@@ -110,7 +112,7 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
   const [quickAddType, setQuickAddType] = useState<'wardrobe' | 'gift' | 'device' | 'doc'>('wardrobe');
   const [quickAddName, setQuickAddName] = useState('');
   const [quickAddCategory, setQuickAddCategory] = useState('Tops');
-  const [quickAddQty, setQuickAddQty] = useState(1);
+  const [quickAddQty, setQuickAddQty] = useState<string>('1');
   const [quickAddNotes, setQuickAddNotes] = useState('');
 
   // Custom iOS In-App Confirm Dialog state
@@ -183,7 +185,7 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
         onAddWardrobeItem({
           name: quickAddName.trim(),
           category: quickAddCategory,
-          quantity: Math.max(1, quickAddQty),
+          quantity: quickAddQty.trim() || '1',
           targetBag: assignedLoc,
           isBought: true,
           isPacked: false,
@@ -192,7 +194,7 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
       } else if (quickAddType === 'gift') {
         onAddGift({
           name: quickAddName.trim(),
-          quantity: Math.max(1, quickAddQty),
+          quantity: parseInt(quickAddQty) || 1,
           targetBag: assignedLoc,
           recipient: quickAddNotes.trim() || 'Professors & Campus Buddies',
           packagingNote: 'Pack safely in ' + bag.name,
@@ -225,7 +227,7 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
     } finally {
       setQuickAddName('');
       setQuickAddNotes('');
-      setQuickAddQty(1);
+      setQuickAddQty('1');
       setShowQuickAdd(false);
     }
   };
@@ -402,35 +404,48 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                             Save
                           </button>
                         </div>
-                      ) : (
-                        <div className="flex items-center justify-between gap-2">
-                          <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
-                            {item.name}
-                          </h4>
-                          <button
-                            type="button"
-                            onClick={() => handleStartEdit(item.id, item.name)}
-                            className="text-[#8E8E93] hover:text-[#007AFF] p-0.5 cursor-pointer"
-                            title="Edit name"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-1.5 text-[11px] text-[#8E8E93] mt-0.5 flex-wrap">
-                        <span className="font-semibold text-slate-700">Qty: {item.quantity}</span>
-                        <span>•</span>
-                        <span className="px-1.5 py-0.2 rounded-md bg-pink-50 text-pink-700 font-medium">
-                          {item.category}
-                        </span>
-                        {item.notes && (
+                      ) : (() => {
+                        const { mainTitle, colorLabel } = parseTitleAndColor(item.name);
+                        return (
                           <>
-                            <span>•</span>
-                            <span className="truncate italic max-w-[180px]">{item.notes}</span>
+                            <div className="flex items-center justify-between gap-2">
+                              <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">
+                                {mainTitle}
+                              </h4>
+                              <button
+                                type="button"
+                                onClick={() => handleStartEdit(item.id, item.name)}
+                                className="text-[#8E8E93] hover:text-[#007AFF] p-0.5 cursor-pointer"
+                                title="Edit name"
+                              >
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 text-[11px] text-[#8E8E93] mt-0.5 flex-wrap">
+                              <span className="font-semibold text-slate-700">Qty: {formatQuantityBadge(item.quantity)}</span>
+                              <span>•</span>
+                              <span className="px-1.5 py-0.2 rounded-md bg-pink-50 text-pink-700 font-medium">
+                                {item.category}
+                              </span>
+                              {colorLabel && (
+                                <>
+                                  <span>•</span>
+                                  <span className="px-1.5 py-0.2 rounded-full bg-violet-50 text-violet-700 border border-violet-200/80 font-medium">
+                                    🎨 {colorLabel}
+                                  </span>
+                                </>
+                              )}
+                              {item.notes && (
+                                <>
+                                  <span>•</span>
+                                  <span className="truncate italic max-w-[180px]">{item.notes}</span>
+                                </>
+                              )}
+                            </div>
                           </>
-                        )}
-                      </div>
+                        );
+                      })()}
                     </div>
 
                     {onDeleteWardrobeItem && (

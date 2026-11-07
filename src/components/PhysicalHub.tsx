@@ -12,6 +12,8 @@ import {
   migrateWardrobeItems,
   isUnnamedRetake,
   normalizeBagLocation,
+  parseTitleAndColor,
+  formatQuantityBadge,
 } from '../data';
 import {
   ChevronLeft,
@@ -51,17 +53,27 @@ interface PhysicalHubProps {
   devices: DeviceAsset[];
   gifts?: any[];
   documents?: DocumentItem[];
+  categories?: string[];
+  deletedCategories?: string[];
+  locations?: string[];
+  deletedLocations?: string[];
   customLocations?: string[];
   customCategories?: string[];
+  onAddLocation?: (name: string) => void;
+  onRenameLocation?: (oldLoc: string, newLoc: string) => void;
+  onDeleteLocation?: (loc: string) => void;
+  onAddCategory?: (cat: string) => void;
+  onRenameCategory?: (oldCategory: string, newCategory: string) => void;
+  onDeleteCategory?: (category: string) => void;
   onAddCustomLocation?: (name: string) => void;
   onAddCustomCategory?: (cat: string) => void;
   onDeleteCustomCategory?: (category: string) => void;
-  onRenameCategory?: (oldCategory: string, newCategory: string) => void;
   onToggleWardrobeBought: (id: string) => void;
   onToggleWardrobePacked: (id: string) => void;
   onAddWardrobeItem: (item: Omit<WardrobeItem, 'id'>) => void;
   onUpdateWardrobeItem: (id: string, updated: Partial<WardrobeItem>) => void;
   onDeleteWardrobeItem: (id: string) => void;
+  onRetryUpload?: (id: string) => void;
   onToggleBagBought: (id: string) => void;
   onToggleBagPacked?: (id: string) => void;
   onAddBag?: (bag: Omit<BagAsset, 'id'>) => void;
@@ -280,17 +292,27 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   bags,
   devices,
   documents = [],
+  categories = [],
+  deletedCategories = [],
+  locations = [],
+  deletedLocations = [],
   customLocations = [],
   customCategories = [],
+  onAddLocation,
+  onRenameLocation,
+  onDeleteLocation,
+  onAddCategory,
+  onRenameCategory,
+  onDeleteCategory,
   onAddCustomLocation,
   onAddCustomCategory,
   onDeleteCustomCategory,
-  onRenameCategory,
   onToggleWardrobeBought,
   onToggleWardrobePacked,
   onAddWardrobeItem,
   onUpdateWardrobeItem,
   onDeleteWardrobeItem,
+  onRetryUpload,
   onToggleBagBought,
   onToggleDeviceBought,
 }) => {
@@ -309,11 +331,11 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<WardrobeItem | null>(null);
 
-  // Form Fields inside Modal
+  // Form Fields inside Modal (Free-Text Quantity support)
   const [formName, setFormName] = useState('');
   const [formCategory, setFormCategory] = useState('Dresses & Frocks');
   const [formSubType, setFormSubType] = useState('');
-  const [formQuantity, setFormQuantity] = useState(1);
+  const [formQuantity, setFormQuantity] = useState<string>('1');
   const [formTargetBag, setFormTargetBag] = useState('Main Large Rolling Suitcase');
   const [formNotes, setFormNotes] = useState('');
   const [formPhotoUrl, setFormPhotoUrl] = useState('');
@@ -438,18 +460,27 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     return wardrobe.filter((w) => !isUnnamedRetake(w));
   }, [wardrobe]);
 
-  // All categories: standard 9 categories + user custom categories + any distinct categories on items
+  // Canonical categories: Single Source of Truth (no dynamic resurrection)
   const allCategories = React.useMemo(() => {
-    const extraCategories = wardrobe
-      .map((w) => normalizeCategoryName(w.category))
-      .filter((c) => !DEFAULT_WARDROBE_CATEGORIES.includes(c));
-    return Array.from(new Set([...DEFAULT_WARDROBE_CATEGORIES, ...customCategories, ...extraCategories]));
-  }, [customCategories, wardrobe]);
+    if (categories && categories.length > 0) {
+      return categories;
+    }
+    const deleted = deletedCategories || [];
+    const base = customCategories && customCategories.length > 0
+      ? Array.from(new Set([...DEFAULT_WARDROBE_CATEGORIES, ...customCategories]))
+      : DEFAULT_WARDROBE_CATEGORIES;
+    return base.filter((c) => !deleted.includes(c));
+  }, [categories, deletedCategories, customCategories]);
 
-  // All bag locations
+  // Canonical bag locations: Single Source of Truth
   const allLocations = React.useMemo(() => {
-    return Array.from(new Set([...DEFAULT_BAG_LOCATIONS, ...bags.map((b) => b.name), ...customLocations]));
-  }, [bags, customLocations]);
+    if (locations && locations.length > 0) {
+      return locations;
+    }
+    const deleted = deletedLocations || [];
+    const defaultList = [...DEFAULT_BAG_LOCATIONS, ...bags.map((b) => b.name), ...customLocations];
+    return Array.from(new Set(defaultList)).filter((l) => !deleted.includes(l));
+  }, [locations, deletedLocations, bags, customLocations]);
 
   // Filtered Items (isolates unnamed items from regular category views)
   const displayedItems = React.useMemo(() => {
@@ -565,7 +596,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     setFormName('');
     setFormCategory(selectedCategory !== 'all' ? selectedCategory : 'Dresses & Frocks');
     setFormSubType('');
-    setFormQuantity(1);
+    setFormQuantity('1');
     setFormTargetBag('Main Large Rolling Suitcase');
     setFormNotes('');
     setFormPhotoUrl('');
@@ -578,7 +609,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     setFormName(item.name);
     setFormCategory(item.category);
     setFormSubType(item.subType || '');
-    setFormQuantity(item.quantity || 1);
+    setFormQuantity(String(item.quantity ?? '1'));
     setFormTargetBag(item.targetBag);
     setFormNotes(item.notes || '');
     setFormPhotoUrl(item.photoUrl || '');
@@ -586,54 +617,43 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSaveModal = async (keepOpenForNext = false) => {
+  const handleSaveModal = (keepOpenForNext = false) => {
     const trimmedName = formName.trim();
     if (!trimmedName) return;
 
     try {
-      let finalPhotoUrl = formPhotoUrl;
-      // If photo is a large uncompressed base64 string, compress it to max 400x400 JPEG at 0.6 quality (~15-25KB)
-      if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image') && finalPhotoUrl.length > 30000) {
-        try {
-          finalPhotoUrl = await compressPhotoToMax400(finalPhotoUrl, 400, 0.6);
-        } catch {}
-      }
+      const finalPhotoUrl = formPhotoUrl;
+      const isLocalDataPhoto = finalPhotoUrl && finalPhotoUrl.startsWith('data:image');
+
+      const itemPayload = {
+        name: trimmedName,
+        category: formCategory,
+        subType: formCategory === 'Medicine & First Aid' ? formSubType : undefined,
+        quantity: formQuantity.trim() || '1',
+        targetBag: formTargetBag,
+        notes: formNotes.trim(),
+        photoUrl: finalPhotoUrl,
+        colorHex: formColorHex,
+        syncStatus: (isLocalDataPhoto ? 'uploading' : 'synced') as 'uploading' | 'synced',
+        uploadProgress: isLocalDataPhoto ? 15 : 100,
+      };
 
       if (editingItem) {
-        onUpdateWardrobeItem(editingItem.id, {
-          name: trimmedName,
-          category: formCategory,
-          subType: formCategory === 'Medicine & First Aid' ? formSubType : undefined,
-          quantity: formQuantity,
-          targetBag: formTargetBag,
-          notes: formNotes.trim(),
-          photoUrl: finalPhotoUrl,
-          colorHex: formColorHex,
-        });
+        onUpdateWardrobeItem(editingItem.id, itemPayload);
       } else {
         onAddWardrobeItem({
-          name: trimmedName,
-          category: formCategory,
-          subType: formCategory === 'Medicine & First Aid' ? formSubType : undefined,
-          quantity: formQuantity,
-          targetBag: formTargetBag,
-          notes: formNotes.trim(),
-          photoUrl: finalPhotoUrl,
-          colorHex: formColorHex,
+          ...itemPayload,
           isBought: true,
           isPacked: false,
         });
       }
-
-      setSaveToast('✓ Saved to iPad & Cloud');
-      setTimeout(() => setSaveToast(null), 3200);
 
       if (keepOpenForNext) {
         // Clear name, notes, and photo, but preserve selected category and luggage allocation
         setFormName('');
         setFormNotes('');
         setFormPhotoUrl('');
-        setFormQuantity(1);
+        setFormQuantity('1');
         setEditingItem(null);
       } else {
         setIsModalOpen(false);
@@ -641,6 +661,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         setFormName('');
         setFormNotes('');
         setFormPhotoUrl('');
+        setFormQuantity('1');
       }
     } catch (err) {
       console.error('Error saving wardrobe item:', err);
@@ -892,6 +913,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 catalog-print-grid">
                       {items.map((item) => {
                         const visual = getCategoryVisual(item.name, item.category);
+                        const { mainTitle, colorLabel } = parseTitleAndColor(item.name);
                         return (
                           <div
                             key={item.id}
@@ -924,7 +946,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
 
                               {/* Quantity Badge */}
                               <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/75 text-white font-mono font-bold text-[9px]">
-                                x{item.quantity || 1}
+                                {formatQuantityBadge(item.quantity)}
                               </div>
 
                               {/* Medicine SubType Badge */}
@@ -936,9 +958,17 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                             </div>
 
                             {/* Item Details */}
-                            <div className="p-2 space-y-0.5 flex-1 flex flex-col justify-between">
-                              <div className="catalog-print-title font-bold text-[11px] sm:text-xs text-slate-900 leading-tight line-clamp-2">
-                                {item.name}
+                            <div className="p-2 space-y-1 flex-1 flex flex-col justify-between">
+                              <div>
+                                <div className="catalog-print-title font-bold text-[11px] sm:text-xs text-slate-900 leading-tight line-clamp-2">
+                                  {mainTitle}
+                                </div>
+                                {colorLabel && (
+                                  <div className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-violet-50 text-violet-700 border border-violet-200/80 text-[8.5px] font-semibold max-w-full truncate">
+                                    <span>🎨</span>
+                                    <span className="truncate">{colorLabel}</span>
+                                  </div>
+                                )}
                               </div>
                               {item.notes && (
                                 <div className="text-[9px] text-slate-400 truncate line-clamp-1">
@@ -960,6 +990,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                     <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white overflow-hidden shadow-2xs">
                       {items.map((item) => {
                         const visual = getCategoryVisual(item.name, item.category);
+                        const { mainTitle, colorLabel } = parseTitleAndColor(item.name);
                         return (
                           <div
                             key={item.id}
@@ -989,8 +1020,14 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="font-bold text-xs sm:text-sm text-slate-900 leading-tight truncate">
-                                    {item.name}
+                                    {mainTitle}
                                   </span>
+                                  {colorLabel && (
+                                    <span className="px-1.5 py-0.2 rounded-full bg-violet-50 text-violet-700 border border-violet-200/80 text-[9px] font-semibold shrink-0 flex items-center gap-0.5">
+                                      <span>🎨</span>
+                                      <span>{colorLabel}</span>
+                                    </span>
+                                  )}
                                   {item.subType && (
                                     <span className="px-1.5 py-0.2 rounded bg-red-100 text-red-700 font-semibold text-[9px] shrink-0">
                                       {item.subType}
@@ -1008,7 +1045,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                             {/* Right: Quantity + Target Bag */}
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 font-mono font-bold text-xs">
-                                x{item.quantity || 1}
+                                {formatQuantityBadge(item.quantity)}
                               </span>
                               <span className="text-[10px] sm:text-xs text-slate-600 font-mono bg-slate-50 border border-slate-200/80 px-2 py-0.5 rounded-md max-w-[170px] truncate hidden xs:inline-block">
                                 📍 {item.targetBag}
@@ -1025,6 +1062,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 catalog-print-grid">
                       {items.map((item) => {
                         const visual = getCategoryVisual(item.name, item.category);
+                        const { mainTitle, colorLabel } = parseTitleAndColor(item.name);
                         return (
                           <div
                             key={item.id}
@@ -1052,13 +1090,13 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                             >
                               <span className="text-3xl mb-1">{visual.emoji}</span>
                               <span className="text-[9px] font-bold text-slate-600 px-1 truncate max-w-full">
-                                {item.name}
+                                {mainTitle}
                               </span>
                             </div>
 
                             {/* Quantity Badge */}
                             <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-black/75 text-white font-mono font-bold text-[9px] shadow-xs">
-                              x{item.quantity || 1}
+                              {formatQuantityBadge(item.quantity)}
                             </div>
 
                             {/* Medicine SubType Badge */}
@@ -1070,8 +1108,11 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
 
                             {/* Bottom Title & Bag Overlay */}
                             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/50 to-transparent p-1.5 pt-4 text-white pointer-events-none">
-                              <div className="text-[10px] font-bold leading-tight line-clamp-1 drop-shadow-xs">
-                                {item.name}
+                              <div className="text-[10px] font-bold leading-tight line-clamp-1 drop-shadow-xs flex items-center gap-1">
+                                <span className="truncate">{mainTitle}</span>
+                                {colorLabel && (
+                                  <span className="text-[8.5px] text-violet-200 shrink-0 font-normal">🎨 {colorLabel}</span>
+                                )}
                               </div>
                               <div className="text-[8.5px] text-slate-300 font-mono truncate">
                                 📍 {item.targetBag}
@@ -1267,7 +1308,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                         e.stopPropagation();
                         toggleSelectionId(item.id);
                       }}
-                      className={`absolute top-2 left-2 z-20 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-md ${
+                      className={`absolute top-2 left-2 z-30 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-md ${
                         isSelected ? 'bg-[#007AFF] text-white' : 'bg-white/90 text-slate-400 border border-black/20'
                       }`}
                     >
@@ -1285,14 +1326,51 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                     <span className="text-4xl">{visual.emoji}</span>
                   )}
 
+                  {/* Live In-Card Shimmer & Background Upload Progress (Requirement #2) */}
+                  {item.syncStatus === 'uploading' && (
+                    <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-xs flex flex-col items-center justify-center p-2.5 text-white z-20 animate-pulse">
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mb-1.5" />
+                      <span className="text-[10px] font-bold tracking-tight text-white/95">
+                        Uploading to DB...
+                      </span>
+                      <div className="w-full max-w-[85%] h-1.5 bg-white/20 rounded-full mt-2 overflow-hidden">
+                        <div
+                          className="h-full bg-[#007AFF] transition-all duration-300 rounded-full"
+                          style={{ width: `${item.uploadProgress || 20}%` }}
+                        />
+                      </div>
+                      <span className="text-[8px] font-mono text-white/70 mt-1">
+                        {item.uploadProgress || 20}%
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Sync Error State & In-Card Retry Button */}
+                  {item.syncStatus === 'error' && (
+                    <div className="absolute inset-0 bg-red-950/85 backdrop-blur-xs flex flex-col items-center justify-center p-2 text-white z-20 text-center">
+                      <span className="text-base mb-1">⚠️</span>
+                      <span className="text-[10px] font-bold text-red-200 leading-tight mb-2">Sync Failed</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRetryUpload?.(item.id);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold shadow-xs transition-colors cursor-pointer"
+                      >
+                        Retry Sync
+                      </button>
+                    </div>
+                  )}
+
                   {/* Quantity Badge in Corner */}
-                  <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 text-white font-mono font-bold text-[10px] shadow-2xs">
-                    x{item.quantity || 1}
+                  <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 text-white font-mono font-bold text-[10px] shadow-2xs z-10">
+                    {formatQuantityBadge(item.quantity)}
                   </span>
 
                   {/* Medicine SubType Badge */}
                   {item.subType && (
-                    <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-red-600 text-white font-bold text-[9px] shadow-2xs">
+                    <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-red-600 text-white font-bold text-[9px] shadow-2xs z-10">
                       {item.subType}
                     </span>
                   )}
@@ -1301,65 +1379,84 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   <button
                     type="button"
                     onClick={() => handleOpenEditModal(item)}
-                    className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                    className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer z-10"
                     title="Edit photo"
                   >
                     <Camera className="w-5 h-5" />
                   </button>
                 </div>
 
-                {/* Inline Editable Item Name (Requirement #6.3) */}
-                {inlineEditingId === item.id ? (
-                  <div className="mt-2 flex items-center gap-1">
-                    <input
-                      type="text"
-                      value={inlineEditingTitle}
-                      onChange={(e) => setInlineEditingTitle(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveInlineTitle(item.id);
-                        if (e.key === 'Escape') setInlineEditingId(null);
-                      }}
-                      className="flex-1 px-2 py-1 text-xs border border-[#007AFF] rounded-lg bg-white focus:outline-none"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleSaveInlineTitle(item.id)}
-                      className="px-2 py-1 bg-[#007AFF] text-white rounded-lg text-xs font-bold cursor-pointer"
-                    >
-                      ✓
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mt-2 flex items-start justify-between gap-1 group/title">
-                    <h3
-                      onClick={() => {
-                        setInlineEditingId(item.id);
-                        setInlineEditingTitle(item.name);
-                      }}
-                      className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight leading-snug line-clamp-2 cursor-pointer hover:text-[#007AFF] transition-colors"
-                      title="Tap to rename inline"
-                    >
-                      {item.name}
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInlineEditingId(item.id);
-                        setInlineEditingTitle(item.name);
-                      }}
-                      className="text-slate-400 hover:text-[#007AFF] p-0.5 opacity-60 group-hover/title:opacity-100 transition-opacity cursor-pointer shrink-0"
-                      title="Rename item inline"
-                    >
-                      <Edit3 className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
+                {/* Inline Editable Item Name & Color Badge (Requirement #4 & #6.3) */}
+                {(() => {
+                  const { mainTitle, colorLabel } = parseTitleAndColor(item.name);
+                  return (
+                    <div className="mt-2 space-y-1">
+                      {inlineEditingId === item.id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={inlineEditingTitle}
+                            onChange={(e) => setInlineEditingTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveInlineTitle(item.id);
+                              if (e.key === 'Escape') setInlineEditingId(null);
+                            }}
+                            className="flex-1 px-2 py-1 text-xs border border-[#007AFF] rounded-lg bg-white focus:outline-none"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSaveInlineTitle(item.id)}
+                            className="px-2 py-1 bg-[#007AFF] text-white rounded-lg text-xs font-bold cursor-pointer"
+                          >
+                            ✓
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-start justify-between gap-1 group/title">
+                          <h3
+                            onClick={() => {
+                              setInlineEditingId(item.id);
+                              setInlineEditingTitle(item.name);
+                            }}
+                            className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight leading-snug line-clamp-2 cursor-pointer hover:text-[#007AFF] transition-colors"
+                            title="Tap to rename inline"
+                          >
+                            {mainTitle}
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInlineEditingId(item.id);
+                              setInlineEditingTitle(item.name);
+                            }}
+                            className="text-slate-400 hover:text-[#007AFF] p-0.5 opacity-60 group-hover/title:opacity-100 transition-opacity cursor-pointer shrink-0"
+                            title="Rename item inline"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
 
-                {/* Assigned Bag Pill (Clean canonical bag) */}
-                <div className="mt-1 text-[10px] font-mono text-slate-600 truncate bg-slate-100 px-2 py-0.5 rounded-md inline-block max-w-full">
-                  📍 {normalizeBagLocation(item.targetBag)}
-                </div>
+                      {/* Color Badge extracted from ' - ' in title */}
+                      {colorLabel && (
+                        <div>
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200/80 text-[10px] font-semibold max-w-full truncate">
+                            <span>🎨</span>
+                            <span className="truncate">{colorLabel}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Assigned Bag Pill (Clean canonical bag) */}
+                      <div>
+                        <div className="text-[10px] font-mono text-slate-600 truncate bg-slate-100 px-2 py-0.5 rounded-md inline-block max-w-full">
+                          📍 {normalizeBagLocation(item.targetBag)}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* 2-State Packed Toggle Pill & Action Icons (Requirement #1 & #2) */}
@@ -1466,7 +1563,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                     options={allCategories}
                     onChange={(cat) => setFormCategory(cat)}
                     onAddCustom={(cat) => {
-                      onAddCustomCategory?.(cat);
+                      if (onAddCategory) onAddCategory(cat);
+                      else onAddCustomCategory?.(cat);
                       setFormCategory(cat);
                     }}
                     customPlaceholder="+ Add Custom Category..."
@@ -1483,7 +1581,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                     options={allLocations}
                     onChange={(loc) => setFormTargetBag(loc)}
                     onAddCustom={(loc) => {
-                      onAddCustomLocation?.(loc);
+                      if (onAddLocation) onAddLocation(loc);
+                      else onAddCustomLocation?.(loc);
                       setFormTargetBag(loc);
                     }}
                     customPlaceholder="+ Add Custom Location..."
@@ -1516,16 +1615,16 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                 </div>
               )}
 
-              {/* Quantity & Notes */}
+              {/* Quantity & Notes (Requirement #3: Free-Text Quantity support) */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-700 font-semibold mb-1">Quantity</label>
                   <input
-                    type="number"
-                    min="1"
+                    type="text"
                     value={formQuantity}
-                    onChange={(e) => setFormQuantity(parseInt(e.target.value) || 1)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono text-center focus:outline-[#007AFF]"
+                    onChange={(e) => setFormQuantity(e.target.value)}
+                    placeholder="e.g., 1, 50g * 5, 500g x 5, ~10, 3±1"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm focus:outline-[#007AFF]"
                   />
                 </div>
                 <div className="sm:col-span-2">
@@ -1828,19 +1927,15 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         categories={allCategories}
         wardrobe={wardrobe}
         onAddCategory={(newCat) => {
-          onAddCustomCategory?.(newCat);
-          setSaveToast(`✓ Added category "${newCat}"`);
-          setTimeout(() => setSaveToast(null), 3000);
+          if (onAddCategory) onAddCategory(newCat);
+          else onAddCustomCategory?.(newCat);
         }}
         onRenameCategory={(oldCat, newCat) => {
           onRenameCategory?.(oldCat, newCat);
-          setSaveToast(`✓ Renamed "${oldCat}" to "${newCat}"`);
-          setTimeout(() => setSaveToast(null), 3000);
         }}
         onDeleteCategory={(cat) => {
-          onDeleteCustomCategory?.(cat);
-          setSaveToast(`✓ Deleted category "${cat}"`);
-          setTimeout(() => setSaveToast(null), 3000);
+          if (onDeleteCategory) onDeleteCategory(cat);
+          else onDeleteCustomCategory?.(cat);
         }}
       />
     </div>

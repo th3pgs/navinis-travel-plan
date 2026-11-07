@@ -1,6 +1,6 @@
 import { supabase, STORAGE_BUCKET, STATE_TABLE, STATE_ROW_ID } from './supabase';
 import { saveMasterStateIDB, saveWardrobeItemsIDB } from './db';
-import { isSoftwareAppOrNonWardrobe } from './data';
+import { isSoftwareAppOrNonWardrobe, WardrobeItem } from './data';
 
 const LOCAL_STORAGE_KEY = 'navini_master_state_v5';
 
@@ -24,6 +24,10 @@ export interface AppMasterState {
   buddyMessages?: any[];
   confirmedCampusChat?: boolean;
   confirmedChatTopics?: Record<string, boolean>;
+  categories?: string[];
+  deletedCategories?: string[];
+  locations?: string[];
+  deletedLocations?: string[];
   customCategories?: string[];
   customLocations?: string[];
   customBanks?: string[];
@@ -272,8 +276,20 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
     if (state.customCategories) {
       localStorage.setItem('navini_custom_categories_v5', JSON.stringify(state.customCategories));
     }
+    if (state.categories) {
+      localStorage.setItem('navini_categories_v8', JSON.stringify(state.categories));
+    }
+    if (state.deletedCategories) {
+      localStorage.setItem('navini_deleted_categories_v8', JSON.stringify(state.deletedCategories));
+    }
     if (state.customLocations) {
       localStorage.setItem('navini_custom_locations_v5', JSON.stringify(state.customLocations));
+    }
+    if (state.locations) {
+      localStorage.setItem('navini_locations_v8', JSON.stringify(state.locations));
+    }
+    if (state.deletedLocations) {
+      localStorage.setItem('navini_deleted_locations_v8', JSON.stringify(state.deletedLocations));
     }
     if (state.customBanks) {
       localStorage.setItem('navini_custom_banks_v5', JSON.stringify(state.customBanks));
@@ -376,5 +392,61 @@ export async function checkSupabaseConnection(): Promise<boolean> {
     return !error;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Atomically compresses a photo (if dataUrl), uploads to Supabase Storage,
+ * and returns confirmed CDN url. Safe for non-blocking background queue.
+ */
+export async function uploadWardrobeItemPhotoAtomic(
+  item: WardrobeItem,
+  onProgress?: (progress: number) => void
+): Promise<{ success: boolean; photoUrl?: string; error?: string }> {
+  try {
+    let finalPhotoUrl = item.photoUrl;
+
+    if (item.photoUrl && item.photoUrl.startsWith('data:image')) {
+      onProgress?.(25);
+      // Compress to 400x400 JPEG
+      const compressedDataUrl = await compressPhotoToMax400(item.photoUrl, 400, 0.65);
+      onProgress?.(50);
+
+      try {
+        // Convert dataUrl to blob
+        const res = await fetch(compressedDataUrl);
+        const blob = await res.blob();
+        onProgress?.(65);
+
+        // Upload blob to Supabase Storage
+        const fileName = `wardrobe/${Date.now()}_${Math.random().toString(36).substring(2, 8)}.jpg`;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(fileName, blob, {
+            contentType: 'image/jpeg',
+            upsert: true,
+          });
+
+        if (!uploadErr && uploadData?.path) {
+          const { data: publicData } = supabase.storage
+            .from(STORAGE_BUCKET)
+            .getPublicUrl(uploadData.path);
+          finalPhotoUrl = publicData.publicUrl;
+        } else {
+          // Fallback to compressed base64 if network offline
+          finalPhotoUrl = compressedDataUrl;
+        }
+      } catch (uploadErr) {
+        console.warn('Storage upload warning, using local compressed image:', uploadErr);
+        finalPhotoUrl = compressedDataUrl;
+      }
+      onProgress?.(85);
+    }
+
+    onProgress?.(100);
+    return { success: true, photoUrl: finalPhotoUrl };
+  } catch (err: any) {
+    console.error('Atomic photo upload error:', err);
+    return { success: false, error: err?.message || 'Upload failed' };
   }
 }

@@ -2,7 +2,7 @@ export interface WardrobeItem {
   id: string;
   name: string;
   category: string;
-  quantity: number;
+  quantity: string | number;
   targetBag: string;
   isBought: boolean;
   isPacked: boolean;
@@ -10,6 +10,9 @@ export interface WardrobeItem {
   notes?: string;
   photoUrl?: string;
   subType?: string; // For Medicine (Painkillers, Prescription, Antibiotics, Vitamins, Motion Sickness, Balm/Inhaler)
+  syncStatus?: 'uploading' | 'synced' | 'error';
+  uploadProgress?: number;
+  localPhotoPreview?: string;
 }
 
 export interface GiftItem {
@@ -246,6 +249,40 @@ export function isUnnamedRetake(item: WardrobeItem): boolean {
     lower.startsWith('recovered item') ||
     lower.startsWith('item ')
   );
+}
+
+/**
+ * Splits an item title into main title and color label if separated by " - " (space-hyphen-space).
+ * Requires spaces around the hyphen so words like "T-Shirt" or "Short-Sleeve" are never split!
+ */
+export function parseTitleAndColor(rawName: string): { mainTitle: string; colorLabel?: string } {
+  if (!rawName) return { mainTitle: '' };
+  const trimmed = rawName.trim();
+  const delimiter = ' - ';
+  const lastIdx = trimmed.lastIndexOf(delimiter);
+  if (lastIdx === -1) {
+    return { mainTitle: trimmed };
+  }
+  const mainTitle = trimmed.substring(0, lastIdx).trim();
+  const colorLabel = trimmed.substring(lastIdx + delimiter.length).trim();
+  if (!colorLabel) {
+    return { mainTitle: trimmed };
+  }
+  return { mainTitle, colorLabel };
+}
+
+/**
+ * Formats a quantity value into a badge string.
+ * Plain digits like "1" or "3" become "x1" or "x3".
+ * Values with units/symbols like "50g * 5" or "500g x 5" remain as typed.
+ */
+export function formatQuantityBadge(rawQuantity: string | number | undefined): string {
+  const qStr = String(rawQuantity ?? '1').trim();
+  if (!qStr) return 'x1';
+  if (/^\d+$/.test(qStr)) {
+    return `x${qStr}`;
+  }
+  return qStr;
 }
 
 /**
@@ -495,11 +532,15 @@ export function migrateWardrobeItems(items: WardrobeItem[]): WardrobeItem[] {
         (item as any).packed === true ||
         (item as any).checked === true ||
         (item as any).status === 'packed';
+      const quantity = item.quantity !== undefined && item.quantity !== null
+        ? String(item.quantity).trim()
+        : '1';
 
       return {
         ...item,
         category: normalizedCategory,
         targetBag: normalizedBag,
+        quantity,
         isPacked,
       };
     });

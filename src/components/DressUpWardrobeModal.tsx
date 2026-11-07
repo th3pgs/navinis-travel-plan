@@ -73,7 +73,7 @@ export const DressUpWardrobeModal: React.FC<DressUpWardrobeModalProps> = ({
     setEditName(item.name);
     setEditCategory(item.category);
     setEditTargetBag(item.targetBag);
-    setEditQuantity(item.quantity);
+    setEditQuantity(Number(item.quantity) || 1);
     setEditNotes(item.notes || '');
   };
 
@@ -331,7 +331,7 @@ export const DressUpWardrobeModal: React.FC<DressUpWardrobeModalProps> = ({
                       {item.name}
                     </h4>
 
-                    {item.quantity > 1 && (
+                    {Number(item.quantity) > 1 && (
                       <span className="text-[11px] font-mono font-bold text-slate-500 mt-0.5 block">
                         Quantity: x{item.quantity}
                       </span>
