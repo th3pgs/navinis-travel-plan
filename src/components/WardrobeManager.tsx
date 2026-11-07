@@ -402,7 +402,11 @@ export const WardrobeManager: React.FC<WardrobeManagerProps> = ({
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => onDeleteItem(item.id)}
+                      onClick={() => {
+                        if (window.confirm(`Are you sure you want to delete "${item.name}"?`)) {
+                          onDeleteItem(item.id);
+                        }
+                      }}
                       className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-slate-100 transition-colors"
                       title="Delete item"
                     >

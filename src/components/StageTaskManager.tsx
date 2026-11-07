@@ -361,7 +361,11 @@ export const StageTaskManager: React.FC<StageTaskManagerProps> = ({
                   <Edit3 className="w-3.5 h-3.5" />
                 </button>
                 <button
-                  onClick={() => onDeleteTask(task.id)}
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to delete "${task.title}"?`)) {
+                      onDeleteTask(task.id);
+                    }
+                  }}
                   className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-slate-100 transition-colors"
                   title="Delete step"
                 >

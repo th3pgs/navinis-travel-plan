@@ -162,54 +162,58 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
     e.preventDefault();
     if (!quickAddName.trim()) return;
 
-    const assignedLoc = bag.name;
+    try {
+      const assignedLoc = bag.name;
 
-    if (quickAddType === 'wardrobe') {
-      onAddWardrobeItem({
-        name: quickAddName.trim(),
-        category: quickAddCategory,
-        quantity: Math.max(1, quickAddQty),
-        targetBag: assignedLoc,
-        isBought: true,
-        isPacked: false,
-        notes: quickAddNotes.trim() || undefined,
-      });
-    } else if (quickAddType === 'gift') {
-      onAddGift({
-        name: quickAddName.trim(),
-        quantity: Math.max(1, quickAddQty),
-        targetBag: assignedLoc,
-        recipient: quickAddNotes.trim() || 'Professors & Campus Buddies',
-        packagingNote: 'Pack safely in ' + bag.name,
-        isPacked: false,
-      });
-    } else if (quickAddType === 'device') {
-      onAddDevice({
-        name: quickAddName.trim(),
-        model: quickAddNotes.trim() || 'Portable Hardware',
-        role: 'Essential academic & travel tech',
-        carrierOrOs: 'Hardware',
-        carryLocation: assignedLoc,
-        isBought: true,
-        isPacked: false,
-        type: 'phone-ios',
-      });
-    } else if (quickAddType === 'doc') {
-      onAddDoc({
-        title: quickAddName.trim(),
-        issuer: quickAddNotes.trim() || 'Official Document',
-        carryLocation: assignedLoc,
-        isReady: true,
-        isPacked: false,
-        priority: 'High',
-        notes: 'Assigned to ' + bag.name,
-      });
+      if (quickAddType === 'wardrobe') {
+        onAddWardrobeItem({
+          name: quickAddName.trim(),
+          category: quickAddCategory,
+          quantity: Math.max(1, quickAddQty),
+          targetBag: assignedLoc,
+          isBought: true,
+          isPacked: false,
+          notes: quickAddNotes.trim() || undefined,
+        });
+      } else if (quickAddType === 'gift') {
+        onAddGift({
+          name: quickAddName.trim(),
+          quantity: Math.max(1, quickAddQty),
+          targetBag: assignedLoc,
+          recipient: quickAddNotes.trim() || 'Professors & Campus Buddies',
+          packagingNote: 'Pack safely in ' + bag.name,
+          isPacked: false,
+        });
+      } else if (quickAddType === 'device') {
+        onAddDevice({
+          name: quickAddName.trim(),
+          model: quickAddNotes.trim() || 'Portable Hardware',
+          role: 'Essential academic & travel tech',
+          carrierOrOs: 'Hardware',
+          carryLocation: assignedLoc,
+          isBought: true,
+          isPacked: false,
+          type: 'phone-ios',
+        });
+      } else if (quickAddType === 'doc') {
+        onAddDoc({
+          title: quickAddName.trim(),
+          issuer: quickAddNotes.trim() || 'Official Document',
+          carryLocation: assignedLoc,
+          isReady: true,
+          isPacked: false,
+          priority: 'High',
+          notes: 'Assigned to ' + bag.name,
+        });
+      }
+    } catch (err) {
+      console.error('Error adding item to bag:', err);
+    } finally {
+      setQuickAddName('');
+      setQuickAddNotes('');
+      setQuickAddQty(1);
+      setShowQuickAdd(false);
     }
-
-    setQuickAddName('');
-    setQuickAddNotes('');
-    setQuickAddQty(1);
-    setShowQuickAdd(false);
   };
 
   return (
@@ -418,7 +422,11 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                     {onDeleteWardrobeItem && (
                       <button
                         type="button"
-                        onClick={() => onDeleteWardrobeItem(item.id)}
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to delete "${item.name}" from ${bag.name}?`)) {
+                            onDeleteWardrobeItem(item.id);
+                          }
+                        }}
                         className="text-slate-300 hover:text-[#FF3B30] p-1 transition-colors cursor-pointer shrink-0"
                         title="Delete item"
                       >
@@ -513,8 +521,13 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                     {onDeleteGift && (
                       <button
                         type="button"
-                        onClick={() => onDeleteGift(gift.id)}
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to delete "${gift.name}"?`)) {
+                            onDeleteGift(gift.id);
+                          }
+                        }}
                         className="text-slate-300 hover:text-[#FF3B30] p-1 transition-colors cursor-pointer shrink-0"
+                        title="Delete gift"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -570,6 +583,21 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                       </span>
                     </div>
                   </div>
+
+                  {onDeleteDevice && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Are you sure you want to delete "${device.name}"?`)) {
+                          onDeleteDevice(device.id);
+                        }
+                      }}
+                      className="text-slate-300 hover:text-[#FF3B30] p-1 transition-colors cursor-pointer shrink-0"
+                      title="Delete device"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 <div className="pt-2 border-t border-black/5 flex items-center justify-between text-xs">
@@ -620,6 +648,21 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                       </span>
                     </div>
                   </div>
+
+                  {onDeleteDoc && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Are you sure you want to delete "${doc.title}"?`)) {
+                          onDeleteDoc(doc.id);
+                        }
+                      }}
+                      className="text-slate-300 hover:text-[#FF3B30] p-1 transition-colors cursor-pointer shrink-0"
+                      title="Delete document"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 <div className="pt-2 border-t border-black/5 flex items-center justify-between text-xs">
@@ -750,7 +793,7 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                     type="submit"
                     className="px-4 py-1.5 rounded-full bg-[#007AFF] text-white text-xs font-semibold shadow-xs hover:bg-[#007AFF]/90"
                   >
-                    Save to Bag
+                    Save Changes
                   </button>
                 </div>
               </div>

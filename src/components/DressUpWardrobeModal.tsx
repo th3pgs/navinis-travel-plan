@@ -296,7 +296,11 @@ export const DressUpWardrobeModal: React.FC<DressUpWardrobeModalProps> = ({
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => onDeleteItem(item.id)}
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to delete "${item.name}"?`)) {
+                              onDeleteItem(item.id);
+                            }
+                          }}
                           className="p-1 rounded text-slate-400 hover:text-red-600"
                           title="Remove dress"
                         >

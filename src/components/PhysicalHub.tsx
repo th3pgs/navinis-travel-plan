@@ -429,35 +429,44 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   };
 
   const handleSaveModal = async () => {
-    if (!formName.trim()) return;
+    const trimmedName = formName.trim();
+    if (!trimmedName) return;
 
-    if (editingItem) {
-      onUpdateWardrobeItem(editingItem.id, {
-        name: formName.trim(),
-        category: formCategory,
-        subType: formCategory === 'Medicine & First Aid' ? formSubType : undefined,
-        quantity: formQuantity,
-        targetBag: formTargetBag,
-        notes: formNotes.trim(),
-        photoUrl: formPhotoUrl,
-        colorHex: formColorHex,
-      });
-    } else {
-      onAddWardrobeItem({
-        name: formName.trim(),
-        category: formCategory,
-        subType: formCategory === 'Medicine & First Aid' ? formSubType : undefined,
-        quantity: formQuantity,
-        targetBag: formTargetBag,
-        notes: formNotes.trim(),
-        photoUrl: formPhotoUrl,
-        colorHex: formColorHex,
-        isBought: true,
-        isPacked: false,
-      });
+    try {
+      if (editingItem) {
+        onUpdateWardrobeItem(editingItem.id, {
+          name: trimmedName,
+          category: formCategory,
+          subType: formCategory === 'Medicine & First Aid' ? formSubType : undefined,
+          quantity: formQuantity,
+          targetBag: formTargetBag,
+          notes: formNotes.trim(),
+          photoUrl: formPhotoUrl,
+          colorHex: formColorHex,
+        });
+      } else {
+        onAddWardrobeItem({
+          name: trimmedName,
+          category: formCategory,
+          subType: formCategory === 'Medicine & First Aid' ? formSubType : undefined,
+          quantity: formQuantity,
+          targetBag: formTargetBag,
+          notes: formNotes.trim(),
+          photoUrl: formPhotoUrl,
+          colorHex: formColorHex,
+          isBought: true,
+          isPacked: false,
+        });
+      }
+    } catch (err) {
+      console.error('Error saving wardrobe item:', err);
+    } finally {
+      setIsModalOpen(false);
+      setEditingItem(null);
+      setFormName('');
+      setFormNotes('');
+      setFormPhotoUrl('');
     }
-
-    setIsModalOpen(false);
   };
 
   // Image Upload with Live Preview
@@ -1064,7 +1073,11 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onDeleteWardrobeItem(item.id)}
+                    onClick={() => {
+                      if (window.confirm(`Are you sure you want to delete "${item.name}" from your packing list?`)) {
+                        onDeleteWardrobeItem(item.id);
+                      }
+                    }}
                     className="w-6 h-6 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 flex items-center justify-center transition-colors cursor-pointer"
                     title="Delete item"
                   >
@@ -1309,22 +1322,44 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
             </div>
 
             {/* Modal Footer Buttons */}
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveModal}
-                disabled={!formName.trim()}
-                className="px-5 py-2.5 rounded-xl bg-[#007AFF] hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow-2xs cursor-pointer"
-              >
-                {editingItem ? 'Save Changes' : 'Add to Packing Studio'}
-              </button>
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2.5">
+              {editingItem ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to delete "${editingItem.name}"?`)) {
+                      onDeleteWardrobeItem(editingItem.id);
+                      setIsModalOpen(false);
+                      setEditingItem(null);
+                    }
+                  }}
+                  className="px-3.5 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Item</span>
+                </button>
+              ) : <div />}
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditingItem(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveModal}
+                  disabled={!formName.trim()}
+                  className="px-5 py-2.5 rounded-xl bg-[#007AFF] hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow-2xs cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
         </div>

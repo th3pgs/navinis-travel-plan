@@ -89,29 +89,38 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
   };
 
   const handleSaveDoc = () => {
-    if (!formTitle.trim()) return;
+    const trimmedTitle = formTitle.trim();
+    if (!trimmedTitle) return;
 
-    if (editingDoc) {
-      onUpdateDoc(editingDoc.id, {
-        title: formTitle.trim(),
-        issuer: formIssuer.trim(),
-        carryLocation: formLocation,
-        priority: formPriority,
-        notes: formNotes.trim(),
-      });
-    } else {
-      onAddDoc({
-        title: formTitle.trim(),
-        issuer: formIssuer.trim(),
-        carryLocation: formLocation,
-        priority: formPriority,
-        notes: formNotes.trim(),
-        isReady: true,
-        isPacked: false,
-      });
+    try {
+      if (editingDoc) {
+        onUpdateDoc(editingDoc.id, {
+          title: trimmedTitle,
+          issuer: formIssuer.trim(),
+          carryLocation: formLocation,
+          priority: formPriority,
+          notes: formNotes.trim(),
+        });
+      } else {
+        onAddDoc({
+          title: trimmedTitle,
+          issuer: formIssuer.trim(),
+          carryLocation: formLocation,
+          priority: formPriority,
+          notes: formNotes.trim(),
+          isReady: true,
+          isPacked: false,
+        });
+      }
+    } catch (err) {
+      console.error('Error saving document:', err);
+    } finally {
+      setShowAddModal(false);
+      setEditingDoc(null);
+      setFormTitle('');
+      setFormIssuer('');
+      setFormNotes('');
     }
-
-    setShowAddModal(false);
   };
 
   return (
@@ -273,7 +282,11 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onDeleteDoc(doc.id)}
+                      onClick={() => {
+                        if (window.confirm(`Are you sure you want to delete "${doc.title}"?`)) {
+                          onDeleteDoc(doc.id);
+                        }
+                      }}
                       className="w-7 h-7 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 flex items-center justify-center transition-colors cursor-pointer"
                       title="Delete credential"
                     >
@@ -368,22 +381,39 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
               </div>
             </div>
 
-            <div className="pt-2 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveDoc}
-                disabled={!formTitle.trim()}
-                className="px-4 py-2 rounded-xl bg-[#007AFF] hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs transition-colors cursor-pointer"
-              >
-                {editingDoc ? 'Save Changes' : 'Add Credential'}
-              </button>
+            <div className="pt-2 flex items-center justify-between gap-2">
+              {editingDoc ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to delete "${editingDoc.title}"?`)) {
+                      onDeleteDoc?.(editingDoc.id);
+                      setShowAddModal(false);
+                      setEditingDoc(null);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold text-xs transition-colors cursor-pointer"
+                >
+                  Delete Credential
+                </button>
+              ) : <div />}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveDoc}
+                  disabled={!formTitle.trim()}
+                  className="px-4 py-2 rounded-xl bg-[#007AFF] hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -108,22 +108,26 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
   const handleSaveApp = () => {
     if (!newAppName.trim()) return;
 
-    onAddApp({
-      name: newAppName.trim(),
-      platform: newAppPlatform,
-      category: newAppCategory,
-      role: newAppRole.trim() || 'Custom installed application.',
-      appIcon: newAppIcon.trim() || 'doc',
-      devices: newAppDevices,
-      isInstalled: false,
-      isLoggedIn: false,
-      isVerified: false,
-      isConfigured: false,
-    });
-
-    setShowAddModal(false);
-    setNewAppName('');
-    setNewAppRole('');
+    try {
+      onAddApp({
+        name: newAppName.trim(),
+        platform: newAppPlatform,
+        category: newAppCategory,
+        role: newAppRole.trim() || 'Custom installed application.',
+        appIcon: newAppIcon.trim() || 'doc',
+        devices: newAppDevices,
+        isInstalled: false,
+        isLoggedIn: false,
+        isVerified: false,
+        isConfigured: false,
+      });
+    } catch (err) {
+      console.error('Error saving app:', err);
+    } finally {
+      setShowAddModal(false);
+      setNewAppName('');
+      setNewAppRole('');
+    }
   };
 
   return (
@@ -458,9 +462,25 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
                     </div>
 
                     <div className="flex flex-col items-end gap-1">
-                      <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-600 truncate max-w-[90px]">
-                        {app.category}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-600 truncate max-w-[90px]">
+                          {app.category}
+                        </span>
+                        {onDeleteApp && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm(`Are you sure you want to delete "${app.name}"?`)) {
+                                onDeleteApp(app.id);
+                              }
+                            }}
+                            className="text-slate-300 hover:text-[#FF3B30] p-0.5 transition-colors cursor-pointer"
+                            title="Delete app"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                       {allCheckpointsDone && (
                         <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800">
                           Ready ✓
@@ -626,7 +646,7 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
                 disabled={!newAppName.trim()}
                 className="flex-1 py-2 rounded-xl bg-[#007AFF] hover:bg-blue-600 disabled:opacity-50 text-white font-semibold text-xs transition-colors cursor-pointer"
               >
-                Add App
+                Save Changes
               </button>
             </div>
           </div>

@@ -304,17 +304,21 @@ export function App() {
     const mStones = overrides?.milestones || milestones;
     const pInfo = overrides?.passportInfo || passportInfo;
 
-    localStorage.setItem('navini_passport_profile_v7', JSON.stringify(pInfo));
-    localStorage.setItem('navini_bags_v7', JSON.stringify(bAssets));
-    localStorage.setItem('navini_devices_v7', JSON.stringify(dAssets));
-    localStorage.setItem('navini_wardrobe_v7', JSON.stringify(wItems));
-    localStorage.setItem('navini_docs_v7', JSON.stringify(docItems));
-    localStorage.setItem('navini_apps_v7', JSON.stringify(appItems));
-    localStorage.setItem('navini_milestones_v7', JSON.stringify(mStones));
-    localStorage.setItem('navini_custom_categories_v7', JSON.stringify(cCats));
-    localStorage.setItem('navini_custom_locations_v7', JSON.stringify(cLocs));
-    localStorage.setItem('navini_custom_app_categories_v7', JSON.stringify(cAppCats));
-    localStorage.setItem('navini_custom_app_devices_v7', JSON.stringify(cAppDevs));
+    try {
+      localStorage.setItem('navini_passport_profile_v7', JSON.stringify(pInfo));
+      localStorage.setItem('navini_bags_v7', JSON.stringify(bAssets));
+      localStorage.setItem('navini_devices_v7', JSON.stringify(dAssets));
+      localStorage.setItem('navini_wardrobe_v7', JSON.stringify(wItems));
+      localStorage.setItem('navini_docs_v7', JSON.stringify(docItems));
+      localStorage.setItem('navini_apps_v7', JSON.stringify(appItems));
+      localStorage.setItem('navini_milestones_v7', JSON.stringify(mStones));
+      localStorage.setItem('navini_custom_categories_v7', JSON.stringify(cCats));
+      localStorage.setItem('navini_custom_locations_v7', JSON.stringify(cLocs));
+      localStorage.setItem('navini_custom_app_categories_v7', JSON.stringify(cAppCats));
+      localStorage.setItem('navini_custom_app_devices_v7', JSON.stringify(cAppDevs));
+    } catch (e) {
+      console.warn('LocalStorage write warning or quota exceeded:', e);
+    }
 
     const masterState: AppMasterState = {
       version: '7.0',
@@ -971,11 +975,27 @@ export function App() {
         isOpen={selectedInspectBag !== null}
         onClose={() => setSelectedInspectBag(null)}
         bag={selectedInspectBag}
+        bags={bags}
         wardrobeItems={wardrobe}
         deviceItems={devices}
         documentItems={documents}
-        giftItems={[]}
+        giftItems={gifts}
+        locationOptions={Array.from(new Set([...bags.map((b) => b.name), ...customLocations]))}
+        wardrobeCategories={Array.from(new Set(['Dresses & Frocks', 'Tops & T-Shirts', 'Bottoms & Jeans', 'Undergarments & Innerwear', 'Footwear & Slippers', 'Bottles, Liquids & Toiletries', 'Medicine & First Aid', 'Gifts & Souvenirs', 'Daily Essentials, Cutlery & Folders', ...customCategories]))}
+        onAddCustomLocation={handleAddCustomLocation}
+        onAddCustomCategory={handleAddCustomCategory}
         onToggleWardrobePacked={toggleWardrobePacked}
+        onToggleDevicePacked={toggleDevicePacked}
+        onToggleDocPacked={toggleDocPacked}
+        onUpdateWardrobeItem={handleUpdateWardrobeItem}
+        onUpdateDevice={handleUpdateDevice}
+        onUpdateDoc={handleUpdateDoc}
+        onDeleteWardrobeItem={handleDeleteWardrobeItem}
+        onDeleteDevice={handleDeleteDevice}
+        onDeleteDoc={handleDeleteDoc}
+        onAddWardrobeItem={handleAddWardrobeItem}
+        onAddDevice={handleAddDevice}
+        onAddDoc={handleAddDoc}
       />
     </div>
   );
