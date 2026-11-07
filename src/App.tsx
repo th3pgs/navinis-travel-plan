@@ -39,6 +39,8 @@ import {
 } from './cloudSync';
 
 import { AuthGate } from './components/AuthGate';
+import { RecoveryScanner } from './components/RecoveryScanner';
+import { saveWardrobeItemsIDB, getWardrobeItemsIDB } from './db';
 import { TopDockedProfileAirline } from './components/TopDockedProfileAirline';
 import { HardwareShowcaseWidgets } from './components/HardwareShowcaseWidgets';
 import { PhysicalHub } from './components/PhysicalHub';
@@ -229,6 +231,16 @@ export function App() {
       const isAlive = await checkSupabaseConnection();
       if (isMounted) setIsSupabaseConnected(isAlive);
 
+      // Check durable multi-gigabyte IndexedDB local vault first
+      try {
+        const idbWardrobe = await getWardrobeItemsIDB();
+        if (idbWardrobe && idbWardrobe.length > 0 && isMounted) {
+          setWardrobe((prev) => (idbWardrobe.length >= prev.length ? idbWardrobe : prev));
+        }
+      } catch (e) {
+        console.warn('IDB startup check:', e);
+      }
+
       const remote = await fetchCloudState();
       if (remote && isMounted) {
         if (remote.passportInfo) setPassportInfo(remote.passportInfo);
@@ -236,7 +248,18 @@ export function App() {
         if (remote.devices?.length) setDevices(remote.devices);
         if (remote.wardrobe?.length) {
           const migrated = migrateWardrobeItems(remote.wardrobe);
-          setWardrobe(migrated);
+          setWardrobe((prev) => {
+            // If local state/IndexedDB already has more items, merge them instead of blindly wiping!
+            if (prev.length > migrated.length) {
+              const map = new Map<string, WardrobeItem>();
+              migrated.forEach((w) => map.set(w.id, w));
+              prev.forEach((w) => {
+                if (!map.has(w.id)) map.set(w.id, w);
+              });
+              return Array.from(map.values());
+            }
+            return migrated;
+          });
           const hadLegacyCategory = migrated.some((m, idx) => m.category !== remote.wardrobe[idx]?.category);
           if (hadLegacyCategory) {
             syncAllState({ wardrobe: migrated });
@@ -305,6 +328,12 @@ export function App() {
     const pInfo = overrides?.passportInfo || passportInfo;
 
     try {
+      saveWardrobeItemsIDB(wItems);
+    } catch (e) {
+      console.warn('IDB write warning in syncAllState:', e);
+    }
+
+    try {
       localStorage.setItem('navini_passport_profile_v7', JSON.stringify(pInfo));
       localStorage.setItem('navini_bags_v7', JSON.stringify(bAssets));
       localStorage.setItem('navini_devices_v7', JSON.stringify(dAssets));
@@ -341,7 +370,8 @@ export function App() {
       customAppDevices: cAppDevs,
     };
 
-    pushCloudState(masterState);
+    const isImmediate = !!overrides?.wardrobe;
+    pushCloudState(masterState, isImmediate);
   };
 
   // Dynamic classification handlers
@@ -518,19 +548,28 @@ export function App() {
     const newItem: WardrobeItem = { ...item, id: 'w-custom-' + Date.now() };
     const updated = [newItem, ...wardrobe];
     setWardrobe(updated);
+    saveWardrobeItemsIDB(updated);
     syncAllState({ wardrobe: updated });
   };
 
   const handleUpdateWardrobeItem = (id: string, partial: Partial<WardrobeItem>) => {
     const updated = wardrobe.map((w) => (w.id === id ? { ...w, ...partial } : w));
     setWardrobe(updated);
+    saveWardrobeItemsIDB(updated);
     syncAllState({ wardrobe: updated });
   };
 
   const handleDeleteWardrobeItem = (id: string) => {
     const updated = wardrobe.filter((w) => w.id !== id);
     setWardrobe(updated);
+    saveWardrobeItemsIDB(updated);
     syncAllState({ wardrobe: updated });
+  };
+
+  const handleRestoreWardrobeItems = async (restoredItems: WardrobeItem[]) => {
+    setWardrobe(restoredItems);
+    await saveWardrobeItemsIDB(restoredItems);
+    syncAllState({ wardrobe: restoredItems });
   };
 
   // Handlers for Official Documents
@@ -647,6 +686,12 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] text-slate-900 pb-20 font-sans overflow-x-hidden print:bg-white print:pb-0 print:overflow-visible">
+      {/* 0. ON-SCREEN EMERGENCY DATA RECOVERY SCANNER */}
+      <RecoveryScanner
+        currentWardrobe={wardrobe}
+        onRestoreItems={handleRestoreWardrobeItems}
+      />
+
       {/* 1. TOP HEADER (China Flag PNG Branding & Live Supabase Rippling Indicator) */}
       <header className="bg-white/90 backdrop-blur-md border-b border-black/10 sticky top-0 z-40 w-full transition-all">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between gap-3">

@@ -34,7 +34,7 @@ import {
   Eye,
   Filter,
 } from 'lucide-react';
-import { uploadPhotoToSupabase } from '../cloudSync';
+import { uploadPhotoToSupabase, compressPhotoToMax400 } from '../cloudSync';
 import { DynamicSelect } from './DynamicSelect';
 import { LuggageContentsModal } from './LuggageContentsModal';
 import { Battery } from 'lucide-react';
@@ -216,7 +216,7 @@ function getCategoryVisual(name: string, category: string): { emoji: string; bg:
   return { emoji: '✨', bg: 'bg-blue-50 text-[#007AFF]' };
 }
 
-// HTML5 Canvas Rotation and Square-Crop helpers
+// HTML5 Canvas Rotation and Square-Crop helpers with aggressive 400x400 downscaling
 async function processImageCanvas(dataUrl: string, action: 'rotate-left' | 'rotate-right' | 'crop-square'): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -225,23 +225,44 @@ async function processImageCanvas(dataUrl: string, action: 'rotate-left' | 'rota
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d')!;
 
+      let targetW = img.width;
+      let targetH = img.height;
+
       if (action === 'rotate-left' || action === 'rotate-right') {
         const degrees = action === 'rotate-right' ? 90 : -90;
-        canvas.width = img.height;
-        canvas.height = img.width;
+        targetW = img.height;
+        targetH = img.width;
+
+        // Downscale to max 400
+        const maxDim = 400;
+        let scale = 1;
+        if (targetW > maxDim || targetH > maxDim) {
+          scale = Math.min(maxDim / targetW, maxDim / targetH);
+        }
+        canvas.width = Math.max(1, Math.round(targetW * scale));
+        canvas.height = Math.max(1, Math.round(targetH * scale));
+
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate((degrees * Math.PI) / 180);
-        ctx.drawImage(img, -img.width / 2, -img.height / 2);
+        ctx.drawImage(
+          img,
+          -Math.round(img.width * scale) / 2,
+          -Math.round(img.height * scale) / 2,
+          Math.round(img.width * scale),
+          Math.round(img.height * scale)
+        );
       } else if (action === 'crop-square') {
         const size = Math.min(img.width, img.height);
-        canvas.width = size;
-        canvas.height = size;
+        const finalSize = Math.min(400, size);
+        canvas.width = finalSize;
+        canvas.height = finalSize;
         const sx = (img.width - size) / 2;
         const sy = (img.height - size) / 2;
-        ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
+        ctx.drawImage(img, sx, sy, size, size, 0, 0, finalSize, finalSize);
       }
-      resolve(canvas.toDataURL('image/jpeg', 0.92));
+      resolve(canvas.toDataURL('image/jpeg', 0.6));
     };
+    img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
   });
 }
@@ -288,6 +309,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   const [formPhotoUrl, setFormPhotoUrl] = useState('');
   const [formColorHex, setFormColorHex] = useState('#38bdf8');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [saveToast, setSaveToast] = useState<string | null>(null);
 
   // Auto-switch to print mode if window.print() or Ctrl+P is triggered
   React.useEffect(() => {
@@ -428,11 +450,19 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSaveModal = async () => {
+  const handleSaveModal = async (keepOpenForNext = false) => {
     const trimmedName = formName.trim();
     if (!trimmedName) return;
 
     try {
+      let finalPhotoUrl = formPhotoUrl;
+      // If photo is a large uncompressed base64 string, compress it to max 400x400 JPEG at 0.6 quality (~15-25KB)
+      if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image') && finalPhotoUrl.length > 30000) {
+        try {
+          finalPhotoUrl = await compressPhotoToMax400(finalPhotoUrl, 400, 0.6);
+        } catch {}
+      }
+
       if (editingItem) {
         onUpdateWardrobeItem(editingItem.id, {
           name: trimmedName,
@@ -441,7 +471,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
           quantity: formQuantity,
           targetBag: formTargetBag,
           notes: formNotes.trim(),
-          photoUrl: formPhotoUrl,
+          photoUrl: finalPhotoUrl,
           colorHex: formColorHex,
         });
       } else {
@@ -452,49 +482,67 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
           quantity: formQuantity,
           targetBag: formTargetBag,
           notes: formNotes.trim(),
-          photoUrl: formPhotoUrl,
+          photoUrl: finalPhotoUrl,
           colorHex: formColorHex,
           isBought: true,
           isPacked: false,
         });
       }
+
+      setSaveToast('✓ Saved to iPad & Cloud');
+      setTimeout(() => setSaveToast(null), 3200);
+
+      if (keepOpenForNext) {
+        // Clear name, notes, and photo, but preserve selected category and luggage allocation
+        setFormName('');
+        setFormNotes('');
+        setFormPhotoUrl('');
+        setFormQuantity(1);
+        setEditingItem(null);
+      } else {
+        setIsModalOpen(false);
+        setEditingItem(null);
+        setFormName('');
+        setFormNotes('');
+        setFormPhotoUrl('');
+      }
     } catch (err) {
       console.error('Error saving wardrobe item:', err);
-    } finally {
-      setIsModalOpen(false);
-      setEditingItem(null);
-      setFormName('');
-      setFormNotes('');
-      setFormPhotoUrl('');
+      if (!keepOpenForNext) {
+        setIsModalOpen(false);
+      }
     }
   };
 
-  // Image Upload with Live Preview
+  // Image Upload with Instant 400x400 Canvas Compression (~15-25KB) + Background Supabase Sync
   const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Create immediate local dataUrl for instant orientation editing
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const localDataUrl = ev.target?.result as string;
-      setFormPhotoUrl(localDataUrl);
+    try {
+      setIsUploadingPhoto(true);
+      // 1. Instantly compress camera/gallery photo to max 400x400 JPEG on HTML5 canvas
+      const compressedDataUrl = await compressPhotoToMax400(file, 400, 0.6);
+      setFormPhotoUrl(compressedDataUrl);
 
-      // Also upload in background to Supabase
+      // 2. In parallel background, upload to Supabase Storage
       try {
-        setIsUploadingPhoto(true);
         const publicUrl = await uploadPhotoToSupabase(file, 'wardrobe');
-        setFormPhotoUrl(publicUrl);
+        if (publicUrl) {
+          setFormPhotoUrl(publicUrl);
+        }
       } catch (err) {
-        console.error('Supabase upload failed, falling back to local photo:', err);
-      } finally {
-        setIsUploadingPhoto(false);
+        console.warn('Supabase upload background fallback (local compressed photo is safe):', err);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Photo processing error:', err);
+    } finally {
+      setIsUploadingPhoto(false);
+      if (e.target) e.target.value = '';
+    }
   };
 
-  // Orientation Controls
+  // Orientation Controls with 400x400 Downscaling
   const handleRotateImage = async (action: 'rotate-left' | 'rotate-right' | 'crop-square') => {
     if (!formPhotoUrl) return;
     try {
@@ -909,6 +957,14 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200 pb-16">
+      {/* FLOATING SAVE TOAST */}
+      {saveToast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100000] bg-emerald-600 text-white font-bold text-xs sm:text-sm px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 border border-emerald-400 animate-in fade-in slide-in-from-top-4 duration-200 pointer-events-none">
+          <Check className="w-4 h-4 stroke-[3]" />
+          <span>{saveToast}</span>
+        </div>
+      )}
+
       {/* 1. TOP NAVIGATION BAR */}
       <div className="flex items-center justify-between gap-3">
         <button
@@ -1340,24 +1396,37 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                 </button>
               ) : <div />}
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap justify-end">
                 <button
                   type="button"
                   onClick={() => {
                     setIsModalOpen(false);
                     setEditingItem(null);
                   }}
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
+                  className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
+
+                {!editingItem && (
+                  <button
+                    type="button"
+                    onClick={() => handleSaveModal(true)}
+                    disabled={!formName.trim()}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 disabled:opacity-50 font-bold text-xs transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                    title="Save current item and keep form open to quickly add another"
+                  >
+                    <span>+ Save & Add Another</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={handleSaveModal}
+                  onClick={() => handleSaveModal(false)}
                   disabled={!formName.trim()}
-                  className="px-5 py-2.5 rounded-xl bg-[#007AFF] hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow-2xs cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-[#007AFF] hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow-2xs cursor-pointer flex items-center gap-1.5"
                 >
-                  Save Changes
+                  <span>✓ Save Changes</span>
                 </button>
               </div>
             </div>

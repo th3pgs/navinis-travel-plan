@@ -1,4 +1,5 @@
 import { supabase, STORAGE_BUCKET, STATE_TABLE, STATE_ROW_ID } from './supabase';
+import { saveMasterStateIDB, saveWardrobeItemsIDB } from './db';
 
 const LOCAL_STORAGE_KEY = 'navini_master_state_v5';
 
@@ -42,13 +43,75 @@ export function getLastPushTimestamp(): number {
 }
 
 /**
- * Compresses an image client-side to max width ~800px JPEG for fast mobile loading
+ * Aggressively resizes and compresses an image client-side on an HTML5 <canvas>
+ * to max 400x400 JPEG at 0.6 quality (~15-25KB).
+ * Safe for iPadOS camera photos (even 12-48MP raw captures), preventing 5MB localStorage quota crashes.
+ */
+export function compressPhotoToMax400(
+  input: File | Blob | string,
+  maxDim = 400,
+  quality = 0.6
+): Promise<string> {
+  return new Promise((resolve) => {
+    const processImg = (src: string) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          canvas.width = Math.max(1, width);
+          canvas.height = Math.max(1, height);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(src);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(compressedDataUrl);
+        } catch {
+          resolve(src);
+        }
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    };
+
+    if (typeof input === 'string') {
+      processImg(input);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const src = (e.target?.result as string) || '';
+        processImg(src);
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(input);
+    }
+  });
+}
+
+/**
+ * Compresses an image client-side to max 400x400 JPEG for mobile cloud storage
  */
 export function compressImage(
   file: File | Blob,
-  maxWidth = 800,
-  maxHeight = 1000,
-  quality = 0.82
+  maxWidth = 400,
+  maxHeight = 400,
+  quality = 0.65
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -74,14 +137,14 @@ export function compressImage(
             }
           }
 
-          canvas.width = width;
-          canvas.height = height;
+          canvas.width = Math.max(1, width);
+          canvas.height = Math.max(1, height);
           const ctx = canvas.getContext('2d');
           if (!ctx) {
             resolve(file as Blob);
             return;
           }
-          ctx.drawImage(img, 0, 0, width, height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
           canvas.toBlob(
             (blob) => {
@@ -94,7 +157,7 @@ export function compressImage(
             'image/jpeg',
             quality
           );
-        } catch (err) {
+        } catch {
           resolve(file as Blob);
         }
       };
@@ -112,7 +175,7 @@ export async function uploadPhotoToSupabase(
   file: File | Blob,
   folder = 'wardrobe'
 ): Promise<string> {
-  const compressedBlob = await compressImage(file, 800, 1000, 0.82);
+  const compressedBlob = await compressImage(file, 400, 400, 0.65);
   const fileName = `${folder}/${Date.now()}_${Math.random().toString(36).substring(2, 8)}.jpg`;
 
   const { data, error } = await supabase.storage
@@ -180,7 +243,16 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
   _pushInFlight = true;
   _lastPushTimestamp = Date.now();
 
-  // 1. Instantly save locally (0ms offline safe)
+  // 1. Instantly save to IndexedDB (multi-gigabyte safe on iPadOS) and localStorage
+  try {
+    saveMasterStateIDB(state);
+    if (Array.isArray(state.wardrobe)) {
+      saveWardrobeItemsIDB(state.wardrobe);
+    }
+  } catch (err) {
+    console.warn('IndexedDB write warning in pushCloudState:', err);
+  }
+
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
     localStorage.setItem('navini_passport_profile_v5', JSON.stringify(state.passportInfo));
