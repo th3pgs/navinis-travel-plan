@@ -14,6 +14,7 @@ export interface WardrobeItem {
   uploadProgress?: number;
   localPhotoPreview?: string;
   updatedAt?: number;
+  createdAt?: number;
 }
 
 export interface GiftItem {
@@ -292,6 +293,23 @@ export function formatQuantityBadge(rawQuantity: string | number | undefined): s
     return `x${qStr}`;
   }
   return qStr;
+}
+
+/**
+ * Resolves the creation timestamp of an item for newest-first sorting.
+ * Checks `createdAt`, extracts timestamp from ID (e.g. `w-custom-1731000...`), or falls back to `updatedAt`.
+ */
+export function getItemCreationTime(item?: { id?: string; createdAt?: number; updatedAt?: number } | null): number {
+  if (!item) return 0;
+  if (item.createdAt && typeof item.createdAt === 'number') return item.createdAt;
+  if (item.id) {
+    const match = String(item.id).match(/(\d{10,14})/);
+    if (match) {
+      const parsed = parseInt(match[1], 10);
+      if (!isNaN(parsed) && parsed > 1000000000) return parsed;
+    }
+  }
+  return item.updatedAt || 0;
 }
 
 /**

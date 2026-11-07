@@ -14,6 +14,7 @@ import {
   normalizeBagLocation,
   parseTitleAndColor,
   formatQuantityBadge,
+  getItemCreationTime,
 } from '../data';
 import {
   ChevronLeft,
@@ -59,6 +60,8 @@ interface PhysicalHubProps {
   deletedLocations?: string[];
   customLocations?: string[];
   customCategories?: string[];
+  selectedCategory?: string;
+  onSelectCategory?: (category: string) => void;
   onAddLocation?: (name: string) => void;
   onRenameLocation?: (oldLoc: string, newLoc: string) => void;
   onDeleteLocation?: (loc: string) => void;
@@ -376,6 +379,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   deletedLocations = [],
   customLocations = [],
   customCategories = [],
+  selectedCategory: propSelectedCategory,
+  onSelectCategory,
   onAddLocation,
   onRenameLocation,
   onDeleteLocation,
@@ -394,8 +399,18 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   onToggleBagBought,
   onToggleDeviceBought,
 }) => {
-  // Active Category Filter ('all' or one of the 9 categories)
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  // Active Category Filter ('all' or one of the canonical categories)
+  const [internalCategory, setInternalCategory] = useState<string>('all');
+  const selectedCategory = propSelectedCategory !== undefined ? propSelectedCategory : internalCategory;
+
+  const setSelectedCategory = (cat: string) => {
+    setInternalCategory(cat);
+    onSelectCategory?.(cat);
+  };
+
+  // Modern Apple iOS Wardrobe Search Bar State (Requirement #5)
+  const [wardrobeSearch, setWardrobeSearch] = useState('');
+
   const [selectedSuitcaseFilter, setSelectedSuitcaseFilter] = useState<string>('all');
   const [isPrintMode, setIsPrintMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -574,7 +589,10 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
 
   // Filtered Items (isolates unnamed items from regular category views, defensive against null/undefined)
   const displayedItems = React.useMemo(() => {
-    return (wardrobe || []).filter((item) => {
+    const rawSearch = wardrobeSearch.trim().toLowerCase();
+    const searchTokens = rawSearch ? rawSearch.split(/\s+/).filter(Boolean) : [];
+
+    const filtered = (wardrobe || []).filter((item) => {
       if (!item) return false;
       // If user explicitly chose the "unnamed" pill
       if (selectedCategory === 'unnamed') {
@@ -598,9 +616,30 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         const bagMatch = bags.find((b) => b.id === selectedSuitcaseFilter || b.name === selectedSuitcaseFilter);
         if (bagMatch && !isItemInBag(item.targetBag, bagMatch)) return false;
       }
+
+      // Live Instant iOS Search Filter across title, color, category, bag, subType, notes
+      if (searchTokens.length > 0) {
+        const { mainTitle, colorLabel } = parseTitleAndColor(item.name || '');
+        const searchBlob = [
+          item.name || '',
+          mainTitle || '',
+          colorLabel || '',
+          item.category || '',
+          item.targetBag || '',
+          item.subType || '',
+          item.notes || '',
+        ].join(' ').toLowerCase();
+
+        const matchesAll = searchTokens.every((token) => searchBlob.includes(token));
+        if (!matchesAll) return false;
+      }
+
       return true;
     });
-  }, [wardrobe, cleanItems.length, selectedCategory, selectedSuitcaseFilter, bags]);
+
+    // Chronological newest-first sorting (Requirement #3)
+    return filtered.sort((a, b) => getItemCreationTime(b) - getItemCreationTime(a));
+  }, [wardrobe, cleanItems.length, selectedCategory, selectedSuitcaseFilter, bags, wardrobeSearch]);
 
   // Purge all unnamed photo retakes and duplicates (Requirement #4.2)
   const handlePurgeRetakes = () => {
@@ -1324,6 +1363,30 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         </div>
       </div>
 
+      {/* 1.5 APPLE iOS SEARCH BAR (Requirement #5) */}
+      <div className="relative w-full">
+        <div className="relative flex items-center w-full rounded-[10px] bg-[rgba(118,118,128,0.12)] px-3 py-2 transition-all focus-within:bg-[rgba(118,118,128,0.18)] focus-within:ring-2 focus-within:ring-[#007AFF]/50">
+          <Search className="w-4 h-4 text-slate-500 mr-2.5 shrink-0 pointer-events-none" />
+          <input
+            type="text"
+            value={wardrobeSearch}
+            onChange={(e) => setWardrobeSearch(e.target.value)}
+            placeholder="Search items, colors, bags (e.g., dress, red, paracetamol)..."
+            className="w-full bg-transparent text-[15px] text-slate-900 placeholder:text-slate-500 focus:outline-none leading-normal font-normal"
+          />
+          {wardrobeSearch && (
+            <button
+              type="button"
+              onClick={() => setWardrobeSearch('')}
+              className="ml-2 w-5 h-5 rounded-full bg-slate-400 hover:bg-slate-500 text-white flex items-center justify-center text-xs font-bold transition-colors cursor-pointer shrink-0"
+              title="Clear search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* 2. CATEGORY PILLS (Horizontal Scrolling, Starting Immediately without Summary Card) */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none pt-1">
         <button
@@ -1633,6 +1696,33 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
           );
         })}
       </div>
+
+      {/* Empty State for Wardrobe Search or Empty Category */}
+      {displayedItems.length === 0 && (
+        <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
+          <p className="text-sm font-semibold text-slate-700">
+            {wardrobeSearch.trim()
+              ? `No items matching "${wardrobeSearch.trim()}"`
+              : selectedCategory !== 'all'
+              ? `No items found in "${selectedCategory}"`
+              : 'No wardrobe items yet'}
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            {wardrobeSearch.trim()
+              ? 'Try searching for a different color, item title, or suitcase.'
+              : 'Tap "+ Add" above to add your first item to this category.'}
+          </p>
+          {wardrobeSearch.trim() && (
+            <button
+              type="button"
+              onClick={() => setWardrobeSearch('')}
+              className="mt-3 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              Clear Search
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 5. ENLARGED "ADD / EDIT ITEM" MODAL WITH LIVE PHOTO & ORIENTATION PREVIEW */}
       {isModalOpen && (

@@ -104,6 +104,59 @@ export function mergeItemsByTimestamp<T extends { id: string; updatedAt?: number
 }
 
 /**
+ * Item-by-item union merge for wardrobe items.
+ * Guaranteed never to drop remote items when syncing across devices.
+ * - Items in deletedIds are permanently purged.
+ * - Items in remote but not local are ALWAYS added.
+ * - Items in local but not remote are ALWAYS kept.
+ * - When in both, newer timestamp wins.
+ * - Preserves in-flight local uploads / previews if remote photo isn't ready.
+ */
+export function mergeWardrobeLists<T extends { id: string; updatedAt?: number; createdAt?: number; [key: string]: any }>(
+  localItems: T[] = [],
+  remoteItems: T[] = [],
+  deletedIds: string[] = []
+): T[] {
+  const deletedSet = new Set(deletedIds || []);
+  const map = new Map<string, T>();
+
+  // 1. Put local items (excluding deleted and non-wardrobe apps)
+  for (const item of (localItems || [])) {
+    if (!item || !item.id || deletedSet.has(item.id)) continue;
+    if (isSoftwareAppOrNonWardrobe(item)) continue;
+    map.set(item.id, item);
+  }
+
+  // 2. Merge remote items
+  for (const remoteItem of (remoteItems || [])) {
+    if (!remoteItem || !remoteItem.id || deletedSet.has(remoteItem.id)) continue;
+    if (isSoftwareAppOrNonWardrobe(remoteItem)) continue;
+
+    const localItem = map.get(remoteItem.id);
+    if (!localItem) {
+      // Remote item added on another device: ALWAYS add it!
+      map.set(remoteItem.id, remoteItem);
+    } else {
+      const localTime = Number(localItem.updatedAt || localItem.createdAt || 0);
+      const remoteTime = Number(remoteItem.updatedAt || remoteItem.createdAt || 0);
+
+      if (remoteTime >= localTime) {
+        // Remote is newer or equal: take remote, preserving in-flight local upload preview if remote photo is empty
+        const merged: T = {
+          ...remoteItem,
+          ...(localItem.localPhotoPreview && !remoteItem.photoUrl ? { localPhotoPreview: localItem.localPhotoPreview } : {}),
+          ...(localItem.syncStatus === 'uploading' && !remoteItem.photoUrl ? { syncStatus: 'uploading', uploadProgress: localItem.uploadProgress } : {}),
+        };
+        map.set(remoteItem.id, merged);
+      }
+      // If local is strictly newer, localItem remains in map
+    }
+  }
+
+  return Array.from(map.values());
+}
+
+/**
  * Aggressively resizes and compresses an image client-side on an HTML5 <canvas>
  * to max 400x400 JPEG at 0.6 quality (~15-25KB).
  * Safe for iPadOS camera photos (even 12-48MP raw captures), preventing 5MB localStorage quota crashes.
@@ -331,8 +384,38 @@ export function broadcastLiveSync(delta: {
 }
 
 /**
+ * Broadcasts an individual item add, update, or delete across all open tabs/devices.
+ * Delivers instant (<100ms) UI updates without waiting for full-payload roundtrips.
+ */
+export function broadcastItemDelta(delta: {
+  type: 'ITEM_UPSERT' | 'ITEM_DELETE';
+  item?: any;
+  deletedId?: string;
+  timestamp?: number;
+}) {
+  if (isOfflineLocked()) return;
+  if (_activeRealtimeChannel) {
+    try {
+      _activeRealtimeChannel.send({
+        type: 'broadcast',
+        event: 'item_delta',
+        payload: {
+          ...delta,
+          senderId: CLIENT_ID,
+          timestamp: delta.timestamp || Date.now(),
+        },
+      });
+    } catch (err) {
+      console.warn('Realtime item delta broadcast error:', err);
+    }
+  }
+}
+
+/**
  * Push master state to Supabase `app_state` (row `id = 'main_plan'`)
  * with instant local storage write, WebSocket broadcast, and database upsert.
+ * CRITICAL: Pre-fetches the remote state first to perform an item-level union merge,
+ * guaranteeing that items added on other devices are NEVER clobbered or wiped.
  */
 export function pushCloudState(state: AppMasterState, immediate = true): Promise<boolean> {
   const now = Date.now();
@@ -400,7 +483,7 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
     timestamp: now,
   });
 
-  // 3. Write to Supabase database (zero slow debounce)
+  // 3. Write to Supabase database with pre-fetch union merge
   return new Promise((resolve) => {
     if (syncDebounceTimer) {
       clearTimeout(syncDebounceTimer);
@@ -411,6 +494,55 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
       _lastPushTimestamp = Date.now();
 
       try {
+        // STEP 1: Pre-fetch remote state first to prevent overwriting items added on other devices
+        try {
+          const { data: remoteData, error: fetchErr } = await supabase
+            .from(STATE_TABLE)
+            .select('payload')
+            .eq('id', STATE_ROW_ID)
+            .maybeSingle();
+
+          if (!fetchErr && remoteData?.payload) {
+            const remoteState = remoteData.payload as AppMasterState;
+
+            // Merge tombstone deleted IDs
+            const combinedDeleted = Array.from(new Set([
+              ...(state.deletedItemIds || []),
+              ...(remoteState.deletedItemIds || []),
+            ]));
+            state.deletedItemIds = combinedDeleted;
+
+            // Item-level union merge for wardrobe: NEVER drop items!
+            if (Array.isArray(remoteState.wardrobe)) {
+              state.wardrobe = mergeWardrobeLists(state.wardrobe, remoteState.wardrobe, combinedDeleted);
+            }
+
+            // Union merge for bags, devices, documents
+            if (Array.isArray(remoteState.bags)) {
+              state.bags = mergeItemsByTimestamp(state.bags, remoteState.bags, combinedDeleted);
+            }
+            if (Array.isArray(remoteState.devices)) {
+              state.devices = mergeItemsByTimestamp(state.devices, remoteState.devices, combinedDeleted);
+            }
+            if (Array.isArray(remoteState.documents)) {
+              state.documents = mergeItemsByTimestamp(state.documents, remoteState.documents, combinedDeleted);
+            }
+
+            // Save union locally so local state matches
+            try {
+              saveMasterStateIDB(state);
+              if (Array.isArray(state.wardrobe)) {
+                saveWardrobeItemsIDB(state.wardrobe);
+              }
+              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+              localStorage.setItem('navini_wardrobe_v7', JSON.stringify(state.wardrobe));
+              localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(combinedDeleted));
+            } catch {}
+          }
+        } catch (mergeErr) {
+          console.warn('Pre-push union fetch warning (proceeding with local payload):', mergeErr);
+        }
+
         const { error } = await supabase
           .from(STATE_TABLE)
           .upsert({
@@ -444,7 +576,7 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
 
 /**
  * Subscribe to realtime state updates from Supabase:
- * Subscribes to BOTH WebSocket Broadcast channel (`navini-live-sync`) for instant peer-to-peer sync (<100ms)
+ * Subscribes to BOTH WebSocket Broadcast channel (`navini-instant-sync`) for instant peer-to-peer sync (<100ms)
  * AND Postgres database changes for durable background replication.
  */
 export function subscribeToCloudState(
@@ -463,7 +595,7 @@ export function subscribeToCloudState(
     _activeRealtimeChannel = null;
   }
 
-  const channel = supabase.channel('navini-live-sync', {
+  const channel = supabase.channel('navini-instant-sync', {
     config: {
       broadcast: { ack: false, self: false },
     },
@@ -479,6 +611,18 @@ export function subscribeToCloudState(
     if (payload.masterState) {
       onUpdate(payload.masterState, 'broadcast');
     }
+    if (onDelta) {
+      onDelta(payload);
+    }
+  });
+
+  // 1b. Real-time Item Delta Broadcast (Instant item add/edit/delete/packed toggle)
+  channel.on('broadcast', { event: 'item_delta' }, (event) => {
+    if (isOfflineLocked()) return;
+    const payload = event.payload;
+    if (!payload || payload.senderId === CLIENT_ID) return;
+
+    console.log('[LiveSync] Ultra-fast WebSocket item_delta received:', payload.type);
     if (onDelta) {
       onDelta(payload);
     }

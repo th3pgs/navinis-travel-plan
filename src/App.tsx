@@ -31,6 +31,7 @@ import {
   migrateLegacyApps,
   migrateWardrobeItems,
   normalizeBagLocation,
+  isSoftwareAppOrNonWardrobe,
 } from './data';
 
 import {
@@ -43,7 +44,11 @@ import {
   isOfflineLocked as getIsOfflineLocked,
   setOfflineLocked as saveIsOfflineLocked,
   mergeItemsByTimestamp,
+  mergeWardrobeLists,
+  broadcastItemDelta,
 } from './cloudSync';
+
+import { supabase, STATE_TABLE, STATE_ROW_ID } from './supabase';
 
 import { AuthGate } from './components/AuthGate';
 import { RecoveryScanner } from './components/RecoveryScanner';
@@ -66,11 +71,34 @@ export function App() {
 
   // Current View Routing: 'overview' | 'physical' | 'documents' | 'connectivity'
   const [currentView, setCurrentView] = useState<'overview' | 'physical' | 'documents' | 'connectivity'>(() => {
-    const hash = window.location.hash.replace('#', '');
-    if (['physical', 'documents', 'connectivity'].includes(hash)) {
-      return hash as any;
-    }
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryView = urlParams.get('view');
+      if (queryView === 'wardrobe' || queryView === 'physical') return 'physical';
+      if (queryView && ['documents', 'connectivity', 'overview'].includes(queryView)) return queryView as any;
+
+      const hash = window.location.hash.replace('#', '');
+      if (hash === 'wardrobe' || hash === 'physical') return 'physical';
+      if (['documents', 'connectivity'].includes(hash)) return hash as any;
+
+      const saved = localStorage.getItem('navini_active_view');
+      if (saved === 'wardrobe' || saved === 'physical') return 'physical';
+      if (saved && ['documents', 'connectivity', 'overview'].includes(saved)) return saved as any;
+    } catch {}
     return 'overview';
+  });
+
+  // Active Category Filter Persistence across Refreshes & URL query (Requirement #4)
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryCat = urlParams.get('cat');
+      if (queryCat && queryCat.trim()) return queryCat.trim();
+
+      const saved = localStorage.getItem('navini_active_category');
+      if (saved && saved.trim()) return saved.trim();
+    } catch {}
+    return 'all';
   });
 
   // Sidebar & Modals
@@ -82,25 +110,84 @@ export function App() {
 
   // Live Supabase Status
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(false);
+  const lastSeenRemoteUpdatedAtRef = useRef<number>(0);
 
-  // Synchronize hash with currentView
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '');
-      if (['physical', 'documents', 'connectivity'].includes(hash)) {
-        setCurrentView(hash as any);
+  // Synchronize URL search params and hash without causing page reload
+  const updateUrlAndHistory = (view: string, cat?: string) => {
+    try {
+      const url = new URL(window.location.href);
+      if (view && view !== 'overview') {
+        url.searchParams.set('view', view);
+        url.hash = view;
       } else {
-        setCurrentView('overview');
+        url.searchParams.delete('view');
+        url.hash = '';
       }
+
+      const activeCat = cat !== undefined ? cat : selectedCategory;
+      if (activeCat && activeCat !== 'all') {
+        url.searchParams.set('cat', activeCat);
+      } else {
+        url.searchParams.delete('cat');
+      }
+
+      window.history.replaceState(null, '', url.toString());
+    } catch {}
+  };
+
+  // Synchronize hash / popstate with currentView & selectedCategory
+  useEffect(() => {
+    const handleUrlSync = () => {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const qView = urlParams.get('view');
+        const hash = window.location.hash.replace('#', '');
+        const targetView =
+          qView === 'wardrobe' || qView === 'physical' || hash === 'wardrobe' || hash === 'physical'
+            ? 'physical'
+            : ['documents', 'connectivity'].includes(qView || '')
+            ? (qView as any)
+            : ['documents', 'connectivity'].includes(hash)
+            ? (hash as any)
+            : 'overview';
+
+        setCurrentView(targetView);
+
+        const qCat = urlParams.get('cat');
+        if (qCat) {
+          setSelectedCategory(qCat);
+        }
+      } catch {}
     };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+
+    window.addEventListener('popstate', handleUrlSync);
+    window.addEventListener('hashchange', handleUrlSync);
+    return () => {
+      window.removeEventListener('popstate', handleUrlSync);
+      window.removeEventListener('hashchange', handleUrlSync);
+    };
+  }, []);
+
+  // Update URL on initial mount to match restored state
+  useEffect(() => {
+    updateUrlAndHistory(currentView, selectedCategory);
   }, []);
 
   const navigateToView = (view: 'overview' | 'physical' | 'documents' | 'connectivity') => {
     setCurrentView(view);
-    window.location.hash = view === 'overview' ? '' : view;
+    try {
+      localStorage.setItem('navini_active_view', view);
+    } catch {}
+    updateUrlAndHistory(view, selectedCategory);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectCategory = (cat: string) => {
+    setSelectedCategory(cat);
+    try {
+      localStorage.setItem('navini_active_category', cat);
+    } catch {}
+    updateUrlAndHistory(currentView, cat);
   };
 
   // State Management (v7 Migration with Purged Legacy VPNs)
@@ -401,6 +488,10 @@ export function App() {
   const applyRemoteMasterState = (remote: AppMasterState) => {
     if (isOfflineLocked) return;
 
+    if (remote.lastUpdatedAt) {
+      lastSeenRemoteUpdatedAtRef.current = Number(remote.lastUpdatedAt);
+    }
+
     // Merge tombstones
     const remoteDelItemIds = remote.deletedItemIds || [];
     const mergedDeletedIds = Array.from(new Set([...deletedItemIds, ...remoteDelItemIds]));
@@ -431,7 +522,7 @@ export function App() {
     if (remote.wardrobe?.length) {
       const cleanRemote = migrateWardrobeItems(remote.wardrobe);
       setWardrobe((prev) => {
-        const merged = mergeItemsByTimestamp(prev, cleanRemote, mergedDeletedIds);
+        const merged = mergeWardrobeLists(prev, cleanRemote, mergedDeletedIds);
         saveWardrobeItemsIDB(merged);
         return merged;
       });
@@ -465,6 +556,84 @@ export function App() {
       setConfirmedCampusChat(remote.confirmedCampusChat);
     }
   };
+
+  // Engine A: Real-time Item Delta Handler (Sub-100ms item updates across tabs/devices)
+  const handleIncomingDelta = (delta: any) => {
+    if (isOfflineLocked || !delta) return;
+
+    if (delta.type === 'ITEM_DELETE' && delta.deletedId) {
+      const id = delta.deletedId;
+      setDeletedItemIds((prev) => {
+        const updated = Array.from(new Set([...prev, id]));
+        try {
+          localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+      setWardrobe((prev) => {
+        const updated = prev.filter((w) => w.id !== id);
+        saveWardrobeItemsIDB(updated);
+        try {
+          localStorage.setItem('navini_wardrobe_v7', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    } else if (delta.type === 'ITEM_UPSERT' && delta.item && delta.item.id) {
+      const incomingItem = delta.item as WardrobeItem;
+      if (isSoftwareAppOrNonWardrobe(incomingItem)) return;
+      if (deletedItemIds.includes(incomingItem.id)) return;
+
+      setWardrobe((prev) => {
+        const index = prev.findIndex((w) => w.id === incomingItem.id);
+        let updated: WardrobeItem[];
+        if (index >= 0) {
+          const current = prev[index];
+          const incomingTime = Number(incomingItem.updatedAt || incomingItem.createdAt || 0);
+          const currentTime = Number(current.updatedAt || current.createdAt || 0);
+          if (incomingTime >= currentTime) {
+            updated = [...prev];
+            updated[index] = { ...current, ...incomingItem };
+          } else {
+            return prev;
+          }
+        } else {
+          updated = [incomingItem, ...prev];
+        }
+        saveWardrobeItemsIDB(updated);
+        try {
+          localStorage.setItem('navini_wardrobe_v7', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    }
+  };
+
+  // Engine B: 1.5-Second Live Delta Background Poller
+  useEffect(() => {
+    if (isOfflineLocked) return;
+
+    const pollTimer = setInterval(async () => {
+      if (document.visibilityState !== 'visible' || isOfflineLocked) return;
+      try {
+        const { data, error } = await supabase
+          .from(STATE_TABLE)
+          .select('payload')
+          .eq('id', STATE_ROW_ID)
+          .maybeSingle();
+
+        if (!error && data?.payload) {
+          const remote = data.payload as AppMasterState;
+          const remoteTime = Number(remote.lastUpdatedAt || 0);
+          if (remoteTime > 0 && remoteTime !== lastSeenRemoteUpdatedAtRef.current) {
+            lastSeenRemoteUpdatedAtRef.current = remoteTime;
+            applyRemoteMasterState(remote);
+          }
+        }
+      } catch {}
+    }, 1500);
+
+    return () => clearInterval(pollTimer);
+  }, [isOfflineLocked, deletedItemIds]);
 
   // Pulls latest state from Supabase and merges cleanly
   const pullAndMergeFromCloud = async () => {
@@ -518,7 +687,7 @@ export function App() {
       }
       realtimeUnsubRef.current = subscribeToCloudState((incoming) => {
         applyRemoteMasterState(incoming);
-      });
+      }, handleIncomingDelta);
 
       // 3. Pull latest remote state from Supabase and merge
       await pullAndMergeFromCloud();
@@ -581,7 +750,7 @@ export function App() {
         if (!isMounted || isOfflineLocked) return;
         setIsSupabaseConnected(true);
         applyRemoteMasterState(incoming);
-      });
+      }, handleIncomingDelta);
     }
 
     // Check connection health every 12 seconds
@@ -1045,9 +1214,23 @@ export function App() {
 
   const toggleWardrobePacked = (id: string) => {
     const now = Date.now();
-    const updated = wardrobe.map((w) => (w.id === id ? { ...w, isPacked: !w.isPacked, updatedAt: now } : w));
+    let updatedItem: WardrobeItem | null = null;
+    const updated = wardrobe.map((w) => {
+      if (w.id === id) {
+        updatedItem = { ...w, isPacked: !w.isPacked, updatedAt: now };
+        return updatedItem;
+      }
+      return w;
+    });
     setWardrobe(updated);
+    saveWardrobeItemsIDB(updated);
     syncAllState({ wardrobe: updated });
+    if (updatedItem) {
+      broadcastItemDelta({
+        type: 'ITEM_UPSERT',
+        item: updatedItem,
+      });
+    }
   };
 
   const handleAddWardrobeItem = (item: Omit<WardrobeItem, 'id'>) => {
@@ -1057,20 +1240,38 @@ export function App() {
       id: 'w-custom-' + now,
       syncStatus: item.syncStatus || 'uploading',
       uploadProgress: item.uploadProgress || 15,
+      createdAt: now,
       updatedAt: now,
     };
     const updated = [newItem, ...wardrobe];
     setWardrobe(updated);
     saveWardrobeItemsIDB(updated);
     syncAllState({ wardrobe: updated });
+    broadcastItemDelta({
+      type: 'ITEM_UPSERT',
+      item: newItem,
+    });
   };
 
   const handleUpdateWardrobeItem = (id: string, partial: Partial<WardrobeItem>) => {
     const now = Date.now();
-    const updated = wardrobe.map((w) => (w.id === id ? { ...w, ...partial, updatedAt: now } : w));
+    let updatedItem: WardrobeItem | null = null;
+    const updated = wardrobe.map((w) => {
+      if (w.id === id) {
+        updatedItem = { ...w, ...partial, updatedAt: now };
+        return updatedItem;
+      }
+      return w;
+    });
     setWardrobe(updated);
     saveWardrobeItemsIDB(updated);
     syncAllState({ wardrobe: updated });
+    if (updatedItem) {
+      broadcastItemDelta({
+        type: 'ITEM_UPSERT',
+        item: updatedItem,
+      });
+    }
   };
 
   const handleDeleteWardrobeItem = (id: string) => {
@@ -1083,6 +1284,10 @@ export function App() {
       localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(nextDeleted));
     } catch {}
     syncAllState({ wardrobe: updated, deletedItemIds: nextDeleted });
+    broadcastItemDelta({
+      type: 'ITEM_DELETE',
+      deletedId: id,
+    });
   };
 
   const handleRestoreWardrobeItems = async (restoredItems: WardrobeItem[]) => {
@@ -1529,6 +1734,8 @@ export function App() {
             deletedLocations={deletedLocations}
             customLocations={customLocations}
             customCategories={customCategories}
+            selectedCategory={selectedCategory}
+            onSelectCategory={handleSelectCategory}
             onAddLocation={handleAddLocation}
             onRenameLocation={handleRenameLocation}
             onDeleteLocation={handleDeleteLocation}
