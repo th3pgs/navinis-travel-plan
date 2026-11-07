@@ -252,13 +252,6 @@ export function App() {
   });
 
   const [wardrobe, setWardrobe] = useState<WardrobeItem[]>(() => {
-    // If master cloud migration has ALREADY been done on this browser, DO NOT load from localStorage
-    try {
-      if (localStorage.getItem('MASTER_CLOUD_MIGRATION_DONE_V1') === 'true') {
-        return INITIAL_WARDROBE;
-      }
-    } catch {}
-
     const saved = localStorage.getItem('navini_wardrobe_v7') || localStorage.getItem('navini_wardrobe_v6');
     if (saved) {
       try {
@@ -763,24 +756,14 @@ export function App() {
     let isMounted = true;
 
     const initSupabase = async () => {
-      const isAlreadyMigrated = (() => {
-        try {
-          return localStorage.getItem('MASTER_CLOUD_MIGRATION_DONE_V1') === 'true';
-        } catch {
-          return false;
+      // Prior to Supabase master lock, load local IndexedDB items into memory so S22 Ultra holds its full list
+      try {
+        const idbWardrobe = await getWardrobeItemsIDB();
+        if (idbWardrobe && Array.isArray(idbWardrobe) && idbWardrobe.length > 0 && isMounted) {
+          setWardrobe((prev) => mergeWardrobeLists(prev, idbWardrobe, deletedItemIds));
         }
-      })();
-
-      // Prior to master migration, load local IndexedDB items into memory so S22 Ultra holds its full list
-      if (!isAlreadyMigrated && !isMasterLocked) {
-        try {
-          const idbWardrobe = await getWardrobeItemsIDB();
-          if (idbWardrobe && Array.isArray(idbWardrobe) && idbWardrobe.length > 0 && isMounted) {
-            setWardrobe((prev) => mergeWardrobeLists(prev, idbWardrobe, deletedItemIds));
-          }
-        } catch (e) {
-          console.warn('IDB startup check:', e);
-        }
+      } catch (e) {
+        console.warn('IDB startup check:', e);
       }
 
       // If offline locked, strictly isolate to local storage
@@ -800,13 +783,9 @@ export function App() {
             // REMOTE IS MASTER LOCKED: Single global truth!
             setIsMasterLocked(true);
             setMasterMigrationDone(true);
-            purgeLegacyLocalStorageAndIDB();
-            applyRemoteMasterState(remote, true);
-          } else if (isAlreadyMigrated) {
             applyRemoteMasterState(remote, true);
           } else {
-            // Neither is locked: S22 Ultra keeps its rendered local items on screen, ready for the Master Push button!
-            console.log('[App] Ready for S22 Ultra Master Push. In-memory items preserved.');
+            console.log('[App] Cloud master lock not yet engaged in Supabase. In-memory items preserved for Master Push.');
           }
         }
       } catch (err) {
@@ -1589,19 +1568,17 @@ export function App() {
 
           {/* Quick Action Pills + Hamburger Menu */}
           <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            {/* ONE-TIME RED MASTER PUSH BUTTON (S22 ULTRA STATE -> SUPABASE TRUTH) */}
-            {!isMasterLocked && (
-              <button
-                type="button"
-                onClick={handlePushMasterDataToCloud}
-                disabled={isMasterPushing}
-                className="h-7 sm:h-8 px-2.5 sm:px-3.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] sm:text-xs flex items-center gap-1.5 shadow-md shadow-red-500/30 cursor-pointer animate-pulse shrink-0 whitespace-nowrap active:scale-95 transition-all"
-                title="Tap once to publish complete Samsung S22 Ultra master data to Supabase cloud as single global truth"
-              >
-                <span className="text-xs">🔴</span>
-                <span>{isMasterPushing ? 'Publishing...' : 'Push Master Data to Cloud'}</span>
-              </button>
-            )}
+            {/* RED MASTER PUSH BUTTON (ALWAYS RENDERS UNCONDITIONALLY) */}
+            <button
+              type="button"
+              onClick={handlePushMasterDataToCloud}
+              disabled={isMasterPushing}
+              className="h-7 sm:h-8 px-2.5 sm:px-3.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] sm:text-xs flex items-center gap-1.5 shadow-md shadow-red-500/30 cursor-pointer animate-pulse shrink-0 whitespace-nowrap active:scale-95 transition-all"
+              title="Tap to publish current screen state to Supabase cloud as single global truth"
+            >
+              <span className="text-xs">🔴</span>
+              <span>{isMasterPushing ? 'Publishing...' : 'Push Master Data to Cloud'}</span>
+            </button>
 
             {/* Tiny Top-Bar Recovery Shield Icon */}
             <button
