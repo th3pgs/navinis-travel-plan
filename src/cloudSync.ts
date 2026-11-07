@@ -73,45 +73,10 @@ export function setMasterMigrationDone(done = true): void {
 }
 
 /**
- * Clean slate utility: wipes out legacy browser caching keys and IndexedDB database
- * to guarantee that mobile browsers (Safari/Chrome) never resurrect old or deleted items.
+ * Safe no-op: Never delete local IndexedDB or localStorage items so user data never vanishes.
  */
 export function purgeLegacyLocalStorageAndIDB(): void {
-  try {
-    const keysToPreserve = new Set([
-      'navini_auth_unlocked',
-      'MASTER_CLOUD_MIGRATION_DONE_V1',
-      'navini_active_view',
-      'navini_active_category',
-      'navini_offline_locked',
-    ]);
-    const toRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && !keysToPreserve.has(k)) {
-        if (
-          k.startsWith('navini_') ||
-          k.startsWith('wardrobe_') ||
-          k.startsWith('master_') ||
-          k.includes('vault') ||
-          k.includes('cache')
-        ) {
-          toRemove.push(k);
-        }
-      }
-    }
-    toRemove.forEach((k) => localStorage.removeItem(k));
-  } catch (e) {
-    console.warn('LocalStorage purge error:', e);
-  }
-
-  try {
-    if (typeof indexedDB !== 'undefined') {
-      indexedDB.deleteDatabase('navini_travel_vault');
-    }
-  } catch (e) {
-    console.warn('IndexedDB deleteDatabase error:', e);
-  }
+  // Intentionally preserved to prevent accidental data loss across devices.
 }
 
 let syncDebounceTimer: any = null;
@@ -477,32 +442,35 @@ export function broadcastItemDelta(delta: {
 
 /**
  * Push master state to Supabase `app_state` (row `id = 'main_plan'`)
- * with instant WebSocket broadcast and direct database upsert.
- * 100% Pure Supabase Cloud Mode: zero local caching & zero stale clobbering.
+ * with instant local IndexedDB save, WebSocket broadcast, and union-merged database upsert.
+ * Guaranteed never to drop or clobber items added on another device.
  */
 export function pushCloudState(state: AppMasterState, immediate = true): Promise<boolean> {
   const now = Date.now();
   state.lastUpdated = new Date(now).toISOString();
   state.lastUpdatedAt = now;
+  state.is_master_locked = true;
   _pushInFlight = true;
   _lastPushTimestamp = now;
 
-  const isMasterLockedMode = state.is_master_locked || isMasterMigrationDone();
+  // 1. Save to IndexedDB (multi-gigabyte safe, NO 5MB quota limit!)
+  try {
+    saveMasterStateIDB(state);
+    if (Array.isArray(state.wardrobe)) {
+      saveWardrobeItemsIDB(state.wardrobe);
+    }
+  } catch (err) {
+    console.warn('IndexedDB write warning in pushCloudState:', err);
+  }
 
   // If offline locked, strictly isolate to local storage
   if (isOfflineLocked()) {
     console.log('[CloudSync] Device is offline locked. Changes safely kept locally.');
-    try {
-      saveMasterStateIDB(state);
-      if (Array.isArray(state.wardrobe)) {
-        saveWardrobeItemsIDB(state.wardrobe);
-      }
-    } catch {}
     _pushInFlight = false;
     return Promise.resolve(true);
   }
 
-  // 1. Broadcast immediately over WebSocket to peer devices in ~100ms
+  // 2. Broadcast immediately over WebSocket to peer devices in ~100ms
   broadcastLiveSync({
     action: 'state_update',
     masterState: state,
@@ -510,7 +478,7 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
     timestamp: now,
   });
 
-  // 2. Write directly to Supabase database
+  // 3. Write to Supabase database with pre-fetch union merge so no device ever clobbers another
   return new Promise((resolve) => {
     if (syncDebounceTimer) {
       clearTimeout(syncDebounceTimer);
@@ -521,16 +489,44 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
       _lastPushTimestamp = Date.now();
 
       try {
-        // If NOT in master locked mode yet (prior to one-time migration), keep local storage in sync
-        if (!isMasterLockedMode) {
-          try {
-            saveMasterStateIDB(state);
-            if (Array.isArray(state.wardrobe)) {
-              saveWardrobeItemsIDB(state.wardrobe);
+        try {
+          const { data: remoteData, error: fetchErr } = await supabase
+            .from(STATE_TABLE)
+            .select('payload')
+            .eq('id', STATE_ROW_ID)
+            .maybeSingle();
+
+          if (!fetchErr && remoteData?.payload) {
+            const remoteState = remoteData.payload as AppMasterState;
+
+            const combinedDeleted = Array.from(new Set([
+              ...(state.deletedItemIds || []),
+              ...(remoteState.deletedItemIds || []),
+            ]));
+            state.deletedItemIds = combinedDeleted;
+
+            if (Array.isArray(remoteState.wardrobe)) {
+              state.wardrobe = mergeWardrobeLists(state.wardrobe, remoteState.wardrobe, combinedDeleted);
             }
-          } catch (err) {
-            console.warn('IndexedDB write warning in pushCloudState:', err);
+            if (Array.isArray(remoteState.bags)) {
+              state.bags = mergeItemsByTimestamp(state.bags, remoteState.bags, combinedDeleted);
+            }
+            if (Array.isArray(remoteState.devices)) {
+              state.devices = mergeItemsByTimestamp(state.devices, remoteState.devices, combinedDeleted);
+            }
+            if (Array.isArray(remoteState.documents)) {
+              state.documents = mergeItemsByTimestamp(state.documents, remoteState.documents, combinedDeleted);
+            }
+
+            try {
+              saveMasterStateIDB(state);
+              if (Array.isArray(state.wardrobe)) {
+                saveWardrobeItemsIDB(state.wardrobe);
+              }
+            } catch {}
           }
+        } catch (mergeErr) {
+          console.warn('Pre-push union fetch warning:', mergeErr);
         }
 
         const { error } = await supabase

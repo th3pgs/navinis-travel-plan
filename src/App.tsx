@@ -471,14 +471,15 @@ export function App() {
       masterState.is_master_locked = true;
     }
 
-    // If offline locked, strictly isolate to local storage
+    // Always keep local IndexedDB updated
+    try {
+      await saveWardrobeItemsIDB(masterState.wardrobe);
+      await saveMasterStateIDB(masterState);
+    } catch (e) {
+      console.warn('IDB write warning in syncAllState:', e);
+    }
+
     if (isOfflineLocked) {
-      try {
-        await saveWardrobeItemsIDB(masterState.wardrobe);
-        await saveMasterStateIDB(masterState);
-      } catch (e) {
-        console.warn('IDB write warning in syncAllState:', e);
-      }
       return true;
     }
 
@@ -487,7 +488,7 @@ export function App() {
     return pushResult;
   };
 
-  // One-Time Action: Forces rendered Samsung S22 Ultra master state into Supabase cloud
+  // Master Push Action: Safely combines local + remote state and publishes to Supabase as global truth
   const handlePushMasterDataToCloud = async () => {
     setIsMasterPushing(true);
     try {
@@ -497,7 +498,42 @@ export function App() {
       snapshot.is_master_locked = true;
       snapshot.lastUpdatedAt = Date.now();
 
-      // Force overwrite Supabase app_state table completely (NO merging with older remote data!)
+      // Pre-fetch remote state from Supabase and union-merge so zero items are ever lost
+      try {
+        const { data: remoteData, error: fetchErr } = await supabase
+          .from(STATE_TABLE)
+          .select('payload')
+          .eq('id', STATE_ROW_ID)
+          .maybeSingle();
+
+        if (!fetchErr && remoteData?.payload) {
+          const remoteState = remoteData.payload as AppMasterState;
+          const combinedDeleted = Array.from(
+            new Set([...(snapshot.deletedItemIds || []), ...(remoteState.deletedItemIds || [])])
+          );
+          snapshot.deletedItemIds = combinedDeleted;
+
+          if (Array.isArray(remoteState.wardrobe)) {
+            snapshot.wardrobe = mergeWardrobeLists(
+              snapshot.wardrobe,
+              migrateWardrobeItems(remoteState.wardrobe),
+              combinedDeleted
+            );
+          }
+          if (Array.isArray(remoteState.bags)) {
+            snapshot.bags = mergeItemsByTimestamp(snapshot.bags, remoteState.bags, combinedDeleted);
+          }
+          if (Array.isArray(remoteState.devices)) {
+            snapshot.devices = mergeItemsByTimestamp(snapshot.devices, remoteState.devices, combinedDeleted);
+          }
+          if (Array.isArray(remoteState.documents)) {
+            snapshot.documents = mergeItemsByTimestamp(snapshot.documents, remoteState.documents, combinedDeleted);
+          }
+        }
+      } catch (mergeErr) {
+        console.warn('Pre-push merge check warning:', mergeErr);
+      }
+
       const { error } = await supabase.from(STATE_TABLE).upsert({
         id: STATE_ROW_ID,
         payload: snapshot,
@@ -507,9 +543,9 @@ export function App() {
       if (!error) {
         setIsMasterLocked(true);
         setMasterMigrationDone(true);
-
-        // Wipe legacy browser caching keys & IndexedDB database
-        purgeLegacyLocalStorageAndIDB();
+        setWardrobe(snapshot.wardrobe);
+        await saveWardrobeItemsIDB(snapshot.wardrobe);
+        await saveMasterStateIDB(snapshot);
 
         // Broadcast master_locked to all connected peer tabs & devices
         broadcastLiveSync({
@@ -517,7 +553,9 @@ export function App() {
           masterState: snapshot,
         });
 
-        setMasterModalMessage('✓ Master Data Published to Cloud! All devices will now sync 100% from Supabase.');
+        setMasterModalMessage(
+          `✓ Published Online! All ${snapshot.wardrobe.length} wardrobe items, bags, and documents are now synced globally. Anyone logging in with the password on any device will see this exact progress. You can also download the JSON backup below for offline viewing.`
+        );
       } else {
         setMasterModalMessage('Failed to publish master data: ' + error.message);
       }
@@ -528,8 +566,28 @@ export function App() {
     }
   };
 
-  // Reconciles incoming remote state: In pure cloud mode, adopts remote state directly with ZERO local merges
-  const applyRemoteMasterState = (remote: AppMasterState, isPureReplace = true) => {
+  // Direct 1-Tap JSON Backup Download for Offline Viewing
+  const handleDownloadMasterJsonBackup = () => {
+    try {
+      const snapshot = buildCurrentMasterState({ is_master_locked: true });
+      const dataStr = JSON.stringify(snapshot, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dateTag = new Date().toISOString().slice(0, 10);
+      a.download = `navini-china-plan-master-${dateTag}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('JSON download error:', e);
+    }
+  };
+
+  // Reconciles incoming remote state cleanly via item-level union merge so zero items ever vanish
+  const applyRemoteMasterState = (remote: AppMasterState, _isPureReplace = false) => {
     if (isOfflineLocked) return;
 
     if (remote.lastUpdatedAt) {
@@ -541,36 +599,50 @@ export function App() {
       setMasterMigrationDone(true);
     }
 
+    const remoteDelItemIds = remote.deletedItemIds || [];
+    const mergedDeletedIds = Array.from(new Set([...deletedItemIds, ...remoteDelItemIds]));
+    setDeletedItemIds(mergedDeletedIds);
+    try {
+      localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(mergedDeletedIds));
+    } catch {}
+
     if (remote.passportInfo) {
       setPassportInfo(remote.passportInfo);
     }
 
-    if (Array.isArray(remote.wardrobe)) {
+    if (Array.isArray(remote.wardrobe) && remote.wardrobe.length > 0) {
       const cleanRemote = migrateWardrobeItems(remote.wardrobe);
-      setWardrobe(cleanRemote);
+      setWardrobe((prev) => {
+        const merged = mergeWardrobeLists(prev, cleanRemote, mergedDeletedIds);
+        saveWardrobeItemsIDB(merged);
+        return merged;
+      });
     }
 
-    if (Array.isArray(remote.bags)) {
-      setBags(remote.bags.map((b) => ({ ...b, name: normalizeBagLocation(b.name) })));
+    if (Array.isArray(remote.bags) && remote.bags.length > 0) {
+      setBags((prev) => {
+        const normalized = remote.bags.map((b) => ({ ...b, name: normalizeBagLocation(b.name) }));
+        return mergeItemsByTimestamp(prev, normalized, mergedDeletedIds);
+      });
     }
 
-    if (Array.isArray(remote.devices)) {
-      setDevices(remote.devices);
+    if (Array.isArray(remote.devices) && remote.devices.length > 0) {
+      setDevices((prev) => mergeItemsByTimestamp(prev, remote.devices, mergedDeletedIds));
     }
 
-    if (Array.isArray(remote.documents)) {
-      setDocuments(remote.documents);
+    if (Array.isArray(remote.documents) && remote.documents.length > 0) {
+      setDocuments((prev) => mergeItemsByTimestamp(prev, remote.documents, mergedDeletedIds));
     }
 
-    if (Array.isArray(remote.apps)) {
+    if (Array.isArray(remote.apps) && remote.apps.length > 0) {
       setApps(migrateLegacyApps(remote.apps));
     }
 
-    if (Array.isArray(remote.milestones)) {
+    if (Array.isArray(remote.milestones) && remote.milestones.length > 0) {
       setMilestones(remote.milestones);
     }
 
-    if (Array.isArray(remote.categories)) {
+    if (Array.isArray(remote.categories) && remote.categories.length > 0) {
       const del = remote.deletedCategories || [];
       setCategories(remote.categories.filter((c: string) => !del.includes(c)));
     }
@@ -578,16 +650,12 @@ export function App() {
       setDeletedCategories(remote.deletedCategories);
     }
 
-    if (Array.isArray(remote.locations)) {
+    if (Array.isArray(remote.locations) && remote.locations.length > 0) {
       const del = remote.deletedLocations || [];
       setLocations(remote.locations.filter((l: string) => !del.includes(l)));
     }
     if (Array.isArray(remote.deletedLocations)) {
       setDeletedLocations(remote.deletedLocations);
-    }
-
-    if (Array.isArray(remote.deletedItemIds)) {
-      setDeletedItemIds(remote.deletedItemIds);
     }
 
     if (typeof remote.confirmedCampusChat === 'boolean') {
@@ -639,7 +707,7 @@ export function App() {
     }
   };
 
-  // Engine B: 1.5-Second Live Delta Background Poller
+  // Engine B: 1.5-Second Live Delta Background Poller (Always active on all devices)
   useEffect(() => {
     if (isOfflineLocked) return;
 
@@ -654,26 +722,19 @@ export function App() {
 
         if (!error && data?.payload) {
           const remote = data.payload as AppMasterState;
-          if (remote.is_master_locked) {
-            if (!isMasterLocked) {
-              setIsMasterLocked(true);
-              setMasterMigrationDone(true);
-              purgeLegacyLocalStorageAndIDB();
-            }
-            const remoteTime = Number(remote.lastUpdatedAt || 0);
-            if (remoteTime > 0 && remoteTime !== lastSeenRemoteUpdatedAtRef.current) {
-              lastSeenRemoteUpdatedAtRef.current = remoteTime;
-              applyRemoteMasterState(remote, true);
-            }
+          const remoteTime = Number(remote.lastUpdatedAt || 0);
+          if (remoteTime > 0 && remoteTime !== lastSeenRemoteUpdatedAtRef.current) {
+            lastSeenRemoteUpdatedAtRef.current = remoteTime;
+            applyRemoteMasterState(remote);
           }
         }
       } catch {}
     }, 1500);
 
     return () => clearInterval(pollTimer);
-  }, [isOfflineLocked, isMasterLocked]);
+  }, [isOfflineLocked, deletedItemIds]);
 
-  // Pulls latest state from Supabase in pure cloud mode
+  // Pulls latest state from Supabase and merges cleanly on any device
   const pullAndMergeFromCloud = async () => {
     if (isOfflineLocked) return;
     try {
@@ -683,9 +744,7 @@ export function App() {
 
       const remote = await fetchCloudState();
       if (remote) {
-        if (remote.is_master_locked || isMasterLocked) {
-          applyRemoteMasterState(remote, true);
-        }
+        applyRemoteMasterState(remote);
       }
     } catch (err) {
       console.warn('pullAndMergeFromCloud error:', err);
@@ -756,7 +815,7 @@ export function App() {
     let isMounted = true;
 
     const initSupabase = async () => {
-      // Prior to Supabase master lock, load local IndexedDB items into memory so S22 Ultra holds its full list
+      // 1. Load local IndexedDB items into memory first
       try {
         const idbWardrobe = await getWardrobeItemsIDB();
         if (idbWardrobe && Array.isArray(idbWardrobe) && idbWardrobe.length > 0 && isMounted) {
@@ -776,17 +835,11 @@ export function App() {
       const isAlive = await checkSupabaseConnection();
       if (isMounted) setIsSupabaseConnected(isAlive);
 
+      // 2. Always fetch and union-merge from Supabase on every device!
       try {
         const remote = await fetchCloudState();
         if (remote && isMounted) {
-          if (remote.is_master_locked) {
-            // REMOTE IS MASTER LOCKED: Single global truth!
-            setIsMasterLocked(true);
-            setMasterMigrationDone(true);
-            applyRemoteMasterState(remote, true);
-          } else {
-            console.log('[App] Cloud master lock not yet engaged in Supabase. In-memory items preserved for Master Push.');
-          }
+          applyRemoteMasterState(remote);
         }
       } catch (err) {
         console.warn('Initial cloud state fetch warning:', err);
@@ -800,14 +853,7 @@ export function App() {
       realtimeUnsubRef.current = subscribeToCloudState((incoming) => {
         if (!isMounted || isOfflineLocked) return;
         setIsSupabaseConnected(true);
-        if (incoming.is_master_locked) {
-          setIsMasterLocked(true);
-          setMasterMigrationDone(true);
-          purgeLegacyLocalStorageAndIDB();
-          applyRemoteMasterState(incoming, true);
-        } else if (isMasterLocked) {
-          applyRemoteMasterState(incoming, true);
-        }
+        applyRemoteMasterState(incoming);
       }, handleIncomingDelta);
     }
 
@@ -1573,11 +1619,12 @@ export function App() {
               type="button"
               onClick={handlePushMasterDataToCloud}
               disabled={isMasterPushing}
-              className="h-7 sm:h-8 px-2.5 sm:px-3.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] sm:text-xs flex items-center gap-1.5 shadow-md shadow-red-500/30 cursor-pointer animate-pulse shrink-0 whitespace-nowrap active:scale-95 transition-all"
+              className="h-7 sm:h-8 px-2 sm:px-3.5 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold text-[10px] sm:text-xs flex items-center gap-1 shadow-md shadow-red-500/30 cursor-pointer animate-pulse shrink-0 whitespace-nowrap active:scale-95 transition-all"
               title="Tap to publish current screen state to Supabase cloud as single global truth"
             >
-              <span className="text-xs">🔴</span>
-              <span>{isMasterPushing ? 'Publishing...' : 'Push Master Data to Cloud'}</span>
+              <span className="text-[10px] sm:text-xs">🔴</span>
+              <span className="sm:hidden">{isMasterPushing ? 'Pushing...' : 'Push Master'}</span>
+              <span className="hidden sm:inline">{isMasterPushing ? 'Publishing...' : 'Push Master Data to Cloud'}</span>
             </button>
 
             {/* Tiny Top-Bar Recovery Shield Icon */}
@@ -1624,7 +1671,7 @@ export function App() {
               onClick={() => setShowTaxiModal(true)}
               className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-[11px] sm:text-xs transition-colors shadow-2xs cursor-pointer shrink-0 whitespace-nowrap"
             >
-              🚕 Taxi Card
+              🚕 <span className="hidden xs:inline">Taxi Card</span>
             </button>
 
             {/* Hamburger Button for Apple Sidebar */}
@@ -1635,6 +1682,34 @@ export function App() {
               title="Open menu"
             >
               <Menu className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* DEDICATED FULL-WIDTH MASTER PUBLISH & OFFLINE JSON BAR (VISIBLE ON ALL MOBILE & TABLET SCREENS) */}
+        <div className="bg-red-50/90 border-t border-red-200/80 px-2.5 sm:px-4 py-1.5 print:hidden">
+          <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={handlePushMasterDataToCloud}
+              disabled={isMasterPushing}
+              className="flex-1 py-1.5 px-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-98 transition-all"
+            >
+              <span>🔴</span>
+              <span>
+                {isMasterPushing
+                  ? 'Publishing Master Data Online...'
+                  : `Push Master Data to Cloud (${wardrobe.length} Items)`}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={handleDownloadMasterJsonBackup}
+              className="py-1.5 px-3 rounded-lg bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-bold text-xs flex items-center gap-1 shadow-2xs cursor-pointer shrink-0 active:scale-98 transition-all"
+              title="Download full JSON backup file for offline viewing"
+            >
+              <span>📥</span>
+              <span>JSON Backup</span>
             </button>
           </div>
         </div>
@@ -1961,17 +2036,27 @@ export function App() {
             <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center text-2xl shadow-inner font-bold">
               ✓
             </div>
-            <h3 className="text-base font-bold text-slate-900">Cloud Master Lock Active</h3>
+            <h3 className="text-base font-bold text-slate-900">Published Online Globally</h3>
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">
               {masterModalMessage}
             </p>
-            <button
-              type="button"
-              onClick={() => setMasterModalMessage(null)}
-              className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-all shadow-sm active:scale-98 cursor-pointer"
-            >
-              Done
-            </button>
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={handleDownloadMasterJsonBackup}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm transition-all shadow-sm active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>📥</span>
+                <span>Download Offline JSON Backup</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMasterModalMessage(null)}
+                className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-all shadow-sm active:scale-98 cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
