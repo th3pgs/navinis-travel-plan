@@ -448,22 +448,22 @@ export function App() {
     };
   };
 
-  // Sync state to local storage & push to Supabase
-  const syncAllState = (overrides?: Partial<AppMasterState>) => {
+  // Sync state to local storage & push to Supabase (NEVER storing wardrobe images in localStorage!)
+  const syncAllState = async (overrides?: Partial<AppMasterState>): Promise<boolean> => {
     const masterState = buildCurrentMasterState(overrides);
 
     try {
-      saveWardrobeItemsIDB(masterState.wardrobe);
-      saveMasterStateIDB(masterState);
+      await saveWardrobeItemsIDB(masterState.wardrobe);
+      await saveMasterStateIDB(masterState);
     } catch (e) {
       console.warn('IDB write warning in syncAllState:', e);
     }
 
+    // Save ONLY lightweight metadata to localStorage - NEVER the 5MB wardrobe array!
     try {
       localStorage.setItem('navini_passport_profile_v7', JSON.stringify(masterState.passportInfo));
       localStorage.setItem('navini_bags_v7', JSON.stringify(masterState.bags));
       localStorage.setItem('navini_devices_v7', JSON.stringify(masterState.devices));
-      localStorage.setItem('navini_wardrobe_v7', JSON.stringify(masterState.wardrobe));
       localStorage.setItem('navini_docs_v7', JSON.stringify(masterState.documents));
       localStorage.setItem('navini_apps_v7', JSON.stringify(masterState.apps));
       localStorage.setItem('navini_milestones_v7', JSON.stringify(masterState.milestones));
@@ -481,7 +481,8 @@ export function App() {
     }
 
     // Push immediately to Supabase and broadcast over WebSocket
-    pushCloudState(masterState, true);
+    const pushResult = await pushCloudState(masterState, true);
+    return pushResult;
   };
 
   // Reconciles incoming remote state cleanly by timestamp and tombstones
@@ -573,14 +574,10 @@ export function App() {
       setWardrobe((prev) => {
         const updated = prev.filter((w) => w.id !== id);
         saveWardrobeItemsIDB(updated);
-        try {
-          localStorage.setItem('navini_wardrobe_v7', JSON.stringify(updated));
-        } catch {}
         return updated;
       });
     } else if (delta.type === 'ITEM_UPSERT' && delta.item && delta.item.id) {
       const incomingItem = delta.item as WardrobeItem;
-      if (isSoftwareAppOrNonWardrobe(incomingItem)) return;
       if (deletedItemIds.includes(incomingItem.id)) return;
 
       setWardrobe((prev) => {
@@ -600,9 +597,6 @@ export function App() {
           updated = [incomingItem, ...prev];
         }
         saveWardrobeItemsIDB(updated);
-        try {
-          localStorage.setItem('navini_wardrobe_v7', JSON.stringify(updated));
-        } catch {}
         return updated;
       });
     }
@@ -719,8 +713,8 @@ export function App() {
       // Load from durable multi-gigabyte IndexedDB local vault first
       try {
         const idbWardrobe = await getWardrobeItemsIDB();
-        if (idbWardrobe && idbWardrobe.length > 0 && isMounted) {
-          setWardrobe((prev) => (idbWardrobe.length >= prev.length ? idbWardrobe : prev));
+        if (idbWardrobe && Array.isArray(idbWardrobe) && idbWardrobe.length > 0 && isMounted) {
+          setWardrobe((prev) => mergeWardrobeLists(prev, idbWardrobe, deletedItemIds));
         }
       } catch (e) {
         console.warn('IDB startup check:', e);
@@ -1233,11 +1227,19 @@ export function App() {
     }
   };
 
-  const handleAddWardrobeItem = (item: Omit<WardrobeItem, 'id'>) => {
+  // UUID-Only Item Identifier Generator (Requirement #1.2)
+  const generateItemId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+  };
+
+  const handleAddWardrobeItem = async (item: Omit<WardrobeItem, 'id'>): Promise<{ success: boolean; cloudSynced: boolean }> => {
     const now = Date.now();
     const newItem: WardrobeItem = {
       ...item,
-      id: 'w-custom-' + now,
+      id: generateItemId(),
       syncStatus: item.syncStatus || 'uploading',
       uploadProgress: item.uploadProgress || 15,
       createdAt: now,
@@ -1245,15 +1247,16 @@ export function App() {
     };
     const updated = [newItem, ...wardrobe];
     setWardrobe(updated);
-    saveWardrobeItemsIDB(updated);
-    syncAllState({ wardrobe: updated });
+    await saveWardrobeItemsIDB(updated);
     broadcastItemDelta({
       type: 'ITEM_UPSERT',
       item: newItem,
     });
+    const cloudSuccess = await syncAllState({ wardrobe: updated });
+    return { success: true, cloudSynced: cloudSuccess };
   };
 
-  const handleUpdateWardrobeItem = (id: string, partial: Partial<WardrobeItem>) => {
+  const handleUpdateWardrobeItem = async (id: string, partial: Partial<WardrobeItem>): Promise<{ success: boolean; cloudSynced: boolean }> => {
     const now = Date.now();
     let updatedItem: WardrobeItem | null = null;
     const updated = wardrobe.map((w) => {
@@ -1264,14 +1267,15 @@ export function App() {
       return w;
     });
     setWardrobe(updated);
-    saveWardrobeItemsIDB(updated);
-    syncAllState({ wardrobe: updated });
+    await saveWardrobeItemsIDB(updated);
     if (updatedItem) {
       broadcastItemDelta({
         type: 'ITEM_UPSERT',
         item: updatedItem,
       });
     }
+    const cloudSuccess = await syncAllState({ wardrobe: updated });
+    return { success: true, cloudSynced: cloudSuccess };
   };
 
   const handleDeleteWardrobeItem = (id: string) => {

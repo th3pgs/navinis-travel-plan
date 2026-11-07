@@ -1,6 +1,6 @@
 import { supabase, STORAGE_BUCKET, STATE_TABLE, STATE_ROW_ID } from './supabase';
-import { saveMasterStateIDB, saveWardrobeItemsIDB } from './db';
-import { isSoftwareAppOrNonWardrobe, WardrobeItem } from './data';
+import { saveMasterStateIDB, saveWardrobeItemsIDB, getMasterStateIDB, getWardrobeItemsIDB } from './db';
+import { WardrobeItem } from './data';
 
 const LOCAL_STORAGE_KEY = 'navini_master_state_v5';
 
@@ -111,6 +111,7 @@ export function mergeItemsByTimestamp<T extends { id: string; updatedAt?: number
  * - Items in local but not remote are ALWAYS kept.
  * - When in both, newer timestamp wins.
  * - Preserves in-flight local uploads / previews if remote photo isn't ready.
+ * - NEVER filters or blocks items by name, title, or brand keywords.
  */
 export function mergeWardrobeLists<T extends { id: string; updatedAt?: number; createdAt?: number; [key: string]: any }>(
   localItems: T[] = [],
@@ -120,17 +121,15 @@ export function mergeWardrobeLists<T extends { id: string; updatedAt?: number; c
   const deletedSet = new Set(deletedIds || []);
   const map = new Map<string, T>();
 
-  // 1. Put local items (excluding deleted and non-wardrobe apps)
+  // 1. Put local items (excluding deleted)
   for (const item of (localItems || [])) {
     if (!item || !item.id || deletedSet.has(item.id)) continue;
-    if (isSoftwareAppOrNonWardrobe(item)) continue;
     map.set(item.id, item);
   }
 
   // 2. Merge remote items
   for (const remoteItem of (remoteItems || [])) {
     if (!remoteItem || !remoteItem.id || deletedSet.has(remoteItem.id)) continue;
-    if (isSoftwareAppOrNonWardrobe(remoteItem)) continue;
 
     const localItem = map.get(remoteItem.id);
     if (!localItem) {
@@ -157,14 +156,19 @@ export function mergeWardrobeLists<T extends { id: string; updatedAt?: number; c
 }
 
 /**
+ * Alias for item-level dictionary union merge
+ */
+export const mergeItemsById = mergeWardrobeLists;
+
+/**
  * Aggressively resizes and compresses an image client-side on an HTML5 <canvas>
- * to max 400x400 JPEG at 0.6 quality (~15-25KB).
- * Safe for iPadOS camera photos (even 12-48MP raw captures), preventing 5MB localStorage quota crashes.
+ * to max 450x450 JPEG at 0.65 quality (~15-25KB).
+ * Safe for iPadOS/Android camera photos (even 12-108MP raw captures).
  */
 export function compressPhotoToMax400(
   input: File | Blob | string,
-  maxDim = 400,
-  quality = 0.6
+  maxDim = 450,
+  quality = 0.65
 ): Promise<string> {
   return new Promise((resolve) => {
     const processImg = (src: string) => {
@@ -219,12 +223,12 @@ export function compressPhotoToMax400(
 }
 
 /**
- * Compresses an image client-side to max 400x400 JPEG for mobile cloud storage
+ * Compresses an image client-side to max 450x450 JPEG for cloud storage
  */
 export function compressImage(
   file: File | Blob,
-  maxWidth = 400,
-  maxHeight = 400,
+  maxWidth = 450,
+  maxHeight = 450,
   quality = 0.65
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
@@ -313,21 +317,15 @@ export async function uploadPhotoToSupabase(
 
 /**
  * Fetch the master plan state from Supabase `app_state` (row `id = 'main_plan'`)
- * with instant local cache fallback. Skips network when offline locked.
+ * with instant IndexedDB local cache fallback. Skips network when offline locked.
+ * NEVER relies on the 5MB localStorage trap for wardrobe arrays or photos.
  */
 export async function fetchCloudState(): Promise<AppMasterState | null> {
-  const localSaved = localStorage.getItem(LOCAL_STORAGE_KEY);
-  let localState: AppMasterState | null = null;
-  if (localSaved) {
-    try {
-      localState = JSON.parse(localSaved);
-    } catch (e) {}
-  }
-
-  // If offline locked, strictly return local cached state with zero network
+  // If offline locked, strictly return local IndexedDB cached state with zero network
   if (isOfflineLocked()) {
-    console.log('[CloudSync] Device is offline locked. Reading exclusively from local cache.');
-    return localState;
+    console.log('[CloudSync] Device is offline locked. Reading exclusively from IndexedDB.');
+    const idbState = await getMasterStateIDB();
+    return idbState;
   }
 
   try {
@@ -340,17 +338,27 @@ export async function fetchCloudState(): Promise<AppMasterState | null> {
     if (!error && data && data.payload) {
       const remote = data.payload as AppMasterState;
       if (remote.passportInfo) {
+        // Cache master state and wardrobe directly in IndexedDB (gigabytes capacity)
         try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(remote));
+          await saveMasterStateIDB(remote);
+          if (Array.isArray(remote.wardrobe)) {
+            await saveWardrobeItemsIDB(remote.wardrobe);
+          }
         } catch (e) {}
         return remote;
       }
     }
   } catch (err) {
-    console.warn('Supabase fetch failed, using local cache:', err);
+    console.warn('Supabase fetch failed, using IndexedDB fallback:', err);
   }
 
-  return localState;
+  // Fallback to IndexedDB vault
+  try {
+    const idbState = await getMasterStateIDB();
+    if (idbState) return idbState;
+  } catch {}
+
+  return null;
 }
 
 /**
@@ -424,12 +432,7 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
   _pushInFlight = true;
   _lastPushTimestamp = now;
 
-  // Ensure wardrobe never contains apps or non-wardrobe artifacts
-  if (Array.isArray(state.wardrobe)) {
-    state.wardrobe = state.wardrobe.filter((item) => !isSoftwareAppOrNonWardrobe(item));
-  }
-
-  // 1. Instantly save to IndexedDB (multi-gigabyte safe on iPadOS) and localStorage
+  // 1. Instantly save to IndexedDB (multi-gigabyte safe, NO 5MB quota limit!)
   try {
     saveMasterStateIDB(state);
     if (Array.isArray(state.wardrobe)) {
@@ -439,14 +442,13 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
     console.warn('IndexedDB write warning in pushCloudState:', err);
   }
 
+  // 2. Save ONLY lightweight preferences & metadata to localStorage (under 5KB total)
+  // NEVER write the massive wardrobe array or large base64 photos to localStorage!
   try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
     localStorage.setItem('navini_passport_profile_v7', JSON.stringify(state.passportInfo));
     localStorage.setItem('navini_bags_v7', JSON.stringify(state.bags));
     localStorage.setItem('navini_devices_v7', JSON.stringify(state.devices));
-    localStorage.setItem('navini_wardrobe_v7', JSON.stringify(state.wardrobe));
     localStorage.setItem('navini_docs_v7', JSON.stringify(state.documents));
-    localStorage.setItem('navini_procedure_steps_v7', JSON.stringify(state.procedureSteps));
     localStorage.setItem('navini_apps_v7', JSON.stringify(state.apps));
     localStorage.setItem('navini_milestones_v7', JSON.stringify(state.milestones));
     if (state.categories) {
@@ -528,14 +530,12 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
               state.documents = mergeItemsByTimestamp(state.documents, remoteState.documents, combinedDeleted);
             }
 
-            // Save union locally so local state matches
+            // Save union locally to IndexedDB so local state matches
             try {
               saveMasterStateIDB(state);
               if (Array.isArray(state.wardrobe)) {
                 saveWardrobeItemsIDB(state.wardrobe);
               }
-              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
-              localStorage.setItem('navini_wardrobe_v7', JSON.stringify(state.wardrobe));
               localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(combinedDeleted));
             } catch {}
           }

@@ -174,89 +174,32 @@ export const DEFAULT_WARDROBE_CATEGORIES: string[] = [
   'Daily Essentials, Cutlery & Folders',
 ];
 
-const KNOWN_APP_PATTERNS = [
-  'alipay',
-  'wechat',
-  'google',
-  'gmail',
-  'baidu',
-  'amap',
-  'gaode',
-  'shadowrocket',
-  'v2rayng',
-  'clash',
-  'hiddify',
-  'chatgpt',
-  'gemini',
-  'claude',
-  'deepl',
-  'pleco',
-  'meituan',
-  'taobao',
-  'didi',
-  'metroman',
-  'rednote',
-  'xiaohongshu',
-  'astrill',
-  'whatsapp',
-  'youtube',
-  'dialog',
-  'trip.com',
-  'ele.me',
-  'bilibili',
-  'douyin',
-  'authenticator',
-  'pinduoduo',
-];
-
 /**
- * Accurately detects whether an item is a software app, device, bag, doc, or non-wardrobe artifact.
+ * Accurately detects whether an item is an explicit software app asset rather than a wardrobe item.
+ * NEVER filters or blocks items by their name, brand name, starting letter, or title.
  */
 export function isSoftwareAppOrNonWardrobe(item: any): boolean {
-  if (!item) return true;
+  if (!item || typeof item !== 'object') return false;
+  // If item has a wardrobe category or luggage assignment, it is ALWAYS a wardrobe item
+  if (item.category || item.targetBag || item.colorHex || item.subType) {
+    return false;
+  }
+  // Only detect pure software app assets from the digital apps catalog
   const id = String(item.id || '').toLowerCase();
-  if (
-    id.startsWith('app-') ||
-    id.startsWith('bag-') ||
-    id.startsWith('dev-') ||
-    id.startsWith('doc-') ||
-    id.startsWith('step-') ||
-    id.startsWith('gift-') ||
-    id.startsWith('m-')
-  ) {
+  if (id.startsWith('app-') && item.platform !== undefined && item.appIcon !== undefined) {
     return true;
-  }
-  // Software app attributes
-  if (
-    item.platform !== undefined ||
-    item.carrierOrOs !== undefined ||
-    item.appIcon !== undefined ||
-    Array.isArray(item.devices) ||
-    item.isConfigured !== undefined ||
-    item.isLoggedIn !== undefined ||
-    item.isVerified !== undefined
-  ) {
-    return true;
-  }
-  const name = String(item.name || '').toLowerCase();
-  for (const pattern of KNOWN_APP_PATTERNS) {
-    if (name.includes(pattern)) return true;
   }
   return false;
 }
 
 /**
- * Returns true if the item has no user-typed name or was generated as an automated photo recovery placeholder.
+ * Returns true only if the item has no user-typed name or is literally untitled.
+ * NEVER matches typed item names, numbers, or brand words.
  */
 export function isUnnamedRetake(item?: WardrobeItem | null): boolean {
   if (!item || !item.name) return true;
   const lower = String(item.name || '').trim().toLowerCase();
-  return (
-    lower === '' ||
-    lower === 'untitled' ||
-    lower.startsWith('recovered item') ||
-    lower.startsWith('item ')
-  );
+  return lower === '' || lower === 'untitled';
 }
 
 /**
@@ -544,13 +487,13 @@ export function normalizeBagLocation(rawLoc?: string): string {
 }
 
 /**
- * Automatically purges software apps, normalizes wardrobe items to canonical categories, canonical bags,
- * and recovers locked-in packed booleans (Requirement #2, #4, #5).
+ * Normalizes wardrobe items to canonical categories and bags,
+ * recovers locked-in packed booleans, and ensures 100% item integrity without filtering out any items.
  */
 export function migrateWardrobeItems(items: WardrobeItem[]): WardrobeItem[] {
   if (!Array.isArray(items)) return [];
   return items
-    .filter((item) => !isSoftwareAppOrNonWardrobe(item))
+    .filter((item) => Boolean(item && item.id))
     .map((item) => {
       const normalizedCategory = normalizeCategoryName(item.category);
       const normalizedBag = normalizeBagLocation(item.targetBag);

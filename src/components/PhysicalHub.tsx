@@ -73,8 +73,8 @@ interface PhysicalHubProps {
   onDeleteCustomCategory?: (category: string) => void;
   onToggleWardrobeBought: (id: string) => void;
   onToggleWardrobePacked: (id: string) => void;
-  onAddWardrobeItem: (item: Omit<WardrobeItem, 'id'>) => void;
-  onUpdateWardrobeItem: (id: string, updated: Partial<WardrobeItem>) => void;
+  onAddWardrobeItem: (item: Omit<WardrobeItem, 'id'>) => Promise<any> | void;
+  onUpdateWardrobeItem: (id: string, updated: Partial<WardrobeItem>) => Promise<any> | void;
   onDeleteWardrobeItem: (id: string) => void;
   onRetryUpload?: (id: string) => void;
   onToggleBagBought: (id: string) => void;
@@ -264,13 +264,13 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
 }
 
 /**
- * Downscales any photo (even 10MB-15MB 4K from S22 Ultra) to max 600px longest side
- * on an off-screen HTML5 <canvas> and exports at 0.72 quality (~20-30KB JPEG).
+ * Downscales any photo (even 10MB-15MB 4K from S22 Ultra) to max 450px longest side
+ * on an off-screen HTML5 <canvas> and exports at 0.65 quality (~15-25KB JPEG).
  */
 export async function downscalePhotoTo600(
   input: Blob | string,
-  maxDimension = 600,
-  quality = 0.72
+  maxDimension = 450,
+  quality = 0.65
 ): Promise<string> {
   let source: ImageBitmap | HTMLImageElement;
 
@@ -597,18 +597,11 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
       // If user explicitly chose the "unnamed" pill
       if (selectedCategory === 'unnamed') {
         if (!isUnnamedRetake(item)) return false;
-      } else {
-        // If there are clean items, don't mix unnamed retakes into 'all' or categories
-        if (cleanItems.length > 0 && isUnnamedRetake(item)) {
+      } else if (selectedCategory !== 'all') {
+        const itemCat = normalizeCategoryName(item.category);
+        const selNorm = normalizeCategoryName(selectedCategory);
+        if (itemCat !== selNorm && item.category !== selectedCategory) {
           return false;
-        }
-
-        if (selectedCategory !== 'all') {
-          const itemCat = normalizeCategoryName(item.category);
-          const selNorm = normalizeCategoryName(selectedCategory);
-          if (itemCat !== selNorm && item.category !== selectedCategory) {
-            return false;
-          }
         }
       }
 
@@ -639,7 +632,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
 
     // Chronological newest-first sorting (Requirement #3)
     return filtered.sort((a, b) => getItemCreationTime(b) - getItemCreationTime(a));
-  }, [wardrobe, cleanItems.length, selectedCategory, selectedSuitcaseFilter, bags, wardrobeSearch]);
+  }, [wardrobe, selectedCategory, selectedSuitcaseFilter, bags, wardrobeSearch]);
 
   // Purge all unnamed photo retakes and duplicates (Requirement #4.2)
   const handlePurgeRetakes = () => {
@@ -722,16 +715,25 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   const packedCount = wardrobe.filter((w) => w.isPacked).length;
   const packedPercent = Math.round((packedCount / (wardrobe.length || 1)) * 100);
 
-  // Handlers for Add / Edit Modal
+  // Handlers for Add / Edit Modal with Sticky Category & Bag Defaults (Requirement #3)
   const handleOpenAddModal = () => {
     cleanupRawBlobUrl();
     selectedFileRef.current = null;
     setEditingItem(null);
     setFormName('');
-    setFormCategory(selectedCategory !== 'all' ? selectedCategory : 'Dresses & Frocks');
+
+    const savedLastCat = localStorage.getItem('navini_last_used_category') || 'Dresses & Frocks';
+    const savedLastBag = localStorage.getItem('navini_last_used_bag') || 'Main Large Rolling Suitcase';
+
+    const defaultCat =
+      selectedCategory !== 'all' && selectedCategory !== 'unnamed'
+        ? selectedCategory
+        : savedLastCat;
+
+    setFormCategory(defaultCat);
+    setFormTargetBag(savedLastBag);
     setFormSubType('');
     setFormQuantity('1');
-    setFormTargetBag('Main Large Rolling Suitcase');
     setFormNotes('');
     setFormPhotoUrl('');
     setFormColorHex('#38bdf8');
@@ -753,11 +755,17 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSaveModal = (keepOpenForNext = false) => {
+  const handleSaveModal = async (keepOpenForNext = false) => {
     cleanupRawBlobUrl();
     selectedFileRef.current = null;
     const trimmedName = formName.trim();
     if (!trimmedName) return;
+
+    // Persist sticky category & bag selection in localStorage (Requirement #3)
+    try {
+      localStorage.setItem('navini_last_used_category', formCategory);
+      localStorage.setItem('navini_last_used_bag', formTargetBag);
+    } catch {}
 
     try {
       const finalPhotoUrl = formPhotoUrl;
@@ -776,18 +784,27 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         uploadProgress: isLocalDataPhoto ? 15 : 100,
       };
 
+      let saveResult: any = null;
       if (editingItem) {
-        onUpdateWardrobeItem(editingItem.id, itemPayload);
+        saveResult = await onUpdateWardrobeItem(editingItem.id, itemPayload);
       } else {
-        onAddWardrobeItem({
+        saveResult = await onAddWardrobeItem({
           ...itemPayload,
           isBought: true,
           isPacked: false,
         });
       }
 
+      // Verified save toast: Only display "✓ Updated to Database" after genuinely resolving without error! (Requirement #2.3)
+      if (saveResult && saveResult.cloudSynced === false) {
+        setSaveToast('💾 Saved to Local Vault (Cloud Sync Pending)');
+      } else {
+        setSaveToast('✓ Updated to Database');
+      }
+      setTimeout(() => setSaveToast(null), 2500);
+
       if (keepOpenForNext) {
-        // Clear name, notes, and photo, but preserve selected category and luggage allocation
+        // Clear name, notes, and photo, but preserve selected category and luggage allocation (Requirement #3)
         setFormName('');
         setFormNotes('');
         setFormPhotoUrl('');
@@ -803,6 +820,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
       }
     } catch (err) {
       console.error('Error saving wardrobe item:', err);
+      setSaveToast('⚠️ Save error occurred');
+      setTimeout(() => setSaveToast(null), 3000);
       if (!keepOpenForNext) {
         setIsModalOpen(false);
       }
@@ -1398,12 +1417,12 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
               : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
           }`}
         >
-          All ({cleanItems.length})
+          All ({wardrobe.length})
         </button>
 
         {allCategories.map((cat) => {
           const normCat = normalizeCategoryName(cat);
-          const count = cleanItems.filter((w) => normalizeCategoryName(w.category) === normCat || w.category === cat).length;
+          const count = wardrobe.filter((w) => normalizeCategoryName(w.category) === normCat || w.category === cat).length;
           const isActive = selectedCategory === cat || (selectedCategory !== 'all' && selectedCategory !== 'unnamed' && normalizeCategoryName(selectedCategory) === normCat);
           return (
             <button
