@@ -200,10 +200,10 @@ export function renderDeviceIcon(type: DeviceAsset['type'], sizeClass = 'w-7 h-1
   );
 }
 
-// Maps category to default visual emoji
-function getCategoryVisual(name: string, category: string): { emoji: string; bg: string } {
-  const n = name.toLowerCase();
-  const c = category.toLowerCase();
+// Maps category to default visual emoji (defensive null/undefined safe)
+function getCategoryVisual(name?: string | null, category?: string | null): { emoji: string; bg: string } {
+  const n = String(name || '').toLowerCase();
+  const c = String(category || '').toLowerCase();
 
   if (c.includes('medicine') || n.includes('paracetamol') || n.includes('pill') || n.includes('balm')) {
     return { emoji: '💊', bg: 'bg-red-50 text-red-600' };
@@ -235,7 +235,85 @@ function getCategoryVisual(name: string, category: string): { emoji: string; bg:
   return { emoji: '✨', bg: 'bg-blue-50 text-[#007AFF]' };
 }
 
-// HTML5 Canvas Rotation and Square-Crop helpers with aggressive 400x400 downscaling
+/**
+ * Dynamically loads and converts Apple HEIC/HEIF photos to standard JPEG blobs.
+ * Code-split on-demand so initial web bundle remains featherweight.
+ */
+async function convertHeicToJpeg(blob: Blob): Promise<Blob> {
+  const heicModule = await import('heic2any');
+  const heic2any = (heicModule as any).default || heicModule;
+  const converted = await heic2any({
+    blob,
+    toType: 'image/jpeg',
+    quality: 0.8,
+  });
+  return Array.isArray(converted) ? converted[0] : converted;
+}
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = (e) => reject(e);
+    img.src = src;
+  });
+}
+
+/**
+ * Downscales any photo (even 10MB-15MB 4K from S22 Ultra) to max 600px longest side
+ * on an off-screen HTML5 <canvas> and exports at 0.72 quality (~20-30KB JPEG).
+ */
+export async function downscalePhotoTo600(
+  input: Blob | string,
+  maxDimension = 600,
+  quality = 0.72
+): Promise<string> {
+  let source: ImageBitmap | HTMLImageElement;
+
+  if (typeof input !== 'string' && typeof createImageBitmap === 'function') {
+    try {
+      source = await createImageBitmap(input);
+    } catch {
+      source = await loadImageElement(typeof input === 'string' ? input : URL.createObjectURL(input));
+    }
+  } else {
+    const url = typeof input === 'string' ? input : URL.createObjectURL(input);
+    source = await loadImageElement(url);
+  }
+
+  const { width, height } = source;
+  let targetW = width;
+  let targetH = height;
+
+  if (width > maxDimension || height > maxDimension) {
+    if (width >= height) {
+      targetW = maxDimension;
+      targetH = Math.max(1, Math.round((height / width) * maxDimension));
+    } else {
+      targetH = maxDimension;
+      targetW = Math.max(1, Math.round((width / height) * maxDimension));
+    }
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetW;
+  canvas.height = targetH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context not available');
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, targetW, targetH);
+
+  if ('close' in source && typeof (source as ImageBitmap).close === 'function') {
+    (source as ImageBitmap).close();
+  }
+
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
+// HTML5 Canvas Rotation and Square-Crop helpers on already-downscaled max-600px canvas (takes ~5ms)
 async function processImageCanvas(dataUrl: string, action: 'rotate-left' | 'rotate-right' | 'crop-square'): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -252,8 +330,8 @@ async function processImageCanvas(dataUrl: string, action: 'rotate-left' | 'rota
         targetW = img.height;
         targetH = img.width;
 
-        // Downscale to max 400
-        const maxDim = 400;
+        // Downscale to max 600px
+        const maxDim = 600;
         let scale = 1;
         if (targetW > maxDim || targetH > maxDim) {
           scale = Math.min(maxDim / targetW, maxDim / targetH);
@@ -272,14 +350,14 @@ async function processImageCanvas(dataUrl: string, action: 'rotate-left' | 'rota
         );
       } else if (action === 'crop-square') {
         const size = Math.min(img.width, img.height);
-        const finalSize = Math.min(400, size);
+        const finalSize = Math.min(600, size);
         canvas.width = finalSize;
         canvas.height = finalSize;
         const sx = (img.width - size) / 2;
         const sy = (img.height - size) / 2;
         ctx.drawImage(img, sx, sy, size, size, 0, 0, finalSize, finalSize);
       }
-      resolve(canvas.toDataURL('image/jpeg', 0.6));
+      resolve(canvas.toDataURL('image/jpeg', 0.72));
     };
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
@@ -342,6 +420,18 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   const [formColorHex, setFormColorHex] = useState('#38bdf8');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  const rawBlobUrlRef = useRef<string | null>(null);
+  const selectedFileRef = useRef<File | null>(null);
+
+  const cleanupRawBlobUrl = () => {
+    if (rawBlobUrlRef.current) {
+      try {
+        URL.revokeObjectURL(rawBlobUrlRef.current);
+      } catch {}
+      rawBlobUrlRef.current = null;
+    }
+  };
 
   // Multi-Select & Batch Actions state (Requirement #6.3)
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -482,9 +572,10 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     return Array.from(new Set(defaultList)).filter((l) => !deleted.includes(l));
   }, [locations, deletedLocations, bags, customLocations]);
 
-  // Filtered Items (isolates unnamed items from regular category views)
+  // Filtered Items (isolates unnamed items from regular category views, defensive against null/undefined)
   const displayedItems = React.useMemo(() => {
-    return wardrobe.filter((item) => {
+    return (wardrobe || []).filter((item) => {
+      if (!item) return false;
       // If user explicitly chose the "unnamed" pill
       if (selectedCategory === 'unnamed') {
         if (!isUnnamedRetake(item)) return false;
@@ -533,11 +624,12 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   // Multi-keyword deep matching for the catalog preview
   const filteredCatalogItems = React.useMemo(() => {
     const rawQuery = searchQuery.trim().toLowerCase();
-    if (!rawQuery) return wardrobe;
+    if (!rawQuery) return wardrobe || [];
 
     const tokens = rawQuery.split(/\s+/).filter(Boolean);
 
-    return wardrobe.filter((item) => {
+    return (wardrobe || []).filter((item) => {
+      if (!item) return false;
       const searchBlob = [
         item.name,
         item.category,
@@ -548,6 +640,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         item.colorHex,
       ]
         .filter(Boolean)
+        .map((s) => String(s || ''))
         .join(' ')
         .toLowerCase();
 
@@ -592,6 +685,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
 
   // Handlers for Add / Edit Modal
   const handleOpenAddModal = () => {
+    cleanupRawBlobUrl();
+    selectedFileRef.current = null;
     setEditingItem(null);
     setFormName('');
     setFormCategory(selectedCategory !== 'all' ? selectedCategory : 'Dresses & Frocks');
@@ -605,6 +700,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   };
 
   const handleOpenEditModal = (item: WardrobeItem) => {
+    cleanupRawBlobUrl();
+    selectedFileRef.current = null;
     setEditingItem(item);
     setFormName(item.name);
     setFormCategory(item.category);
@@ -618,6 +715,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   };
 
   const handleSaveModal = (keepOpenForNext = false) => {
+    cleanupRawBlobUrl();
+    selectedFileRef.current = null;
     const trimmedName = formName.trim();
     if (!trimmedName) return;
 
@@ -671,18 +770,51 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     }
   };
 
-  // Image Upload with Instant 400x400 Canvas Compression (~15-25KB) + Background Supabase Sync
+  // Image Upload with Instant 0ms Preview + Background HTML5 Canvas Downscaling (15MB -> ~25KB, max 600px, 0.72 quality)
   const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    selectedFileRef.current = file;
+    cleanupRawBlobUrl();
+
+    const isHeic =
+      file.name.toLowerCase().endsWith('.heic') ||
+      file.name.toLowerCase().endsWith('.heif') ||
+      file.type.toLowerCase().includes('heic') ||
+      file.type.toLowerCase().includes('heif');
+
+    // 1. Zero-Delay Instant Preview (URL.createObjectURL)
+    if (!isHeic) {
+      const rawPreviewUrl = URL.createObjectURL(file);
+      rawBlobUrlRef.current = rawPreviewUrl;
+      setFormPhotoUrl(rawPreviewUrl);
+    }
+
     try {
       setIsUploadingPhoto(true);
-      // 1. Instantly compress camera/gallery photo to max 400x400 JPEG on HTML5 canvas
-      const compressedDataUrl = await compressPhotoToMax400(file, 400, 0.6);
-      setFormPhotoUrl(compressedDataUrl);
 
-      // 2. In parallel background, upload to Supabase Storage
+      let processableBlob: Blob = file;
+      if (isHeic) {
+        try {
+          processableBlob = await convertHeicToJpeg(file);
+          const convertedUrl = URL.createObjectURL(processableBlob);
+          cleanupRawBlobUrl();
+          rawBlobUrlRef.current = convertedUrl;
+          setFormPhotoUrl(convertedUrl);
+        } catch (heicErr) {
+          console.warn('HEIC conversion error fallback:', heicErr);
+        }
+      }
+
+      // 2. Immediate Background Canvas Compression (15MB -> ~25KB, max 600px, 0.72 quality)
+      const compressedDataUrl = await downscalePhotoTo600(processableBlob, 600, 0.72);
+      
+      // Swap preview's underlying save payload to compressed Base64 string & revoke blob URL to free phone RAM
+      setFormPhotoUrl(compressedDataUrl);
+      cleanupRawBlobUrl();
+
+      // 3. Parallel background Supabase upload
       try {
         const publicUrl = await uploadPhotoToSupabase(file, 'wardrobe');
         if (publicUrl) {
@@ -699,7 +831,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     }
   };
 
-  // Orientation Controls with 400x400 Downscaling
+  // Orientation Controls operating directly on downscaled 600px canvas (~5ms, never freezes phone)
   const handleRotateImage = async (action: 'rotate-left' | 'rotate-right' | 'crop-square') => {
     if (!formPhotoUrl) return;
     try {
@@ -912,8 +1044,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   {catalogViewMode === 'detailed' && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 catalog-print-grid">
                       {items.map((item) => {
-                        const visual = getCategoryVisual(item.name, item.category);
-                        const { mainTitle, colorLabel } = parseTitleAndColor(item.name);
+                        const visual = getCategoryVisual(item?.name, item?.category);
+                        const { mainTitle, colorLabel } = parseTitleAndColor(item?.name);
                         return (
                           <div
                             key={item.id}
@@ -924,7 +1056,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                               {item.photoUrl ? (
                                 <img
                                   src={item.photoUrl}
-                                  alt={item.name}
+                                  alt={String(item?.name || '')}
                                   crossOrigin="anonymous"
                                   loading="eager"
                                   className="catalog-print-image w-full h-full object-cover"
@@ -989,8 +1121,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   {catalogViewMode === 'list' && (
                     <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white overflow-hidden shadow-2xs">
                       {items.map((item) => {
-                        const visual = getCategoryVisual(item.name, item.category);
-                        const { mainTitle, colorLabel } = parseTitleAndColor(item.name);
+                        const visual = getCategoryVisual(item?.name, item?.category);
+                        const { mainTitle, colorLabel } = parseTitleAndColor(item?.name);
                         return (
                           <div
                             key={item.id}
@@ -1002,7 +1134,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                                 {item.photoUrl ? (
                                   <img
                                     src={item.photoUrl}
-                                    alt={item.name}
+                                    alt={String(item?.name || '')}
                                     crossOrigin="anonymous"
                                     className="w-full h-full object-cover"
                                     onError={(e) => {
@@ -1061,8 +1193,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   {catalogViewMode === 'pictures' && (
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 catalog-print-grid">
                       {items.map((item) => {
-                        const visual = getCategoryVisual(item.name, item.category);
-                        const { mainTitle, colorLabel } = parseTitleAndColor(item.name);
+                        const visual = getCategoryVisual(item?.name, item?.category);
+                        const { mainTitle, colorLabel } = parseTitleAndColor(item?.name);
                         return (
                           <div
                             key={item.id}
@@ -1071,7 +1203,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                             {item.photoUrl ? (
                               <img
                                 src={item.photoUrl}
-                                alt={item.name}
+                                alt={String(item?.name || '')}
                                 crossOrigin="anonymous"
                                 loading="eager"
                                 className="catalog-print-image w-full h-full object-cover"
@@ -1142,52 +1274,52 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         </div>
       )}
 
-      {/* 1. TOP NAVIGATION BAR */}
-      <div className="flex items-center justify-between gap-3">
+      {/* 1. TOP NAVIGATION BAR (Responsive on 320px–360px J5 Prime & S22) */}
+      <div className="flex flex-wrap items-center justify-between gap-1.5 p-1 sm:p-2">
         <button
           type="button"
           onClick={onBack}
-          className="ios-back-button group"
+          className="ios-back-button group px-2 sm:px-2.5 py-1.5 text-xs font-semibold shrink-0"
         >
-          <ChevronLeft className="w-5 h-5 text-[#007AFF] group-hover:-translate-x-0.5 transition-transform" />
+          <ChevronLeft className="w-4 h-4 text-[#007AFF] group-hover:-translate-x-0.5 transition-transform" />
           <span>Overview</span>
         </button>
 
-        <div className="flex items-center gap-2">
-          {/* Multi-Select Toggle Button (Requirement #6.3) */}
+        <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+          {/* Multi-Select Toggle Button */}
           <button
             type="button"
             onClick={() => {
               setIsSelectionMode(!isSelectionMode);
               setSelectedIds(new Set());
             }}
-            className={`px-3 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer ${
+            className={`px-2 sm:px-2.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1 shadow-2xs transition-all cursor-pointer whitespace-nowrap ${
               isSelectionMode
                 ? 'bg-amber-500 text-white shadow-sm'
                 : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
             }`}
           >
-            <span>{isSelectionMode ? 'Done Selecting' : '☑️ Select Multiple'}</span>
+            <span>{isSelectionMode ? 'Done' : '☑️ Select'}</span>
           </button>
 
           {/* Catalog / Print Button */}
           <button
             type="button"
             onClick={() => setIsPrintMode(true)}
-            className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-all cursor-pointer whitespace-nowrap"
           >
-            <Printer className="w-4 h-4 text-emerald-400" />
-            <span>Catalog / Print</span>
+            <Printer className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Print</span>
           </button>
 
           {/* Add Item Button */}
           <button
             type="button"
             onClick={handleOpenAddModal}
-            className="px-3.5 py-2 rounded-xl bg-[#007AFF] hover:bg-blue-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-blue-600 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-all cursor-pointer whitespace-nowrap"
           >
-            <Plus className="w-4 h-4" />
-            <span>Add Item</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add</span>
           </button>
         </div>
       </div>
@@ -1280,16 +1412,17 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
       </div>
 
       {/* 3. 2-COLUMN SQUARE PHOTO GRID FOR WARDROBE ITEMS (iOS Visual Cards) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 px-1 sm:px-0">
         {displayedItems.map((item) => {
-          const visual = getCategoryVisual(item.name, item.category);
-          const isPacked = item.isPacked;
+          const visual = getCategoryVisual(item?.name, item?.category);
+          const isPacked = Boolean(item?.isPacked);
           const isSelected = selectedIds.has(item.id);
+          const { mainTitle, colorLabel } = parseTitleAndColor(item?.name);
 
           return (
             <div
               key={item.id}
-              className={`ios-card p-2.5 sm:p-3 rounded-2xl flex flex-col justify-between transition-all border shadow-xs relative ${
+              className={`ios-card p-2 sm:p-2.5 rounded-2xl flex flex-col justify-between transition-all border shadow-xs relative overflow-hidden ${
                 isSelected
                   ? 'ring-2 ring-[#007AFF] border-[#007AFF] bg-blue-50/20'
                   : isPacked
@@ -1297,211 +1430,203 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   : 'bg-white border-black/10 hover:border-slate-300'
               }`}
             >
-              <div>
-                {/* Large Square Photo (aspect-square, rounded-[14px]) */}
-                <div className="w-full aspect-square rounded-[14px] bg-slate-100 border border-black/5 overflow-hidden flex items-center justify-center relative group">
-                  {/* Multi-Select Checkbox Badge */}
-                  {isSelectionMode && (
+              {/* Photo Container */}
+              <div className="w-full aspect-square rounded-[14px] bg-slate-100 border border-black/5 overflow-hidden flex items-center justify-center relative group shrink-0">
+                {/* Multi-Select Checkbox Badge */}
+                {isSelectionMode && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSelectionId(item.id);
+                    }}
+                    className={`absolute top-2 left-2 z-30 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-md ${
+                      isSelected ? 'bg-[#007AFF] text-white' : 'bg-white/90 text-slate-400 border border-black/20'
+                    }`}
+                  >
+                    {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                  </button>
+                )}
+
+                {item.photoUrl ? (
+                  <img
+                    src={item.photoUrl}
+                    alt={String(item.name || '')}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-4xl">{visual.emoji}</span>
+                )}
+
+                {/* Live In-Card Shimmer & Background Upload Progress (Requirement #2) */}
+                {item.syncStatus === 'uploading' && (
+                  <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-xs flex flex-col items-center justify-center p-2.5 text-white z-20 animate-pulse">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mb-1.5" />
+                    <span className="text-[10px] font-bold tracking-tight text-white/95">
+                      Uploading to DB...
+                    </span>
+                    <div className="w-full max-w-[85%] h-1.5 bg-white/20 rounded-full mt-2 overflow-hidden">
+                      <div
+                        className="h-full bg-[#007AFF] transition-all duration-300 rounded-full"
+                        style={{ width: `${item.uploadProgress || 20}%` }}
+                      />
+                    </div>
+                    <span className="text-[8px] font-mono text-white/70 mt-1">
+                      {item.uploadProgress || 20}%
+                    </span>
+                  </div>
+                )}
+
+                {/* Sync Error State & In-Card Retry Button */}
+                {item.syncStatus === 'error' && (
+                  <div className="absolute inset-0 bg-red-950/85 backdrop-blur-xs flex flex-col items-center justify-center p-2 text-white z-20 text-center">
+                    <span className="text-base mb-1">⚠️</span>
+                    <span className="text-[10px] font-bold text-red-200 leading-tight mb-2">Sync Failed</span>
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        toggleSelectionId(item.id);
+                        onRetryUpload?.(item.id);
                       }}
-                      className={`absolute top-2 left-2 z-30 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-md ${
-                        isSelected ? 'bg-[#007AFF] text-white' : 'bg-white/90 text-slate-400 border border-black/20'
-                      }`}
+                      className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold shadow-xs transition-colors cursor-pointer"
                     >
-                      {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                      Retry Sync
                     </button>
-                  )}
+                  </div>
+                )}
 
-                  {item.photoUrl ? (
-                    <img
-                      src={item.photoUrl}
-                      alt={item.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-4xl">{visual.emoji}</span>
-                  )}
+                {/* Quantity Badge in Corner */}
+                <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 text-white font-mono font-bold text-[10px] shadow-2xs z-10">
+                  {formatQuantityBadge(item.quantity)}
+                </span>
 
-                  {/* Live In-Card Shimmer & Background Upload Progress (Requirement #2) */}
-                  {item.syncStatus === 'uploading' && (
-                    <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-xs flex flex-col items-center justify-center p-2.5 text-white z-20 animate-pulse">
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mb-1.5" />
-                      <span className="text-[10px] font-bold tracking-tight text-white/95">
-                        Uploading to DB...
-                      </span>
-                      <div className="w-full max-w-[85%] h-1.5 bg-white/20 rounded-full mt-2 overflow-hidden">
-                        <div
-                          className="h-full bg-[#007AFF] transition-all duration-300 rounded-full"
-                          style={{ width: `${item.uploadProgress || 20}%` }}
-                        />
-                      </div>
-                      <span className="text-[8px] font-mono text-white/70 mt-1">
-                        {item.uploadProgress || 20}%
-                      </span>
-                    </div>
-                  )}
+                {/* Medicine SubType Badge */}
+                {item.subType && (
+                  <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-red-600 text-white font-bold text-[9px] shadow-2xs z-10">
+                    {item.subType}
+                  </span>
+                )}
 
-                  {/* Sync Error State & In-Card Retry Button */}
-                  {item.syncStatus === 'error' && (
-                    <div className="absolute inset-0 bg-red-950/85 backdrop-blur-xs flex flex-col items-center justify-center p-2 text-white z-20 text-center">
-                      <span className="text-base mb-1">⚠️</span>
-                      <span className="text-[10px] font-bold text-red-200 leading-tight mb-2">Sync Failed</span>
+                {/* Quick photo change on hover */}
+                <button
+                  type="button"
+                  onClick={() => handleOpenEditModal(item)}
+                  className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer z-10"
+                  title="Edit photo"
+                >
+                  <Camera className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Natural Flex Flow Text Body below Image (Requirement #2 - No Dead Empty Gaps!) */}
+              <div className="flex-1 flex flex-col justify-between gap-1.5 pt-2">
+                {/* Top Text Group */}
+                <div className="min-w-0">
+                  {inlineEditingId === item.id ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={inlineEditingTitle}
+                        onChange={(e) => setInlineEditingTitle(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveInlineTitle(item.id);
+                          if (e.key === 'Escape') setInlineEditingId(null);
+                        }}
+                        className="flex-1 px-2 py-1 text-xs border border-[#007AFF] rounded-lg bg-white focus:outline-none"
+                        autoFocus
+                      />
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRetryUpload?.(item.id);
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold shadow-xs transition-colors cursor-pointer"
+                        onClick={() => handleSaveInlineTitle(item.id)}
+                        className="px-2 py-1 bg-[#007AFF] text-white rounded-lg text-xs font-bold cursor-pointer"
                       >
-                        Retry Sync
+                        ✓
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between gap-1 group/title">
+                      <h3
+                        onClick={() => {
+                          setInlineEditingId(item.id);
+                          setInlineEditingTitle(String(item.name || ''));
+                        }}
+                        className="font-bold text-[12px] sm:text-xs text-slate-900 tracking-tight leading-[1.25] line-clamp-2 cursor-pointer hover:text-[#007AFF] transition-colors"
+                        title="Tap to rename inline"
+                      >
+                        {mainTitle}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInlineEditingId(item.id);
+                          setInlineEditingTitle(String(item.name || ''));
+                        }}
+                        className="text-slate-400 hover:text-[#007AFF] p-0.5 opacity-60 group-hover/title:opacity-100 transition-opacity cursor-pointer shrink-0"
+                        title="Rename item inline"
+                      >
+                        <Edit3 className="w-3 h-3" />
                       </button>
                     </div>
                   )}
 
-                  {/* Quantity Badge in Corner */}
-                  <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 text-white font-mono font-bold text-[10px] shadow-2xs z-10">
-                    {formatQuantityBadge(item.quantity)}
-                  </span>
-
-                  {/* Medicine SubType Badge */}
-                  {item.subType && (
-                    <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-red-600 text-white font-bold text-[9px] shadow-2xs z-10">
-                      {item.subType}
+                  {/* Inline/Compact Metadata Pills in a single wrapping flex row */}
+                  <div className="flex flex-wrap items-center gap-1 mt-1">
+                    {colorLabel && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200/80 text-[9.5px] font-semibold max-w-full truncate">
+                        <span>🎨</span>
+                        <span className="truncate">{colorLabel}</span>
+                      </span>
+                    )}
+                    <span className="text-[9.5px] font-mono text-slate-600 truncate bg-slate-100 px-1.5 py-0.5 rounded-md inline-block max-w-full">
+                      📍 {normalizeBagLocation(item?.targetBag)}
                     </span>
-                  )}
-
-                  {/* Quick photo change on hover */}
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditModal(item)}
-                    className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer z-10"
-                    title="Edit photo"
-                  >
-                    <Camera className="w-5 h-5" />
-                  </button>
+                  </div>
                 </div>
 
-                {/* Inline Editable Item Name & Color Badge (Requirement #4 & #6.3) */}
-                {(() => {
-                  const { mainTitle, colorLabel } = parseTitleAndColor(item.name);
-                  return (
-                    <div className="mt-2 space-y-1">
-                      {inlineEditingId === item.id ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            value={inlineEditingTitle}
-                            onChange={(e) => setInlineEditingTitle(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleSaveInlineTitle(item.id);
-                              if (e.key === 'Escape') setInlineEditingId(null);
-                            }}
-                            className="flex-1 px-2 py-1 text-xs border border-[#007AFF] rounded-lg bg-white focus:outline-none"
-                            autoFocus
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleSaveInlineTitle(item.id)}
-                            className="px-2 py-1 bg-[#007AFF] text-white rounded-lg text-xs font-bold cursor-pointer"
-                          >
-                            ✓
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-start justify-between gap-1 group/title">
-                          <h3
-                            onClick={() => {
-                              setInlineEditingId(item.id);
-                              setInlineEditingTitle(item.name);
-                            }}
-                            className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight leading-snug line-clamp-2 cursor-pointer hover:text-[#007AFF] transition-colors"
-                            title="Tap to rename inline"
-                          >
-                            {mainTitle}
-                          </h3>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setInlineEditingId(item.id);
-                              setInlineEditingTitle(item.name);
-                            }}
-                            className="text-slate-400 hover:text-[#007AFF] p-0.5 opacity-60 group-hover/title:opacity-100 transition-opacity cursor-pointer shrink-0"
-                            title="Rename item inline"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Color Badge extracted from ' - ' in title */}
-                      {colorLabel && (
-                        <div>
-                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200/80 text-[10px] font-semibold max-w-full truncate">
-                            <span>🎨</span>
-                            <span className="truncate">{colorLabel}</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Assigned Bag Pill (Clean canonical bag) */}
-                      <div>
-                        <div className="text-[10px] font-mono text-slate-600 truncate bg-slate-100 px-2 py-0.5 rounded-md inline-block max-w-full">
-                          📍 {normalizeBagLocation(item.targetBag)}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* 2-State Packed Toggle Pill & Action Icons (Requirement #1 & #2) */}
-              <div className="mt-3 pt-2 border-t border-black/5 flex items-center justify-between gap-1">
-                <button
-                  type="button"
-                  onClick={() => onToggleWardrobePacked(item.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
-                    isPacked
-                      ? 'bg-[#16A34A] text-white hover:bg-[#15803D]'
-                      : 'border border-slate-300 hover:border-slate-400 bg-white text-slate-700'
-                  }`}
-                >
-                  <span>{isPacked ? '✓ Packed' : '○ To Pack'}</span>
-                </button>
-
-                <div className="flex items-center gap-0.5">
+                {/* Bottom Action Row: Anchored at bottom with mt-auto */}
+                <div className="mt-auto pt-1.5 border-t border-black/5 flex items-center justify-between gap-1">
                   <button
                     type="button"
-                    onClick={() => handleOpenEditModal(item)}
-                    className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
-                    title="Edit item"
+                    onClick={() => onToggleWardrobePacked(item.id)}
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs ${
+                      isPacked
+                        ? 'bg-[#16A34A] text-white hover:bg-[#15803D]'
+                        : 'border border-slate-300 hover:border-slate-400 bg-white text-slate-700'
+                    }`}
                   >
-                    <Edit3 className="w-3 h-3" />
+                    <span>{isPacked ? '✓ Packed' : '○ To Pack'}</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setConfirmModalState({
-                        isOpen: true,
-                        title: 'Delete Item?',
-                        message: `Are you sure you want to remove "${item.name}" from your wardrobe?`,
-                        confirmLabel: 'Delete',
-                        isDestructive: true,
-                        onConfirm: () => {
-                          onDeleteWardrobeItem(item.id);
-                          setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
-                        },
-                      });
-                    }}
-                    className="w-6 h-6 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 flex items-center justify-center transition-colors cursor-pointer"
-                    title="Delete item"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(item)}
+                      className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+                      title="Edit item"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmModalState({
+                          isOpen: true,
+                          title: 'Delete Item?',
+                          message: `Are you sure you want to remove "${String(item.name || '')}" from your wardrobe?`,
+                          confirmLabel: 'Delete',
+                          isDestructive: true,
+                          onConfirm: () => {
+                            onDeleteWardrobeItem(item.id);
+                            setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+                          },
+                        });
+                      }}
+                      className="w-6 h-6 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 flex items-center justify-center transition-colors cursor-pointer"
+                      title="Delete item"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1653,13 +1778,29 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   )}
                 </div>
 
-                {/* Large Live Preview Box */}
+                {/* Large Live Preview Box (Instant 0ms URL.createObjectURL + HEIC Auto-Convert) */}
                 <div className="w-full h-48 sm:h-56 rounded-2xl bg-slate-200/80 border-2 border-dashed border-slate-300 overflow-hidden flex items-center justify-center relative">
                   {formPhotoUrl ? (
                     <img
                       src={formPhotoUrl}
                       alt="Preview"
                       className="w-full h-full object-contain bg-slate-900/10"
+                      onError={async () => {
+                        if (selectedFileRef.current) {
+                          try {
+                            const jpegBlob = await convertHeicToJpeg(selectedFileRef.current);
+                            const newUrl = URL.createObjectURL(jpegBlob);
+                            cleanupRawBlobUrl();
+                            rawBlobUrlRef.current = newUrl;
+                            setFormPhotoUrl(newUrl);
+                            const compressed = await downscalePhotoTo600(jpegBlob, 600, 0.72);
+                            setFormPhotoUrl(compressed);
+                            cleanupRawBlobUrl();
+                          } catch (err) {
+                            console.warn('HEIC onError fallback error:', err);
+                          }
+                        }
+                      }}
                     />
                   ) : (
                     <div className="text-center p-4 text-slate-400">
@@ -1706,8 +1847,12 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   <div className="flex justify-end">
                     <button
                       type="button"
-                      onClick={() => setFormPhotoUrl('')}
-                      className="text-xs text-red-600 font-semibold hover:underline"
+                      onClick={() => {
+                        cleanupRawBlobUrl();
+                        selectedFileRef.current = null;
+                        setFormPhotoUrl('');
+                      }}
+                      className="text-xs text-red-600 font-semibold hover:underline cursor-pointer"
                     >
                       Remove Photo
                     </button>

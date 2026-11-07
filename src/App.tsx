@@ -1258,24 +1258,24 @@ export function App() {
 
       {/* 1. TOP HEADER (China Flag PNG Branding & Live Supabase Rippling Indicator) */}
       <header className="bg-white/90 backdrop-blur-md border-b border-black/10 sticky top-0 z-40 w-full transition-all">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between gap-3">
+        <div className="max-w-5xl mx-auto px-2 sm:px-4 md:px-6 h-12 sm:h-14 flex items-center justify-between gap-1.5 sm:gap-3 box-border overflow-hidden">
           {/* Logo & Brand with China Flag PNG */}
           <button
             type="button"
             onClick={() => navigateToView('overview')}
-            className="flex items-center gap-2.5 text-left group cursor-pointer"
+            className="flex items-center gap-1.5 sm:gap-2.5 text-left group cursor-pointer min-w-0 flex-1 overflow-hidden"
           >
             <img
               src="https://flagcdn.com/w80/cn.png"
               alt="China Flag"
-              className="h-[18px] sm:h-[20px] w-auto rounded-[3px] border border-black/10 shrink-0 object-cover inline-block shadow-2xs"
+              className="h-[16px] sm:h-[20px] w-auto rounded-[3px] border border-black/10 shrink-0 object-cover inline-block shadow-2xs"
               onError={(e) => {
                 e.currentTarget.src = './favicon-cn.svg';
               }}
             />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-sm sm:text-base tracking-tight text-slate-900 block leading-tight">
+            <div className="min-w-0 flex-1 truncate">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-bold text-[13px] sm:text-base tracking-tight text-slate-900 block leading-tight truncate">
                   Navini's Travel Plan
                 </span>
 
@@ -1287,29 +1287,29 @@ export function App() {
                   />
                 )}
               </div>
-              <span className="text-[10px] text-[#8E8E93] hidden sm:block">
+              <span className="text-[10px] text-[#8E8E93] hidden md:block truncate">
                 Colombo &rarr; Shanghai &rarr; Haikou
               </span>
             </div>
           </button>
 
           {/* Quick Action Pills + Hamburger Menu */}
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Tiny Top-Bar Recovery Shield Icon (Requirement #6.3) */}
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            {/* Tiny Top-Bar Recovery Shield Icon */}
             <button
               type="button"
               onClick={() => setShowRecoveryModal(true)}
-              className="w-8 h-8 rounded-full border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 flex items-center justify-center transition-colors shadow-2xs cursor-pointer"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 flex items-center justify-center transition-colors shadow-2xs cursor-pointer shrink-0"
               title="Emergency Data Recovery & Raw Names Vault"
             >
-              <span className="text-sm">🛡️</span>
+              <span className="text-xs sm:text-sm">🛡️</span>
             </button>
 
-            {/* TOP-BAR DOWNLOAD / OFFLINE LOCK TOGGLE BUTTON (Requirement #1) */}
+            {/* TOP-BAR DOWNLOAD / OFFLINE LOCK TOGGLE BUTTON */}
             <button
               type="button"
               onClick={handleToggleOfflineLock}
-              className={`h-8 px-2.5 sm:px-3 rounded-full flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer select-none ${
+              className={`h-7 sm:h-8 px-2 sm:px-3 rounded-full flex items-center justify-center gap-1 transition-all shadow-2xs cursor-pointer select-none shrink-0 ${
                 isOfflineLocked
                   ? 'bg-blue-600 hover:bg-blue-700 text-white border border-blue-400 font-bold'
                   : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300/80 font-bold'
@@ -1322,23 +1322,22 @@ export function App() {
             >
               {isOfflineLocked ? (
                 <>
-                  <span className="text-sm leading-none">📥</span>
+                  <span className="text-xs sm:text-sm leading-none">📥</span>
                   <span className="text-[11px] font-bold hidden sm:inline tracking-tight">Locked Offline</span>
-                  <span className="text-[11px] font-bold sm:hidden">Locked</span>
                 </>
               ) : (
                 <>
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                   <span className="text-[11px] font-bold text-emerald-800 hidden sm:inline tracking-tight">☁️ Live</span>
-                  <span className="text-[11px] font-bold text-emerald-800 sm:hidden">Live</span>
                 </>
               )}
             </button>
 
+            {/* Taxi Card Button */}
             <button
               type="button"
               onClick={() => setShowTaxiModal(true)}
-              className="px-3 py-1.5 rounded-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-semibold text-xs transition-colors shadow-2xs cursor-pointer"
+              className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-[11px] sm:text-xs transition-colors shadow-2xs cursor-pointer shrink-0 whitespace-nowrap"
             >
               🚕 Taxi Card
             </button>
@@ -1347,10 +1346,10 @@ export function App() {
             <button
               type="button"
               onClick={() => setIsSidebarOpen(true)}
-              className="w-8 h-8 rounded-full border border-black/10 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center transition-colors shadow-2xs cursor-pointer"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-black/10 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center transition-colors shadow-2xs cursor-pointer shrink-0"
               title="Open menu"
             >
-              <Menu className="w-4 h-4" />
+              <Menu className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </div>
         </div>

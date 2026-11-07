@@ -247,9 +247,9 @@ export function isSoftwareAppOrNonWardrobe(item: any): boolean {
 /**
  * Returns true if the item has no user-typed name or was generated as an automated photo recovery placeholder.
  */
-export function isUnnamedRetake(item: WardrobeItem): boolean {
+export function isUnnamedRetake(item?: WardrobeItem | null): boolean {
   if (!item || !item.name) return true;
-  const lower = item.name.trim().toLowerCase();
+  const lower = String(item.name || '').trim().toLowerCase();
   return (
     lower === '' ||
     lower === 'untitled' ||
@@ -261,10 +261,12 @@ export function isUnnamedRetake(item: WardrobeItem): boolean {
 /**
  * Splits an item title into main title and color label if separated by " - " (space-hyphen-space).
  * Requires spaces around the hyphen so words like "T-Shirt" or "Short-Sleeve" are never split!
+ * Defensive: Never throws TypeError on null/undefined input.
  */
-export function parseTitleAndColor(rawName: string): { mainTitle: string; colorLabel?: string } {
-  if (!rawName) return { mainTitle: '' };
-  const trimmed = rawName.trim();
+export function parseTitleAndColor(rawName?: string | null): { mainTitle: string; colorLabel?: string } {
+  const safeName = String(rawName || '');
+  if (!safeName) return { mainTitle: '' };
+  const trimmed = safeName.trim();
   const delimiter = ' - ';
   const lastIdx = trimmed.lastIndexOf(delimiter);
   if (lastIdx === -1) {

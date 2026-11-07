@@ -405,7 +405,7 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                           </button>
                         </div>
                       ) : (() => {
-                        const { mainTitle, colorLabel } = parseTitleAndColor(item.name);
+                        const { mainTitle, colorLabel } = parseTitleAndColor(item?.name);
                         return (
                           <>
                             <div className="flex items-center justify-between gap-2">
@@ -414,7 +414,7 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                               </h4>
                               <button
                                 type="button"
-                                onClick={() => handleStartEdit(item.id, item.name)}
+                                onClick={() => handleStartEdit(item.id, String(item?.name || ''))}
                                 className="text-[#8E8E93] hover:text-[#007AFF] p-0.5 cursor-pointer"
                                 title="Edit name"
                               >
@@ -455,7 +455,7 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                           setConfirmModal({
                             isOpen: true,
                             title: 'Delete Item?',
-                            message: `Are you sure you want to remove "${item.name}" from ${bag.name}?`,
+                            message: `Are you sure you want to remove "${String(item?.name || '')}" from ${bag.name}?`,
                             onConfirm: () => {
                               onDeleteWardrobeItem(item.id);
                               setConfirmModal((prev) => ({ ...prev, isOpen: false }));

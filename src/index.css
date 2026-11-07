@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @layer base {
-  body {
+  html, body {
     background-color: #F2F2F7;
     color: #000000;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", "Helvetica Neue", Helvetica, Arial, sans-serif;
