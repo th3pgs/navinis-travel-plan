@@ -17,6 +17,7 @@ import {
   ProcedureStep,
   BankingTaskItem,
   GiftItem,
+  DEFAULT_WARDROBE_CATEGORIES,
   INITIAL_BAGS,
   INITIAL_DEVICES,
   INITIAL_DOCUMENTS,
@@ -392,6 +393,63 @@ export function App() {
     const updated = [...customCategories, trimmed];
     setCustomCategories(updated);
     syncAllState({ customCategories: updated });
+  };
+
+  const handleDeleteCustomCategory = (catToDelete: string) => {
+    const updatedCustom = customCategories.filter((c) => c !== catToDelete);
+    setCustomCategories(updatedCustom);
+    // Move any items in that category to fallback
+    const fallbackCategory = 'Daily Essentials, Cutlery & Folders';
+    const updatedWardrobe = wardrobe.map((w) =>
+      w.category === catToDelete ? { ...w, category: fallbackCategory } : w
+    );
+    setWardrobe(updatedWardrobe);
+    saveWardrobeItemsIDB(updatedWardrobe);
+    syncAllState({
+      customCategories: updatedCustom,
+      wardrobe: updatedWardrobe,
+    });
+  };
+
+  const handleRenameCategory = (oldCategory: string, newCategory: string) => {
+    const trimmed = newCategory.trim();
+    if (!trimmed || oldCategory === trimmed) return;
+
+    let updatedCustom = [...customCategories];
+    if (updatedCustom.includes(oldCategory)) {
+      updatedCustom = updatedCustom.map((c) => (c === oldCategory ? trimmed : c));
+    } else if (!DEFAULT_WARDROBE_CATEGORIES.includes(trimmed)) {
+      updatedCustom.push(trimmed);
+    }
+    setCustomCategories(updatedCustom);
+
+    const updatedWardrobe = wardrobe.map((w) =>
+      w.category === oldCategory ? { ...w, category: trimmed } : w
+    );
+    setWardrobe(updatedWardrobe);
+    saveWardrobeItemsIDB(updatedWardrobe);
+    syncAllState({
+      customCategories: updatedCustom,
+      wardrobe: updatedWardrobe,
+    });
+  };
+
+  const handlePullFromSupabase = async () => {
+    const remote = await fetchCloudState();
+    if (remote) {
+      if (remote.passportInfo) setPassportInfo(remote.passportInfo);
+      if (remote.bags?.length) setBags(remote.bags.map((b) => ({ ...b, name: normalizeBagLocation(b.name) })));
+      if (remote.devices?.length) setDevices(remote.devices);
+      if (remote.wardrobe?.length) {
+        const cleanRemote = migrateWardrobeItems(remote.wardrobe);
+        setWardrobe(cleanRemote);
+        await saveWardrobeItemsIDB(cleanRemote);
+      }
+      if (remote.documents?.length) setDocuments(remote.documents);
+      if (remote.apps?.length) setApps(migrateLegacyApps(remote.apps));
+      if (remote.customCategories?.length) setCustomCategories(remote.customCategories);
+      if (remote.customLocations?.length) setCustomLocations(remote.customLocations);
+    }
   };
 
   const handleAddCustomLocation = (loc: string) => {
@@ -939,6 +997,8 @@ export function App() {
             customCategories={customCategories}
             onAddCustomLocation={handleAddCustomLocation}
             onAddCustomCategory={handleAddCustomCategory}
+            onDeleteCustomCategory={handleDeleteCustomCategory}
+            onRenameCategory={handleRenameCategory}
             onToggleWardrobeBought={toggleWardrobeBought}
             onToggleWardrobePacked={toggleWardrobePacked}
             onAddWardrobeItem={handleAddWardrobeItem}
@@ -1014,12 +1074,13 @@ export function App() {
         onClose={() => setShowTaxiModal(false)}
       />
 
-      {/* EMERGENCY DATA RECOVERY MODAL (TRIGGERED FROM TOP BAR SHIELD) */}
+      {/* EMERGENCY DATA RECOVERY & STORAGE INSPECTOR MODAL */}
       <RecoveryScanner
         isOpen={showRecoveryModal}
         onClose={() => setShowRecoveryModal(false)}
         currentWardrobe={wardrobe}
         onRestoreItems={handleRestoreWardrobeItems}
+        onPullFromSupabase={handlePullFromSupabase}
       />
 
       {/* OFFLINE BACKUP MODAL */}

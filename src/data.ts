@@ -150,27 +150,111 @@ export interface TimelineEvent {
   items: TimelineEventItem[];
 }
 
-// 10 Canonical Packing Categories (Requirement #4)
+// 9 Original Canonical Packing Categories
 export const DEFAULT_WARDROBE_CATEGORIES: string[] = [
   'Dresses & Frocks',
-  'Tops',
-  'Bottoms',
-  'Undergarments',
-  'Footwear',
-  'Bottles & Liquids',
-  'Medicine',
-  'Gifts',
-  'Essentials',
-  'Electronics',
+  'Tops & T-Shirts',
+  'Bottoms & Jeans',
+  'Undergarments & Innerwear',
+  'Footwear & Slippers',
+  'Bottles, Liquids & Toiletries',
+  'Medicine & First Aid',
+  'Gifts & Souvenirs',
+  'Daily Essentials, Cutlery & Folders',
+];
+
+const KNOWN_APP_PATTERNS = [
+  'alipay',
+  'wechat',
+  'google',
+  'gmail',
+  'baidu',
+  'amap',
+  'gaode',
+  'shadowrocket',
+  'v2rayng',
+  'clash',
+  'hiddify',
+  'chatgpt',
+  'gemini',
+  'claude',
+  'deepl',
+  'pleco',
+  'meituan',
+  'taobao',
+  'didi',
+  'metroman',
+  'rednote',
+  'xiaohongshu',
+  'astrill',
+  'whatsapp',
+  'youtube',
+  'dialog',
+  'trip.com',
+  'ele.me',
+  'bilibili',
+  'douyin',
+  'authenticator',
+  'pinduoduo',
 ];
 
 /**
- * Normalizes any category string into one of the 10 canonical categories,
+ * Accurately detects whether an item is a software app, device, bag, doc, or non-wardrobe artifact.
+ */
+export function isSoftwareAppOrNonWardrobe(item: any): boolean {
+  if (!item) return true;
+  const id = String(item.id || '').toLowerCase();
+  if (
+    id.startsWith('app-') ||
+    id.startsWith('bag-') ||
+    id.startsWith('dev-') ||
+    id.startsWith('doc-') ||
+    id.startsWith('step-') ||
+    id.startsWith('gift-') ||
+    id.startsWith('m-')
+  ) {
+    return true;
+  }
+  // Software app attributes
+  if (
+    item.platform !== undefined ||
+    item.carrierOrOs !== undefined ||
+    item.appIcon !== undefined ||
+    Array.isArray(item.devices) ||
+    item.isConfigured !== undefined ||
+    item.isLoggedIn !== undefined ||
+    item.isVerified !== undefined
+  ) {
+    return true;
+  }
+  const name = String(item.name || '').toLowerCase();
+  for (const pattern of KNOWN_APP_PATTERNS) {
+    if (name.includes(pattern)) return true;
+  }
+  return false;
+}
+
+/**
+ * Returns true if the item has no user-typed name or was generated as an automated photo recovery placeholder.
+ */
+export function isUnnamedRetake(item: WardrobeItem): boolean {
+  if (!item || !item.name) return true;
+  const lower = item.name.trim().toLowerCase();
+  return (
+    lower === '' ||
+    lower === 'untitled' ||
+    lower.startsWith('recovered item') ||
+    lower.startsWith('item ')
+  );
+}
+
+/**
+ * Normalizes any category string into one of the 9 canonical categories,
  * purges app categories, and preserves custom user categories.
  */
 export function normalizeCategoryName(rawCategory?: string): string {
   if (!rawCategory || !rawCategory.trim()) {
-    return 'Essentials';
+    return 'Daily Essentials, Cutlery & Folders';
   }
   const trimmed = rawCategory.trim();
   const lower = trimmed.toLowerCase();
@@ -181,26 +265,13 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower.includes('bypass') ||
     lower.includes('stock ai') ||
     lower.includes('transit & maps') ||
-    lower.includes('transit and maps')
+    lower.includes('transit and maps') ||
+    lower.includes('essential daily')
   ) {
-    return 'Essentials';
+    return 'Daily Essentials, Cutlery & Folders';
   }
 
-  // Match Electronics / Tech items
-  if (
-    lower.includes('electronic') ||
-    lower.includes('tech') ||
-    lower.includes('device') ||
-    lower.includes('hardware') ||
-    lower.includes('charger') ||
-    lower.includes('adapter') ||
-    lower.includes('cable') ||
-    lower.includes('powerbank')
-  ) {
-    return 'Electronics';
-  }
-
-  // Match Tops
+  // Match Tops & T-Shirts
   if (
     lower === 'tops' ||
     lower === 'top' ||
@@ -214,7 +285,7 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'tops and t-shirts' ||
     lower.startsWith('top')
   ) {
-    return 'Tops';
+    return 'Tops & T-Shirts';
   }
 
   // Match Dresses & Frocks
@@ -231,7 +302,7 @@ export function normalizeCategoryName(rawCategory?: string): string {
     return 'Dresses & Frocks';
   }
 
-  // Match Bottoms
+  // Match Bottoms & Jeans
   if (
     lower === 'bottoms' ||
     lower === 'bottom' ||
@@ -246,10 +317,10 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'bottoms & jeans' ||
     lower === 'bottoms and jeans'
   ) {
-    return 'Bottoms';
+    return 'Bottoms & Jeans';
   }
 
-  // Match Undergarments
+  // Match Undergarments & Innerwear
   if (
     lower === 'undergarments' ||
     lower === 'undergarment' ||
@@ -262,10 +333,10 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower.includes('panties') ||
     lower.includes('underpant')
   ) {
-    return 'Undergarments';
+    return 'Undergarments & Innerwear';
   }
 
-  // Match Footwear
+  // Match Footwear & Slippers
   if (
     lower === 'footwear' ||
     lower === 'slippers' ||
@@ -277,10 +348,10 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'footwear & slippers' ||
     lower === 'footwear and slippers'
   ) {
-    return 'Footwear';
+    return 'Footwear & Slippers';
   }
 
-  // Match Bottles & Liquids
+  // Match Bottles, Liquids & Toiletries
   if (
     lower === 'bottles, liquids & toiletries' ||
     lower === 'bottles & liquids' ||
@@ -292,10 +363,10 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'bottles' ||
     lower === 'bottle'
   ) {
-    return 'Bottles & Liquids';
+    return 'Bottles, Liquids & Toiletries';
   }
 
-  // Match Medicine
+  // Match Medicine & First Aid
   if (
     lower === 'medicine & first aid' ||
     lower === 'medicine and first aid' ||
@@ -304,10 +375,10 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'first aid' ||
     lower === 'pharmacy'
   ) {
-    return 'Medicine';
+    return 'Medicine & First Aid';
   }
 
-  // Match Gifts
+  // Match Gifts & Souvenirs
   if (
     lower === 'gifts & souvenirs' ||
     lower === 'gifts and souvenirs' ||
@@ -316,16 +387,15 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'souvenirs' ||
     lower === 'souvenir'
   ) {
-    return 'Gifts';
+    return 'Gifts & Souvenirs';
   }
 
-  // Match Essentials
+  // Match Daily Essentials, Cutlery & Folders
   if (
     lower === 'daily essentials, cutlery & folders' ||
     lower === 'daily essentials' ||
     lower === 'essentials' ||
     lower === 'essential' ||
-    lower === 'essential daily' ||
     lower === 'cutlery' ||
     lower === 'folders' ||
     lower === 'folder' ||
@@ -333,7 +403,7 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'lab coat' ||
     lower === 'lab coats'
   ) {
-    return 'Essentials';
+    return 'Daily Essentials, Cutlery & Folders';
   }
 
   // Exact case-insensitive match against canonical categories
@@ -410,27 +480,29 @@ export function normalizeBagLocation(rawLoc?: string): string {
 }
 
 /**
- * Automatically normalizes wardrobe items to canonical categories, canonical bags,
+ * Automatically purges software apps, normalizes wardrobe items to canonical categories, canonical bags,
  * and recovers locked-in packed booleans (Requirement #2, #4, #5).
  */
 export function migrateWardrobeItems(items: WardrobeItem[]): WardrobeItem[] {
   if (!Array.isArray(items)) return [];
-  return items.map((item) => {
-    const normalizedCategory = normalizeCategoryName(item.category);
-    const normalizedBag = normalizeBagLocation(item.targetBag);
-    const isPacked =
-      item.isPacked === true ||
-      (item as any).packed === true ||
-      (item as any).checked === true ||
-      (item as any).status === 'packed';
+  return items
+    .filter((item) => !isSoftwareAppOrNonWardrobe(item))
+    .map((item) => {
+      const normalizedCategory = normalizeCategoryName(item.category);
+      const normalizedBag = normalizeBagLocation(item.targetBag);
+      const isPacked =
+        item.isPacked === true ||
+        (item as any).packed === true ||
+        (item as any).checked === true ||
+        (item as any).status === 'packed';
 
-    return {
-      ...item,
-      category: normalizedCategory,
-      targetBag: normalizedBag,
-      isPacked,
-    };
-  });
+      return {
+        ...item,
+        category: normalizedCategory,
+        targetBag: normalizedBag,
+        isPacked,
+      };
+    });
 }
 
 export const MEDICINE_SUBTYPES: string[] = [

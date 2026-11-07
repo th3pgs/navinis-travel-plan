@@ -1,5 +1,6 @@
 import { supabase, STORAGE_BUCKET, STATE_TABLE, STATE_ROW_ID } from './supabase';
 import { saveMasterStateIDB, saveWardrobeItemsIDB } from './db';
+import { isSoftwareAppOrNonWardrobe } from './data';
 
 const LOCAL_STORAGE_KEY = 'navini_master_state_v5';
 
@@ -242,6 +243,11 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
   state.lastUpdated = new Date().toISOString();
   _pushInFlight = true;
   _lastPushTimestamp = Date.now();
+
+  // Ensure wardrobe never contains apps or non-wardrobe artifacts
+  if (Array.isArray(state.wardrobe)) {
+    state.wardrobe = state.wardrobe.filter((item) => !isSoftwareAppOrNonWardrobe(item));
+  }
 
   // 1. Instantly save to IndexedDB (multi-gigabyte safe on iPadOS) and localStorage
   try {

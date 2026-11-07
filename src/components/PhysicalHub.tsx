@@ -10,6 +10,8 @@ import {
   isItemInBag,
   normalizeCategoryName,
   migrateWardrobeItems,
+  isUnnamedRetake,
+  normalizeBagLocation,
 } from '../data';
 import {
   ChevronLeft,
@@ -33,13 +35,14 @@ import {
   ShoppingBag,
   Eye,
   Filter,
+  Settings2,
+  Battery,
 } from 'lucide-react';
 import { uploadPhotoToSupabase, compressPhotoToMax400 } from '../cloudSync';
 import { DynamicSelect } from './DynamicSelect';
 import { LuggageContentsModal } from './LuggageContentsModal';
 import { IOSConfirmModal } from './IOSConfirmModal';
-import { normalizeBagLocation } from '../data';
-import { Battery } from 'lucide-react';
+import { ManageCategoriesModal } from './ManageCategoriesModal';
 
 interface PhysicalHubProps {
   onBack: () => void;
@@ -52,6 +55,8 @@ interface PhysicalHubProps {
   customCategories?: string[];
   onAddCustomLocation?: (name: string) => void;
   onAddCustomCategory?: (cat: string) => void;
+  onDeleteCustomCategory?: (category: string) => void;
+  onRenameCategory?: (oldCategory: string, newCategory: string) => void;
   onToggleWardrobeBought: (id: string) => void;
   onToggleWardrobePacked: (id: string) => void;
   onAddWardrobeItem: (item: Omit<WardrobeItem, 'id'>) => void;
@@ -279,6 +284,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   customCategories = [],
   onAddCustomLocation,
   onAddCustomCategory,
+  onDeleteCustomCategory,
+  onRenameCategory,
   onToggleWardrobeBought,
   onToggleWardrobePacked,
   onAddWardrobeItem,
@@ -293,6 +300,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   const [isPrintMode, setIsPrintMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [catalogViewMode, setCatalogViewMode] = useState<'detailed' | 'list' | 'pictures'>('detailed');
+  const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
 
   // Luggage Inspection Drawer state
   const [inspectBag, setInspectBag] = useState<BagAsset | null>(null);
@@ -421,6 +429,15 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isPrintMode]);
 
+  // Separate unnamed camera retakes / placeholders from clean items (Requirement #4)
+  const unnamedItems = React.useMemo(() => {
+    return wardrobe.filter(isUnnamedRetake);
+  }, [wardrobe]);
+
+  const cleanItems = React.useMemo(() => {
+    return wardrobe.filter((w) => !isUnnamedRetake(w));
+  }, [wardrobe]);
+
   // All categories: standard 9 categories + user custom categories + any distinct categories on items
   const allCategories = React.useMemo(() => {
     const extraCategories = wardrobe
@@ -434,23 +451,53 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
     return Array.from(new Set([...DEFAULT_BAG_LOCATIONS, ...bags.map((b) => b.name), ...customLocations]));
   }, [bags, customLocations]);
 
-  // Filtered Items (matching normalized categories so legacy or short names match correctly)
+  // Filtered Items (isolates unnamed items from regular category views)
   const displayedItems = React.useMemo(() => {
     return wardrobe.filter((item) => {
-      const itemCat = normalizeCategoryName(item.category);
-      if (selectedCategory !== 'all') {
-        const selNorm = normalizeCategoryName(selectedCategory);
-        if (itemCat !== selNorm && item.category !== selectedCategory) {
+      // If user explicitly chose the "unnamed" pill
+      if (selectedCategory === 'unnamed') {
+        if (!isUnnamedRetake(item)) return false;
+      } else {
+        // If there are clean items, don't mix unnamed retakes into 'all' or categories
+        if (cleanItems.length > 0 && isUnnamedRetake(item)) {
           return false;
         }
+
+        if (selectedCategory !== 'all') {
+          const itemCat = normalizeCategoryName(item.category);
+          const selNorm = normalizeCategoryName(selectedCategory);
+          if (itemCat !== selNorm && item.category !== selectedCategory) {
+            return false;
+          }
+        }
       }
+
       if (selectedSuitcaseFilter !== 'all') {
         const bagMatch = bags.find((b) => b.id === selectedSuitcaseFilter || b.name === selectedSuitcaseFilter);
         if (bagMatch && !isItemInBag(item.targetBag, bagMatch)) return false;
       }
       return true;
     });
-  }, [wardrobe, selectedCategory, selectedSuitcaseFilter, bags]);
+  }, [wardrobe, cleanItems.length, selectedCategory, selectedSuitcaseFilter, bags]);
+
+  // Purge all unnamed photo retakes and duplicates (Requirement #4.2)
+  const handlePurgeRetakes = () => {
+    if (unnamedItems.length === 0) return;
+    setConfirmModalState({
+      isOpen: true,
+      title: `Purge ${unnamedItems.length} Photo Retakes?`,
+      message: `Are you sure you want to delete all unnamed camera retakes and draft placeholders? Your ${cleanItems.length} cleanly named wardrobe items will be safely preserved.`,
+      confirmLabel: 'Purge Retakes',
+      isDestructive: true,
+      onConfirm: () => {
+        unnamedItems.forEach((u) => onDeleteWardrobeItem(u.id));
+        setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+        setSelectedCategory('all');
+        setSaveToast(`✓ Purged ${unnamedItems.length} unnamed retakes`);
+        setTimeout(() => setSaveToast(null), 3000);
+      },
+    });
+  };
 
   // Multi-keyword deep matching for the catalog preview
   const filteredCatalogItems = React.useMemo(() => {
@@ -1105,7 +1152,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
       </div>
 
       {/* 2. CATEGORY PILLS (Horizontal Scrolling, Starting Immediately without Summary Card) */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none pt-1">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none pt-1">
         <button
           type="button"
           onClick={() => setSelectedCategory('all')}
@@ -1115,13 +1162,13 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
               : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
           }`}
         >
-          All ({wardrobe.length})
+          All ({cleanItems.length})
         </button>
 
         {allCategories.map((cat) => {
           const normCat = normalizeCategoryName(cat);
-          const count = wardrobe.filter((w) => normalizeCategoryName(w.category) === normCat || w.category === cat).length;
-          const isActive = selectedCategory === cat || (selectedCategory !== 'all' && normalizeCategoryName(selectedCategory) === normCat);
+          const count = cleanItems.filter((w) => normalizeCategoryName(w.category) === normCat || w.category === cat).length;
+          const isActive = selectedCategory === cat || (selectedCategory !== 'all' && selectedCategory !== 'unnamed' && normalizeCategoryName(selectedCategory) === normCat);
           return (
             <button
               key={cat}
@@ -1144,6 +1191,51 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
             </button>
           );
         })}
+
+        {/* ⚠️ Unnamed / Retakes Filter Pill (Requirement #4.2) */}
+        {unnamedItems.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setSelectedCategory('unnamed')}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedCategory === 'unnamed'
+                ? 'bg-amber-500 text-white shadow-xs'
+                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300'
+            }`}
+          >
+            <span>⚠️ Unnamed / Retakes</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                selectedCategory === 'unnamed' ? 'bg-white/20 text-white' : 'bg-amber-200/80 text-amber-900'
+              }`}
+            >
+              {unnamedItems.length}
+            </span>
+          </button>
+        )}
+
+        {/* 🧹 Auto-Hide / Purge Retakes & Duplicates Button (Requirement #4.2) */}
+        {unnamedItems.length > 0 && (
+          <button
+            type="button"
+            onClick={handlePurgeRetakes}
+            className="px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 flex items-center gap-1 transition-all cursor-pointer"
+            title="Purge all unnamed photo retakes"
+          >
+            <span>🧹 Purge Retakes ({unnamedItems.length})</span>
+          </button>
+        )}
+
+        {/* ⚙️ Manage Categories Editor Button (Requirement #3) */}
+        <button
+          type="button"
+          onClick={() => setIsManageCategoriesOpen(true)}
+          className="px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 flex items-center gap-1.5 transition-all cursor-pointer"
+          title="Manage, rename, or delete categories"
+        >
+          <Settings2 className="w-3.5 h-3.5 text-slate-600" />
+          <span>Manage Categories</span>
+        </button>
       </div>
 
       {/* 3. 2-COLUMN SQUARE PHOTO GRID FOR WARDROBE ITEMS (iOS Visual Cards) */}
@@ -1356,9 +1448,19 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
               {/* Category Dropdown with + Add Custom... (Requirement #3) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">
-                    Category
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-700 font-semibold text-xs">
+                      Category
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsManageCategoriesOpen(true)}
+                      className="text-[11px] text-[#007AFF] font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Settings2 className="w-3 h-3" />
+                      <span>Manage</span>
+                    </button>
+                  </div>
                   <DynamicSelect
                     value={formCategory}
                     options={allCategories}
@@ -1717,6 +1819,29 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         isDestructive={confirmModalState.isDestructive !== false}
         onConfirm={confirmModalState.onConfirm}
         onCancel={() => setConfirmModalState((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* MANAGE CATEGORIES MODAL (Requirement #3) */}
+      <ManageCategoriesModal
+        isOpen={isManageCategoriesOpen}
+        onClose={() => setIsManageCategoriesOpen(false)}
+        categories={allCategories}
+        wardrobe={wardrobe}
+        onAddCategory={(newCat) => {
+          onAddCustomCategory?.(newCat);
+          setSaveToast(`✓ Added category "${newCat}"`);
+          setTimeout(() => setSaveToast(null), 3000);
+        }}
+        onRenameCategory={(oldCat, newCat) => {
+          onRenameCategory?.(oldCat, newCat);
+          setSaveToast(`✓ Renamed "${oldCat}" to "${newCat}"`);
+          setTimeout(() => setSaveToast(null), 3000);
+        }}
+        onDeleteCategory={(cat) => {
+          onDeleteCustomCategory?.(cat);
+          setSaveToast(`✓ Deleted category "${cat}"`);
+          setTimeout(() => setSaveToast(null), 3000);
+        }}
       />
     </div>
   );
