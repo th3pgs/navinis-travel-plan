@@ -8,6 +8,7 @@ export interface AppMasterState {
   version: string;
   lastUpdated: string;
   lastUpdatedAt?: number;
+  is_master_locked?: boolean;
   passportInfo: {
     passportNumber: string;
     expiryDate: string;
@@ -51,6 +52,66 @@ export function setOfflineLocked(locked: boolean): void {
   try {
     localStorage.setItem('navini_offline_locked', locked ? 'true' : 'false');
   } catch {}
+}
+
+export function isMasterMigrationDone(): boolean {
+  try {
+    return localStorage.getItem('MASTER_CLOUD_MIGRATION_DONE_V1') === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setMasterMigrationDone(done = true): void {
+  try {
+    if (done) {
+      localStorage.setItem('MASTER_CLOUD_MIGRATION_DONE_V1', 'true');
+    } else {
+      localStorage.removeItem('MASTER_CLOUD_MIGRATION_DONE_V1');
+    }
+  } catch {}
+}
+
+/**
+ * Clean slate utility: wipes out legacy browser caching keys and IndexedDB database
+ * to guarantee that mobile browsers (Safari/Chrome) never resurrect old or deleted items.
+ */
+export function purgeLegacyLocalStorageAndIDB(): void {
+  try {
+    const keysToPreserve = new Set([
+      'navini_auth_unlocked',
+      'MASTER_CLOUD_MIGRATION_DONE_V1',
+      'navini_active_view',
+      'navini_active_category',
+      'navini_offline_locked',
+    ]);
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && !keysToPreserve.has(k)) {
+        if (
+          k.startsWith('navini_') ||
+          k.startsWith('wardrobe_') ||
+          k.startsWith('master_') ||
+          k.includes('vault') ||
+          k.includes('cache')
+        ) {
+          toRemove.push(k);
+        }
+      }
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k));
+  } catch (e) {
+    console.warn('LocalStorage purge error:', e);
+  }
+
+  try {
+    if (typeof indexedDB !== 'undefined') {
+      indexedDB.deleteDatabase('navini_travel_vault');
+    }
+  } catch (e) {
+    console.warn('IndexedDB deleteDatabase error:', e);
+  }
 }
 
 let syncDebounceTimer: any = null;
@@ -338,25 +399,20 @@ export async function fetchCloudState(): Promise<AppMasterState | null> {
     if (!error && data && data.payload) {
       const remote = data.payload as AppMasterState;
       if (remote.passportInfo) {
-        // Cache master state and wardrobe directly in IndexedDB (gigabytes capacity)
-        try {
-          await saveMasterStateIDB(remote);
-          if (Array.isArray(remote.wardrobe)) {
-            await saveWardrobeItemsIDB(remote.wardrobe);
-          }
-        } catch (e) {}
         return remote;
       }
     }
   } catch (err) {
-    console.warn('Supabase fetch failed, using IndexedDB fallback:', err);
+    console.warn('Supabase fetch failed:', err);
   }
 
-  // Fallback to IndexedDB vault
-  try {
-    const idbState = await getMasterStateIDB();
-    if (idbState) return idbState;
-  } catch {}
+  // Only fallback to IndexedDB if NOT yet in master cloud mode
+  if (!isMasterMigrationDone()) {
+    try {
+      const idbState = await getMasterStateIDB();
+      if (idbState) return idbState;
+    } catch {}
+  }
 
   return null;
 }
@@ -421,9 +477,8 @@ export function broadcastItemDelta(delta: {
 
 /**
  * Push master state to Supabase `app_state` (row `id = 'main_plan'`)
- * with instant local storage write, WebSocket broadcast, and database upsert.
- * CRITICAL: Pre-fetches the remote state first to perform an item-level union merge,
- * guaranteeing that items added on other devices are NEVER clobbered or wiped.
+ * with instant WebSocket broadcast and direct database upsert.
+ * 100% Pure Supabase Cloud Mode: zero local caching & zero stale clobbering.
  */
 export function pushCloudState(state: AppMasterState, immediate = true): Promise<boolean> {
   const now = Date.now();
@@ -432,52 +487,22 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
   _pushInFlight = true;
   _lastPushTimestamp = now;
 
-  // 1. Instantly save to IndexedDB (multi-gigabyte safe, NO 5MB quota limit!)
-  try {
-    saveMasterStateIDB(state);
-    if (Array.isArray(state.wardrobe)) {
-      saveWardrobeItemsIDB(state.wardrobe);
-    }
-  } catch (err) {
-    console.warn('IndexedDB write warning in pushCloudState:', err);
-  }
+  const isMasterLockedMode = state.is_master_locked || isMasterMigrationDone();
 
-  // 2. Save ONLY lightweight preferences & metadata to localStorage (under 5KB total)
-  // NEVER write the massive wardrobe array or large base64 photos to localStorage!
-  try {
-    localStorage.setItem('navini_passport_profile_v7', JSON.stringify(state.passportInfo));
-    localStorage.setItem('navini_bags_v7', JSON.stringify(state.bags));
-    localStorage.setItem('navini_devices_v7', JSON.stringify(state.devices));
-    localStorage.setItem('navini_docs_v7', JSON.stringify(state.documents));
-    localStorage.setItem('navini_apps_v7', JSON.stringify(state.apps));
-    localStorage.setItem('navini_milestones_v7', JSON.stringify(state.milestones));
-    if (state.categories) {
-      localStorage.setItem('navini_categories_v8', JSON.stringify(state.categories));
-    }
-    if (state.deletedCategories) {
-      localStorage.setItem('navini_deleted_categories_v8', JSON.stringify(state.deletedCategories));
-    }
-    if (state.locations) {
-      localStorage.setItem('navini_locations_v8', JSON.stringify(state.locations));
-    }
-    if (state.deletedLocations) {
-      localStorage.setItem('navini_deleted_locations_v8', JSON.stringify(state.deletedLocations));
-    }
-    if (state.deletedItemIds) {
-      localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(state.deletedItemIds));
-    }
-  } catch (e) {
-    console.warn('Local storage write warning', e);
-  }
-
-  // If offline locked, DO NOT push to cloud or broadcast!
+  // If offline locked, strictly isolate to local storage
   if (isOfflineLocked()) {
-    console.log('[CloudSync] Device is offline locked. Changes safely queued locally.');
+    console.log('[CloudSync] Device is offline locked. Changes safely kept locally.');
+    try {
+      saveMasterStateIDB(state);
+      if (Array.isArray(state.wardrobe)) {
+        saveWardrobeItemsIDB(state.wardrobe);
+      }
+    } catch {}
     _pushInFlight = false;
     return Promise.resolve(true);
   }
 
-  // 2. Broadcast immediately over WebSocket to peer devices in ~100ms
+  // 1. Broadcast immediately over WebSocket to peer devices in ~100ms
   broadcastLiveSync({
     action: 'state_update',
     masterState: state,
@@ -485,7 +510,7 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
     timestamp: now,
   });
 
-  // 3. Write to Supabase database with pre-fetch union merge
+  // 2. Write directly to Supabase database
   return new Promise((resolve) => {
     if (syncDebounceTimer) {
       clearTimeout(syncDebounceTimer);
@@ -496,51 +521,16 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
       _lastPushTimestamp = Date.now();
 
       try {
-        // STEP 1: Pre-fetch remote state first to prevent overwriting items added on other devices
-        try {
-          const { data: remoteData, error: fetchErr } = await supabase
-            .from(STATE_TABLE)
-            .select('payload')
-            .eq('id', STATE_ROW_ID)
-            .maybeSingle();
-
-          if (!fetchErr && remoteData?.payload) {
-            const remoteState = remoteData.payload as AppMasterState;
-
-            // Merge tombstone deleted IDs
-            const combinedDeleted = Array.from(new Set([
-              ...(state.deletedItemIds || []),
-              ...(remoteState.deletedItemIds || []),
-            ]));
-            state.deletedItemIds = combinedDeleted;
-
-            // Item-level union merge for wardrobe: NEVER drop items!
-            if (Array.isArray(remoteState.wardrobe)) {
-              state.wardrobe = mergeWardrobeLists(state.wardrobe, remoteState.wardrobe, combinedDeleted);
+        // If NOT in master locked mode yet (prior to one-time migration), keep local storage in sync
+        if (!isMasterLockedMode) {
+          try {
+            saveMasterStateIDB(state);
+            if (Array.isArray(state.wardrobe)) {
+              saveWardrobeItemsIDB(state.wardrobe);
             }
-
-            // Union merge for bags, devices, documents
-            if (Array.isArray(remoteState.bags)) {
-              state.bags = mergeItemsByTimestamp(state.bags, remoteState.bags, combinedDeleted);
-            }
-            if (Array.isArray(remoteState.devices)) {
-              state.devices = mergeItemsByTimestamp(state.devices, remoteState.devices, combinedDeleted);
-            }
-            if (Array.isArray(remoteState.documents)) {
-              state.documents = mergeItemsByTimestamp(state.documents, remoteState.documents, combinedDeleted);
-            }
-
-            // Save union locally to IndexedDB so local state matches
-            try {
-              saveMasterStateIDB(state);
-              if (Array.isArray(state.wardrobe)) {
-                saveWardrobeItemsIDB(state.wardrobe);
-              }
-              localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(combinedDeleted));
-            } catch {}
+          } catch (err) {
+            console.warn('IndexedDB write warning in pushCloudState:', err);
           }
-        } catch (mergeErr) {
-          console.warn('Pre-push union fetch warning (proceeding with local payload):', mergeErr);
         }
 
         const { error } = await supabase
@@ -559,7 +549,7 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
           resolve(false);
         }
       } catch (err) {
-        console.warn('Supabase upsert failed, queued locally:', err);
+        console.warn('Supabase upsert failed:', err);
         resolve(false);
       } finally {
         _pushInFlight = false;

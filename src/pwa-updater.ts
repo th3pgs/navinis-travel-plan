@@ -1,16 +1,14 @@
-import { registerSW } from 'virtual:pwa-register';
+// Service worker registration disabled. Unregister any existing service workers.
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      registration.unregister();
+    }
+  });
+}
 
-// Auto update and refresh service worker immediately when new build is deployed
-const updateSW = registerSW({
-  immediate: true,
-  onNeedRefresh() {
-    updateSW(true);
-    // Automatically reload so the user instantly sees the newly deployed changes
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
-  },
-  onOfflineReady() {
-    console.log('App ready to work offline');
-  },
-});
+if (typeof window !== 'undefined' && 'caches' in window) {
+  caches.keys().then((names) => {
+    for (const name of names) caches.delete(name);
+  });
+}

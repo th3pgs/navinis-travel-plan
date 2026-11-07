@@ -1,7 +1,20 @@
+// Unregister any active service workers and clear browser caches immediately
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      registration.unregister();
+    }
+  });
+}
+if (typeof window !== 'undefined' && 'caches' in window) {
+  caches.keys().then((names) => {
+    for (const name of names) caches.delete(name);
+  });
+}
+
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import './pwa-updater'
 import App from './App.tsx'
 
 // Force clear legacy local storage cache if schema was updated
