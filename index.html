@@ -10,9 +10,26 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <script type="module" crossorigin src="./assets/index-Sezz_Ezk.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DV_hz9qV.css">
-  <link rel="manifest" href="./manifest.webmanifest"></head>
+    <script>
+      // Immediately unregister all service workers and purge caches on page load
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for (var i = 0; i < registrations.length; i++) {
+            registrations[i].unregister();
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (var i = 0; i < names.length; i++) {
+            caches.delete(names[i]);
+          }
+        });
+      }
+    </script>
+    <script type="module" crossorigin src="./assets/index-DNExVqyN.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CmgzGGPD.css">
+  </head>
   <body class="bg-slate-50 text-slate-900 min-h-screen antialiased selection:bg-blue-600 selection:text-white">
     <div id="root"></div>
   </body>
