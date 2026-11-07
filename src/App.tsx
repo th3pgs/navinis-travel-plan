@@ -28,6 +28,7 @@ import {
   INITIAL_GIFTS,
   migrateLegacyApps,
   migrateWardrobeItems,
+  normalizeBagLocation,
 } from './data';
 
 import {
@@ -69,6 +70,7 @@ export function App() {
   // Sidebar & Modals
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showTaxiModal, setShowTaxiModal] = useState(false);
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [selectedInspectBag, setSelectedInspectBag] = useState<BagAsset | null>(null);
 
@@ -119,7 +121,12 @@ export function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((b: BagAsset) => ({
+            ...b,
+            name: normalizeBagLocation(b.name),
+          }));
+        }
       } catch (e) {}
     }
     return INITIAL_BAGS;
@@ -244,7 +251,9 @@ export function App() {
       const remote = await fetchCloudState();
       if (remote && isMounted) {
         if (remote.passportInfo) setPassportInfo(remote.passportInfo);
-        if (remote.bags?.length) setBags(remote.bags);
+        if (remote.bags?.length) {
+          setBags(remote.bags.map((b) => ({ ...b, name: normalizeBagLocation(b.name) })));
+        }
         if (remote.devices?.length) setDevices(remote.devices);
         if (remote.wardrobe?.length) {
           const migrated = migrateWardrobeItems(remote.wardrobe);
@@ -285,7 +294,9 @@ export function App() {
       if (!isMounted) return;
       setIsSupabaseConnected(true);
       if (incoming.passportInfo) setPassportInfo(incoming.passportInfo);
-      if (incoming.bags?.length) setBags(incoming.bags);
+      if (incoming.bags?.length) {
+        setBags(incoming.bags.map((b) => ({ ...b, name: normalizeBagLocation(b.name) })));
+      }
       if (incoming.devices?.length) setDevices(incoming.devices);
       if (incoming.wardrobe?.length) setWardrobe(migrateWardrobeItems(incoming.wardrobe));
       if (incoming.documents?.length) setDocuments(incoming.documents);
@@ -686,12 +697,6 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-[#F2F2F7] text-slate-900 pb-20 font-sans overflow-x-hidden print:bg-white print:pb-0 print:overflow-visible">
-      {/* 0. ON-SCREEN EMERGENCY DATA RECOVERY SCANNER */}
-      <RecoveryScanner
-        currentWardrobe={wardrobe}
-        onRestoreItems={handleRestoreWardrobeItems}
-      />
-
       {/* 1. TOP HEADER (China Flag PNG Branding & Live Supabase Rippling Indicator) */}
       <header className="bg-white/90 backdrop-blur-md border-b border-black/10 sticky top-0 z-40 w-full transition-all">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between gap-3">
@@ -731,6 +736,16 @@ export function App() {
 
           {/* Quick Action Pills + Hamburger Menu */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Tiny Top-Bar Recovery Shield Icon (Requirement #6.3) */}
+            <button
+              type="button"
+              onClick={() => setShowRecoveryModal(true)}
+              className="w-8 h-8 rounded-full border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 flex items-center justify-center transition-colors shadow-2xs cursor-pointer"
+              title="Emergency Data Recovery & Raw Names Vault"
+            >
+              <span className="text-sm">🛡️</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setShowTaxiModal(true)}
@@ -997,6 +1012,14 @@ export function App() {
       <TaxiCardModal
         isOpen={showTaxiModal}
         onClose={() => setShowTaxiModal(false)}
+      />
+
+      {/* EMERGENCY DATA RECOVERY MODAL (TRIGGERED FROM TOP BAR SHIELD) */}
+      <RecoveryScanner
+        isOpen={showRecoveryModal}
+        onClose={() => setShowRecoveryModal(false)}
+        currentWardrobe={wardrobe}
+        onRestoreItems={handleRestoreWardrobeItems}
       />
 
       {/* OFFLINE BACKUP MODAL */}

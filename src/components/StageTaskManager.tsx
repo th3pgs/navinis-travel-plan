@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Trash2, Edit3, Check, X, MapPin } from 'lucide-react';
 import { TaskItem } from '../data';
 import { AppIcon } from './AppIcon';
+import { IOSConfirmModal } from './IOSConfirmModal';
 
 interface StageTaskManagerProps {
   stageId: 'prep-srilanka' | 'airport-cmb' | 'transit-pvg' | 'flight-hak' | 'arrival-campus';
@@ -31,6 +32,17 @@ export const StageTaskManager: React.FC<StageTaskManagerProps> = ({
   onDeleteTask,
 }) => {
   const [showAddForm, setShowAddForm] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
   const [newTitle, setNewTitle] = useState('');
   const [newDetail, setNewDetail] = useState('');
   const [newCategory, setNewCategory] = useState('General');
@@ -362,9 +374,15 @@ export const StageTaskManager: React.FC<StageTaskManagerProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    if (window.confirm(`Are you sure you want to delete "${task.title}"?`)) {
-                      onDeleteTask(task.id);
-                    }
+                    setConfirmModal({
+                      isOpen: true,
+                      title: 'Delete Step?',
+                      message: `Are you sure you want to remove "${task.title}"?`,
+                      onConfirm: () => {
+                        onDeleteTask(task.id);
+                        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                      },
+                    });
                   }}
                   className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-slate-100 transition-colors"
                   title="Delete step"
@@ -376,6 +394,14 @@ export const StageTaskManager: React.FC<StageTaskManagerProps> = ({
           );
         })}
       </div>
+
+      <IOSConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

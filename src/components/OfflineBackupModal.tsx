@@ -1,5 +1,5 @@
-import React from 'react';
-import { Download, Printer, FileJson } from 'lucide-react';
+import React, { useState } from 'react';
+import { Download, Printer, FileJson, CheckCircle2, AlertCircle } from 'lucide-react';
 import { ChecklistItem, WardrobeItem } from '../data';
 
 interface OfflineBackupModalProps {
@@ -17,6 +17,8 @@ export const OfflineBackupModal: React.FC<OfflineBackupModalProps> = ({
   wardrobeItems,
   onImportJson,
 }) => {
+  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   if (!isOpen) return null;
 
   const exportJSON = () => {
@@ -47,13 +49,15 @@ export const OfflineBackupModal: React.FC<OfflineBackupModalProps> = ({
         const parsed = JSON.parse(event.target?.result as string);
         if (parsed.checklistItems && parsed.wardrobeItems) {
           onImportJson(parsed);
-          alert('State backup imported successfully!');
-          onClose();
+          setStatusMsg({ type: 'success', text: 'State backup imported successfully!' });
+          setTimeout(() => {
+            onClose();
+          }, 1200);
         } else {
-          alert('Invalid backup file format.');
+          setStatusMsg({ type: 'error', text: 'Invalid backup file format.' });
         }
       } catch (err) {
-        alert('Could not parse JSON file.');
+        setStatusMsg({ type: 'error', text: 'Could not parse JSON file.' });
       }
     };
     reader.readAsText(file);
@@ -186,6 +190,23 @@ export const OfflineBackupModal: React.FC<OfflineBackupModalProps> = ({
 
       {/* Touch-Scrollable Body */}
       <main className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-xl mx-auto w-full space-y-4">
+        {statusMsg && (
+          <div
+            className={`p-3 rounded-2xl flex items-center gap-2.5 text-xs font-semibold animate-in fade-in ${
+              statusMsg.type === 'success'
+                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                : 'bg-rose-50 text-rose-800 border border-rose-200'
+            }`}
+          >
+            {statusMsg.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{statusMsg.text}</span>
+          </div>
+        )}
+
         <p className="text-xs text-[#8E8E93] leading-relaxed">
           Mainland China network environments can be restrictive. Save an offline snapshot so you have guaranteed access without internet.
         </p>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  AlertTriangle,
+  Shield,
   RotateCw,
   HardDrive,
   Database,
@@ -13,8 +13,16 @@ import {
   Download,
   Eye,
   X,
+  Search,
+  Check,
+  Tag,
+  Wand2,
 } from 'lucide-react';
-import { WardrobeItem } from '../data';
+import {
+  WardrobeItem,
+  normalizeCategoryName,
+  normalizeBagLocation,
+} from '../data';
 import { supabase, STORAGE_BUCKET, STATE_TABLE } from '../supabase';
 import { scanAllIDBDatabases } from '../db';
 
@@ -34,18 +42,20 @@ interface ScannedCloudPhoto {
 }
 
 interface RecoveryScannerProps {
+  isOpen: boolean;
+  onClose: () => void;
   currentWardrobe: WardrobeItem[];
   onRestoreItems: (restoredItems: WardrobeItem[]) => Promise<void> | void;
 }
 
 export const RecoveryScanner: React.FC<RecoveryScannerProps> = ({
+  isOpen,
+  onClose,
   currentWardrobe,
   onRestoreItems,
 }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
-  const [hasScanned, setHasScanned] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showCloudPhotos, setShowCloudPhotos] = useState(false);
   const [restoreSuccessMsg, setRestoreSuccessMsg] = useState<string | null>(null);
@@ -56,10 +66,25 @@ export const RecoveryScanner: React.FC<RecoveryScannerProps> = ({
   const [supabaseRows, setSupabaseRows] = useState<Array<{ id: string; wardrobeCount: number; updated_at?: string }>>([]);
   const [cloudPhotos, setCloudPhotos] = useState<ScannedCloudPhoto[]>([]);
   const [allDiscoveredWardrobe, setAllDiscoveredWardrobe] = useState<WardrobeItem[]>([]);
+  const [rawSavedNames, setRawSavedNames] = useState<string[]>([]);
+  const [rawNameSearch, setRawNameSearch] = useState('');
 
-  // Helper to test if an object looks like a wardrobe item
+  // Helper to ensure an item is a valid wardrobe item (NEVER an app item)
   const isWardrobeLike = (item: any): boolean => {
     if (!item || typeof item !== 'object') return false;
+
+    // Purge app categories / app items from wardrobe
+    const isApp =
+      typeof item.platform === 'string' ||
+      typeof item.appIcon === 'string' ||
+      typeof item.isInstalled === 'boolean' ||
+      typeof item.isConfigured === 'boolean' ||
+      item.category === 'Proxy & Bypass' ||
+      item.category === 'Proxies & Bypass' ||
+      item.category === 'Stock AI & Academic' ||
+      item.category === 'Transit & Maps';
+    if (isApp) return false;
+
     const hasName = typeof item.name === 'string' && item.name.trim().length > 0;
     const hasWardrobeProp =
       typeof item.category === 'string' ||
@@ -67,6 +92,7 @@ export const RecoveryScanner: React.FC<RecoveryScannerProps> = ({
       typeof item.isPacked === 'boolean' ||
       typeof item.isBought === 'boolean' ||
       typeof item.photoUrl === 'string';
+
     return hasName && hasWardrobeProp;
   };
 
@@ -75,6 +101,8 @@ export const RecoveryScanner: React.FC<RecoveryScannerProps> = ({
     setRestoreSuccessMsg(null);
 
     const discoveredMap = new Map<string, WardrobeItem>();
+    const photoToOriginalItem = new Map<string, WardrobeItem>();
+    const rawNamesSet = new Set<string>();
 
     // 1. SCAN ALL LOCALSTORAGE KEYS
     const scannedKeys: ScannedStorageKey[] = [];
@@ -98,9 +126,7 @@ export const RecoveryScanner: React.FC<RecoveryScannerProps> = ({
               items = parsed.items.filter(isWardrobeLike);
             }
           }
-        } catch {
-          // not JSON
-        }
+        } catch {}
 
         if (items.length > 0 || key.includes('wardrobe') || key.includes('navini') || key.includes('plan')) {
           scannedKeys.push({
@@ -111,11 +137,49 @@ export const RecoveryScanner: React.FC<RecoveryScannerProps> = ({
             items,
           });
 
-          // Add to overall candidate pool
           items.forEach((item) => {
+            const trimmedName = (item.name || '').trim();
+            if (trimmedName && !trimmedName.toLowerCase().startsWith('recovered item')) {
+              rawNamesSet.add(trimmedName);
+            }
+
+            // Normalization
+            const normCat = normalizeCategoryName(item.category);
+            const normBag = normalizeBagLocation(item.targetBag);
+            const isPacked =
+              item.isPacked === true ||
+              (item as any).packed === true ||
+              (item as any).checked === true ||
+              (item as any).status === 'packed';
+
+            const normalizedItem: WardrobeItem = {
+              ...item,
+              category: normCat,
+              targetBag: normBag,
+              isPacked,
+            };
+
+            // Map photo to item for real title re-linking
+            if (item.photoUrl && trimmedName && !trimmedName.toLowerCase().startsWith('recovered item')) {
+              photoToOriginalItem.set(item.photoUrl, normalizedItem);
+              const filename = item.photoUrl.split('/').pop()?.split('?')[0];
+              if (filename) photoToOriginalItem.set(filename, normalizedItem);
+            }
+
             const normKey = (item.name || '').trim().toLowerCase();
-            if (normKey && !discoveredMap.has(normKey)) {
-              discoveredMap.set(normKey, item);
+            if (normKey) {
+              const existing = discoveredMap.get(normKey);
+              if (!existing) {
+                discoveredMap.set(normKey, normalizedItem);
+              } else {
+                // If either is packed, preserve packed=true
+                discoveredMap.set(normKey, {
+                  ...existing,
+                  photoUrl: existing.photoUrl || normalizedItem.photoUrl,
+                  notes: existing.notes || normalizedItem.notes,
+                  isPacked: existing.isPacked || isPacked,
+                });
+              }
             }
           });
         }
@@ -141,9 +205,44 @@ export const RecoveryScanner: React.FC<RecoveryScannerProps> = ({
           });
 
           wardrobeItems.forEach((item) => {
+            const trimmedName = (item.name || '').trim();
+            if (trimmedName && !trimmedName.toLowerCase().startsWith('recovered item')) {
+              rawNamesSet.add(trimmedName);
+            }
+
+            const normCat = normalizeCategoryName(item.category);
+            const normBag = normalizeBagLocation(item.targetBag);
+            const isPacked =
+              item.isPacked === true ||
+              (item as any).packed === true ||
+              (item as any).checked === true ||
+              (item as any).status === 'packed';
+
+            const normalizedItem: WardrobeItem = {
+              ...item,
+              category: normCat,
+              targetBag: normBag,
+              isPacked,
+            };
+
+            if (item.photoUrl && trimmedName && !trimmedName.toLowerCase().startsWith('recovered item')) {
+              photoToOriginalItem.set(item.photoUrl, normalizedItem);
+              const filename = item.photoUrl.split('/').pop()?.split('?')[0];
+              if (filename) photoToOriginalItem.set(filename, normalizedItem);
+            }
+
             const normKey = (item.name || '').trim().toLowerCase();
-            if (normKey && !discoveredMap.has(normKey)) {
-              discoveredMap.set(normKey, item);
+            if (normKey) {
+              const existing = discoveredMap.get(normKey);
+              if (!existing) {
+                discoveredMap.set(normKey, normalizedItem);
+              } else {
+                discoveredMap.set(normKey, {
+                  ...existing,
+                  photoUrl: existing.photoUrl || normalizedItem.photoUrl,
+                  isPacked: existing.isPacked || isPacked,
+                });
+              }
             }
           });
         }
@@ -160,9 +259,44 @@ export const RecoveryScanner: React.FC<RecoveryScannerProps> = ({
         const scannedRows = rows.map((r) => {
           const wItems = (r.payload?.wardrobe || []).filter(isWardrobeLike);
           wItems.forEach((item: WardrobeItem) => {
+            const trimmedName = (item.name || '').trim();
+            if (trimmedName && !trimmedName.toLowerCase().startsWith('recovered item')) {
+              rawNamesSet.add(trimmedName);
+            }
+
+            const normCat = normalizeCategoryName(item.category);
+            const normBag = normalizeBagLocation(item.targetBag);
+            const isPacked =
+              item.isPacked === true ||
+              (item as any).packed === true ||
+              (item as any).checked === true ||
+              (item as any).status === 'packed';
+
+            const normalizedItem: WardrobeItem = {
+              ...item,
+              category: normCat,
+              targetBag: normBag,
+              isPacked,
+            };
+
+            if (item.photoUrl && trimmedName && !trimmedName.toLowerCase().startsWith('recovered item')) {
+              photoToOriginalItem.set(item.photoUrl, normalizedItem);
+              const filename = item.photoUrl.split('/').pop()?.split('?')[0];
+              if (filename) photoToOriginalItem.set(filename, normalizedItem);
+            }
+
             const normKey = (item.name || '').trim().toLowerCase();
-            if (normKey && !discoveredMap.has(normKey)) {
-              discoveredMap.set(normKey, item);
+            if (normKey) {
+              const existing = discoveredMap.get(normKey);
+              if (!existing) {
+                discoveredMap.set(normKey, normalizedItem);
+              } else {
+                discoveredMap.set(normKey, {
+                  ...existing,
+                  photoUrl: existing.photoUrl || normalizedItem.photoUrl,
+                  isPacked: existing.isPacked || isPacked,
+                });
+              }
             }
           });
           return {
@@ -202,55 +336,95 @@ export const RecoveryScanner: React.FC<RecoveryScannerProps> = ({
       console.warn('Supabase storage scan warning:', e);
     }
 
-    setAllDiscoveredWardrobe(Array.from(discoveredMap.values()));
+    // 5. AUTO-MATCH REAL TITLES FOR "Recovered Item X" (Requirement #6.1)
+    const finalizedItems = Array.from(discoveredMap.values()).map((item) => {
+      const isPlaceholder =
+        item.name.toLowerCase().startsWith('recovered item') ||
+        item.name.toLowerCase().startsWith('untitled');
+
+      if (isPlaceholder && item.photoUrl) {
+        const filename = item.photoUrl.split('/').pop()?.split('?')[0];
+        const match = photoToOriginalItem.get(item.photoUrl) || (filename ? photoToOriginalItem.get(filename) : undefined);
+        if (match && match.name && !match.name.toLowerCase().startsWith('recovered item')) {
+          return {
+            ...item,
+            name: match.name,
+            category: match.category || item.category,
+            targetBag: match.targetBag || item.targetBag,
+            isPacked: match.isPacked || item.isPacked,
+          };
+        }
+      }
+      return item;
+    });
+
+    setAllDiscoveredWardrobe(finalizedItems);
+    setRawSavedNames(Array.from(rawNamesSet).sort());
     setIsScanning(false);
-    setHasScanned(true);
   };
 
   useEffect(() => {
-    runGlobalScan();
-  }, []);
+    if (isOpen) {
+      runGlobalScan();
+    }
+  }, [isOpen]);
 
-  // Calculate missing items (discovered vs currently active in wardrobe)
+  if (!isOpen) return null;
+
+  // Compare discovered items with current active wardrobe
   const currentNames = new Set(currentWardrobe.map((w) => (w.name || '').trim().toLowerCase()));
   const missingItemsToRestore = allDiscoveredWardrobe.filter(
     (w) => !currentNames.has((w.name || '').trim().toLowerCase())
   );
 
-  // Cloud photos that don't have an active wardrobe item referencing them
+  // Cloud photos not currently referenced
   const activePhotoUrls = new Set(currentWardrobe.map((w) => w.photoUrl).filter(Boolean));
   const unattachedCloudPhotos = cloudPhotos.filter((p) => !activePhotoUrls.has(p.url));
 
+  const filteredRawNames = rawSavedNames.filter((name) =>
+    name.toLowerCase().includes(rawNameSearch.toLowerCase())
+  );
+
+  // Auto-Match & Restore All Found Items
   const handleRestoreClick = async () => {
     setIsRestoring(true);
     try {
-      // Merge all discovered items into current wardrobe
       const mergedList = [...currentWardrobe];
       let restoredCount = 0;
 
       allDiscoveredWardrobe.forEach((candidate) => {
-        const exists = mergedList.some(
+        const existingIdx = mergedList.findIndex(
           (m) =>
             m.id === candidate.id ||
             m.name.trim().toLowerCase() === candidate.name.trim().toLowerCase()
         );
-        if (!exists) {
+
+        if (existingIdx === -1) {
           mergedList.push(candidate);
           restoredCount++;
+        } else {
+          // If candidate was marked packed in any storage key, restore packed state
+          if (candidate.isPacked && !mergedList[existingIdx].isPacked) {
+            mergedList[existingIdx] = {
+              ...mergedList[existingIdx],
+              isPacked: true,
+            };
+          }
         }
       });
 
       await onRestoreItems(mergedList);
-      setRestoreSuccessMsg(`✓ Successfully restored ${restoredCount} items into your wardrobe! All data is permanently saved to iPad & Cloud.`);
+      setRestoreSuccessMsg(
+        `✓ Restored & synchronized ${allDiscoveredWardrobe.length} items. All packed states & titles locked into iPad and Cloud.`
+      );
     } catch (err) {
       console.error('Failed to restore items:', err);
-      alert('Error during restore. Please try again.');
     } finally {
       setIsRestoring(false);
     }
   };
 
-  // Convert unattached cloud photos into wardrobe items if desired
+  // Convert unattached cloud photos into items with available names
   const handleAdoptCloudPhotos = async () => {
     if (unattachedCloudPhotos.length === 0) return;
     setIsRestoring(true);
@@ -264,10 +438,10 @@ export const RecoveryScanner: React.FC<RecoveryScannerProps> = ({
           id,
           name: `Recovered Item ${mergedList.length + 1}`,
           category: 'Tops',
-          targetBag: 'Main Large Suitcase (30×40×70cm)',
+          targetBag: 'Main Large Rolling Suitcase',
           quantity: 1,
           photoUrl: photo.url,
-          notes: 'Auto-recovered from iPad camera cloud storage upload',
+          notes: 'iPad camera photo recovered from Supabase Cloud Storage',
           isBought: true,
           isPacked: false,
         };
@@ -276,7 +450,9 @@ export const RecoveryScanner: React.FC<RecoveryScannerProps> = ({
       });
 
       await onRestoreItems(mergedList);
-      setRestoreSuccessMsg(`✓ Created ${count} items from discovered cloud photos! All items are now in your wardrobe.`);
+      setRestoreSuccessMsg(
+        `✓ Created ${count} items from cloud photos. Tap titles directly on cards to rename them.`
+      );
     } catch (err) {
       console.error('Failed to adopt cloud photos:', err);
     } finally {
@@ -284,320 +460,271 @@ export const RecoveryScanner: React.FC<RecoveryScannerProps> = ({
     }
   };
 
-  if (isMinimized) {
-    return (
-      <div className="bg-amber-500 text-amber-950 px-3.5 py-1.5 flex items-center justify-between text-xs font-bold border-b border-amber-600/30 shadow-xs">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-900" />
-          <span>
-            Recovery Scanner: {allDiscoveredWardrobe.length} items & {cloudPhotos.length} cloud photos available
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={runGlobalScan}
-            disabled={isScanning}
-            className="hover:underline flex items-center gap-1 cursor-pointer"
-          >
-            <RotateCw className={`w-3 h-3 ${isScanning ? 'animate-spin' : ''}`} />
-            <span>Scan</span>
-          </button>
-          <span>•</span>
-          <button
-            type="button"
-            onClick={() => setIsMinimized(false)}
-            className="px-2 py-0.5 rounded-md bg-amber-950 text-amber-100 hover:bg-black transition-colors cursor-pointer"
-          >
-            Open Scanner
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 border-b-2 border-amber-400 p-3.5 sm:p-5 shadow-md">
-      <div className="max-w-6xl mx-auto space-y-3.5">
-        {/* 1. HEADER BAR */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 pb-2 border-b border-amber-200">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm animate-pulse">
-              <AlertTriangle className="w-5 h-5" />
+    <div
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-4xl max-h-[92vh] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 1. TOP HEADER */}
+        <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 text-white p-4 sm:p-5 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-sm">
+              <Shield className="w-5 h-5 text-white" />
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-sm sm:text-base font-black text-amber-950 tracking-tight">
-                  iPad & Cloud Emergency Data Recovery Scanner
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-black tracking-tight">
+                  Emergency Data Recovery & Raw Names Vault
                 </h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
-                  On-Screen Diagnostic
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">
+                  iPad & Cloud
                 </span>
               </div>
-              <p className="text-xs text-amber-800">
-                Deep-scans iPad Chrome localStorage, IndexedDB vaults, and Supabase cloud storage.
+              <p className="text-xs text-amber-100 mt-0.5">
+                Deep-scans 29 storage keys, IndexedDB vaults, and Supabase cloud photos.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={runGlobalScan}
               disabled={isScanning}
-              className="px-3 py-1.5 rounded-xl bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <RotateCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin text-amber-600' : ''}`} />
-              <span>{isScanning ? 'Scanning...' : 'Rescan Now'}</span>
+              <RotateCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
+              <span>{isScanning ? 'Scanning...' : 'Rescan'}</span>
             </button>
-
             <button
               type="button"
-              onClick={() => setIsMinimized(true)}
-              className="px-2.5 py-1.5 rounded-xl bg-amber-200/60 hover:bg-amber-200 text-amber-900 font-bold text-xs transition-colors cursor-pointer"
-              title="Minimize banner"
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-black/20 hover:bg-black/30 text-white flex items-center justify-center transition-colors cursor-pointer"
             >
-              Minimize
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* SUCCESS NOTIFICATION */}
-        {restoreSuccessMsg && (
-          <div className="p-3 rounded-xl bg-emerald-500 text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-sm animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>{restoreSuccessMsg}</span>
-          </div>
-        )}
+        {/* 2. BODY CONTENT */}
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
+          {/* SUCCESS BANNER */}
+          {restoreSuccessMsg && (
+            <div className="p-3.5 rounded-2xl bg-emerald-500 text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-sm animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span>{restoreSuccessMsg}</span>
+            </div>
+          )}
 
-        {/* 2. SUMMARY METRICS TILES */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 text-xs">
-          {/* Tile 1: Active Wardrobe */}
-          <div className="bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-amber-200 shadow-2xs">
-            <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-              <span>Active in Wardrobe</span>
+          {/* METRIC TILES */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-xs">
+            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                <span>Active in Wardrobe</span>
+              </div>
+              <div className="text-xl font-black text-slate-900 mt-0.5">
+                {currentWardrobe.length} <span className="text-xs font-normal text-slate-500">items</span>
+              </div>
             </div>
-            <div className="text-xl font-black text-slate-900 mt-0.5">
-              {currentWardrobe.length}{' '}
-              <span className="text-xs font-normal text-slate-500">items</span>
-            </div>
-          </div>
 
-          {/* Tile 2: Scanned Keys in Browser */}
-          <div className="bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-amber-200 shadow-2xs">
-            <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
-              <HardDrive className="w-3.5 h-3.5 text-amber-600" />
-              <span>localStorage Keys</span>
+            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+                <HardDrive className="w-3.5 h-3.5 text-amber-600" />
+                <span>localStorage Keys</span>
+              </div>
+              <div className="text-xl font-black text-amber-900 mt-0.5">
+                {localStorageKeys.length} <span className="text-xs font-normal text-slate-500">keys</span>
+              </div>
             </div>
-            <div className="text-xl font-black text-amber-900 mt-0.5">
-              {localStorageKeys.length}{' '}
-              <span className="text-xs font-normal text-slate-500">keys scanned</span>
-            </div>
-          </div>
 
-          {/* Tile 3: Total Discovered Items */}
-          <div className="bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-amber-200 shadow-2xs">
-            <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
-              <Database className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Discovered Records</span>
+            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+                <Database className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Discovered Items</span>
+              </div>
+              <div className="text-xl font-black text-emerald-700 mt-0.5">
+                {allDiscoveredWardrobe.length} <span className="text-xs font-normal text-slate-500">records</span>
+              </div>
             </div>
-            <div className="text-xl font-black text-emerald-700 mt-0.5">
-              {allDiscoveredWardrobe.length}{' '}
-              <span className="text-xs font-normal text-slate-500">unique items</span>
-            </div>
-          </div>
 
-          {/* Tile 4: Discovered Cloud Photos */}
-          <div className="bg-white/80 backdrop-blur-xs p-3 rounded-xl border border-amber-200 shadow-2xs">
-            <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
-              <Cloud className="w-3.5 h-3.5 text-sky-600" />
-              <span>Cloud Storage Photos</span>
-            </div>
-            <div className="text-xl font-black text-sky-800 mt-0.5">
-              {cloudPhotos.length}{' '}
-              <span className="text-xs font-normal text-slate-500">photos saved</span>
+            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <div className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+                <Cloud className="w-3.5 h-3.5 text-sky-600" />
+                <span>Cloud Photos</span>
+              </div>
+              <div className="text-xl font-black text-sky-800 mt-0.5">
+                {cloudPhotos.length} <span className="text-xs font-normal text-slate-500">photos</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* 3. PRIMARY ACTION BAR */}
-        <div className="bg-amber-100/70 border border-amber-300 rounded-2xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="space-y-0.5 text-center sm:text-left">
-            <div className="font-extrabold text-xs sm:text-sm text-amber-950 flex items-center gap-1.5 justify-center sm:justify-start">
-              <span>Status:</span>
-              {missingItemsToRestore.length > 0 ? (
+          {/* RESTORE ACTION BAR */}
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div>
+              <div className="font-extrabold text-xs sm:text-sm text-amber-950 flex items-center gap-1.5">
+                <span>Available to Restore:</span>
                 <span className="text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-black">
-                  {missingItemsToRestore.length} items can be restored now!
+                  {missingItemsToRestore.length > 0 ? `${missingItemsToRestore.length} items ready` : 'All items active'}
                 </span>
-              ) : (
-                <span className="text-amber-800">
-                  All {allDiscoveredWardrobe.length} discovered items are currently active.
-                </span>
-              )}
+              </div>
+              <p className="text-[11px] text-amber-800 mt-0.5">
+                Matches saved photos back to real titles and restores locked-in packed states.
+              </p>
             </div>
-            <p className="text-[11px] text-amber-800">
-              {cloudPhotos.length > 0
-                ? `${cloudPhotos.length} iPad camera photos are safely preserved in Supabase Cloud Storage.`
-                : 'Scanned browser cache and cloud backups.'}
-            </p>
-          </div>
 
-          <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
-            {/* ONE-TAP RESTORE BUTTON */}
-            <button
-              type="button"
-              onClick={handleRestoreClick}
-              disabled={isRestoring || allDiscoveredWardrobe.length === 0}
-              className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 disabled:opacity-50 text-white font-black text-xs sm:text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Download className="w-4 h-4 stroke-[2.5]" />
-              <span>
-                {isRestoring
-                  ? 'Restoring Items...'
-                  : `RESTORE ALL FOUND ITEMS (${allDiscoveredWardrobe.length})`}
-              </span>
-            </button>
-
-            {/* ADOPT UNATTACHED CLOUD PHOTOS */}
-            {unattachedCloudPhotos.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
               <button
                 type="button"
-                onClick={handleAdoptCloudPhotos}
-                disabled={isRestoring}
-                className="px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-98 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-                title="Create wardrobe items for uploaded photos that are not currently linked"
+                onClick={handleRestoreClick}
+                disabled={isRestoring || allDiscoveredWardrobe.length === 0}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 disabled:opacity-50 text-white font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
-                <ImageIcon className="w-4 h-4" />
-                <span>Recover {unattachedCloudPhotos.length} Cloud Photos</span>
+                <Download className="w-4 h-4 stroke-[2.5]" />
+                <span>{isRestoring ? 'Restoring...' : `RESTORE ALL FOUND ITEMS (${allDiscoveredWardrobe.length})`}</span>
               </button>
-            )}
 
-            {/* TOGGLE STORAGE DETAILS */}
+              {unattachedCloudPhotos.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleAdoptCloudPhotos}
+                  disabled={isRestoring}
+                  className="px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 active:scale-98 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  <span>Recover {unattachedCloudPhotos.length} Photos</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 3. RAW SAVED NAMES PICKER (Requirement #6.2) */}
+          <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Tag className="w-4 h-4 text-purple-600" />
+                <h3 className="font-bold text-xs sm:text-sm text-slate-900">
+                  🔍 View All Raw Saved Names ({rawSavedNames.length} Found Across 29 Keys)
+                </h3>
+              </div>
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={rawNameSearch}
+                  onChange={(e) => setRawNameSearch(e.target.value)}
+                  placeholder="Filter saved names..."
+                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 border border-slate-200 focus:outline-[#007AFF]"
+                />
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Every unique title ever typed across your iPad’s storage keys and cloud backups. Use these to rename any generic item inline:
+            </p>
+
+            <div className="max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1.5">
+              {filteredRawNames.map((name, i) => (
+                <div
+                  key={i}
+                  className="p-2 bg-white rounded-lg border border-slate-200 text-xs font-semibold text-slate-800 flex items-center justify-between gap-1 shadow-2xs hover:border-[#007AFF]"
+                >
+                  <span className="truncate">{name}</span>
+                  <span className="text-[10px] text-slate-400 font-mono shrink-0">#{i + 1}</span>
+                </div>
+              ))}
+              {filteredRawNames.length === 0 && (
+                <div className="col-span-full py-4 text-center text-xs text-slate-400">
+                  No matching names found.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 4. EXPANDABLE TECHNICAL STORAGE INSPECTION */}
+          <div className="border border-slate-200 rounded-2xl p-3.5 bg-slate-50 space-y-3">
             <button
               type="button"
               onClick={() => setShowDetails(!showDetails)}
-              className="px-3 py-2.5 rounded-xl bg-white hover:bg-amber-50 text-amber-900 border border-amber-300 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between font-bold text-xs text-slate-700 hover:text-slate-900 cursor-pointer"
             >
-              <span>{showDetails ? 'Hide Details' : 'Inspect Storage'}</span>
-              {showDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              <span>Inspect All 29 Storage Keys & Cloud Photos Breakdown</span>
+              {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
+
+            {showDetails && (
+              <div className="space-y-3 pt-2 text-xs">
+                {/* Storage keys table */}
+                <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                      <tr>
+                        <th className="py-1.5 px-3">Storage Key</th>
+                        <th className="py-1.5 px-3">Size (KB)</th>
+                        <th className="py-1.5 px-3">Wardrobe Count</th>
+                        <th className="py-1.5 px-3">Sample Items</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      {localStorageKeys.map((k) => (
+                        <tr key={k.key} className={k.itemCount > 0 ? 'bg-amber-50/40' : ''}>
+                          <td className="py-1.5 px-3 font-bold text-slate-800">{k.key}</td>
+                          <td className="py-1.5 px-3 text-slate-600">{k.sizeKB} KB</td>
+                          <td className="py-1.5 px-3">
+                            {k.itemCount > 0 ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+                                {k.itemCount} items
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">0</span>
+                            )}
+                          </td>
+                          <td className="py-1.5 px-3 text-slate-500 font-sans truncate max-w-xs">
+                            {k.sampleNames.join(', ') || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Cloud Photos Preview */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCloudPhotos(!showCloudPhotos)}
+                    className="font-bold text-sky-600 hover:underline flex items-center gap-1 cursor-pointer mb-2"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>{showCloudPhotos ? 'Hide Cloud Photo Grid' : `View All ${cloudPhotos.length} Cloud Storage Photos`}</span>
+                  </button>
+
+                  {showCloudPhotos && (
+                    <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 p-2.5 rounded-xl bg-white border border-slate-200 max-h-56 overflow-y-auto">
+                      {cloudPhotos.map((photo, i) => (
+                        <div key={i} className="relative rounded-lg overflow-hidden border border-slate-200 bg-white aspect-square shadow-2xs">
+                          <img
+                            src={photo.url}
+                            alt={`Cloud photo ${i + 1}`}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                          <span className="absolute bottom-0 inset-x-0 bg-black/60 text-[9px] text-white text-center py-0.5 font-mono truncate px-0.5">
+                            #{i + 1}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-
-        {/* 4. EXPANDABLE TECHNICAL INSPECTION PANEL */}
-        {showDetails && (
-          <div className="bg-white rounded-2xl p-4 border border-amber-200 space-y-4 animate-in fade-in duration-200 text-xs">
-            {/* A. Browser localStorage Keys Table */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                  <HardDrive className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Browser localStorage Keys Scanned ({localStorageKeys.length})</span>
-                </span>
-                <span className="text-[10px] text-slate-500 font-mono">
-                  Origin storage: ~{localStorageKeys.reduce((acc, k) => acc + k.sizeKB, 0)} KB total
-                </span>
-              </div>
-
-              <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                    <tr>
-                      <th className="py-1.5 px-3">Storage Key Name</th>
-                      <th className="py-1.5 px-3">Size (KB)</th>
-                      <th className="py-1.5 px-3">Wardrobe Items</th>
-                      <th className="py-1.5 px-3">Sample Items Found</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-mono">
-                    {localStorageKeys.map((k) => (
-                      <tr key={k.key} className={k.itemCount > 0 ? 'bg-amber-50/50' : ''}>
-                        <td className="py-1.5 px-3 font-bold text-slate-800">{k.key}</td>
-                        <td className="py-1.5 px-3 text-slate-600">{k.sizeKB} KB</td>
-                        <td className="py-1.5 px-3">
-                          {k.itemCount > 0 ? (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
-                              {k.itemCount} items
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">0 items</span>
-                          )}
-                        </td>
-                        <td className="py-1.5 px-3 text-slate-500 font-sans truncate max-w-xs">
-                          {k.sampleNames.join(', ') || '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* B. IndexedDB Databases */}
-            <div>
-              <span className="font-bold text-slate-800 flex items-center gap-1.5 mb-1.5">
-                <Database className="w-3.5 h-3.5 text-emerald-600" />
-                <span>IndexedDB Databases ({idbResults.length})</span>
-              </span>
-              {idbResults.length === 0 ? (
-                <div className="p-2.5 rounded-xl bg-slate-50 text-slate-500 text-[11px] italic">
-                  No existing IndexedDB stores detected. The new vault will initialize automatically upon saving.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {idbResults.map((idb, idx) => (
-                    <div key={idx} className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200">
-                      <div className="font-bold text-emerald-950 font-mono text-[11px]">
-                        {idb.dbName} → {idb.storeName}
-                      </div>
-                      <div className="text-[11px] text-emerald-800 mt-0.5">
-                        {idb.count} records stored ({idb.items.length} wardrobe items)
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* C. Supabase Rows & Storage Photos */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                  <Cloud className="w-3.5 h-3.5 text-sky-600" />
-                  <span>Supabase Cloud Storage Photos ({cloudPhotos.length} in travel-media/wardrobe)</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowCloudPhotos(!showCloudPhotos)}
-                  className="text-[11px] text-sky-600 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <Eye className="w-3 h-3" />
-                  <span>{showCloudPhotos ? 'Hide Photo Previews' : 'Preview Photos'}</span>
-                </button>
-              </div>
-
-              {/* Photo Preview Grid */}
-              {showCloudPhotos && (
-                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 max-h-56 overflow-y-auto">
-                  {cloudPhotos.map((photo, i) => (
-                    <div key={i} className="relative group rounded-lg overflow-hidden border border-slate-200 bg-white aspect-square shadow-2xs">
-                      <img
-                        src={photo.url}
-                        alt={`Cloud photo ${i + 1}`}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                      <span className="absolute bottom-0 inset-x-0 bg-black/60 text-[9px] text-white text-center py-0.5 font-mono truncate px-0.5">
-                        #{i + 1}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

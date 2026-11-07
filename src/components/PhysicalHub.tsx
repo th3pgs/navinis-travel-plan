@@ -37,6 +37,8 @@ import {
 import { uploadPhotoToSupabase, compressPhotoToMax400 } from '../cloudSync';
 import { DynamicSelect } from './DynamicSelect';
 import { LuggageContentsModal } from './LuggageContentsModal';
+import { IOSConfirmModal } from './IOSConfirmModal';
+import { normalizeBagLocation } from '../data';
 import { Battery } from 'lucide-react';
 
 interface PhysicalHubProps {
@@ -310,6 +312,93 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   const [formColorHex, setFormColorHex] = useState('#38bdf8');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  // Multi-Select & Batch Actions state (Requirement #6.3)
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Inline Title Editing state (Requirement #6.3)
+  const [inlineEditingId, setInlineEditingId] = useState<string | null>(null);
+  const [inlineEditingTitle, setInlineEditingTitle] = useState('');
+
+  // Custom iOS In-App Frosted-Glass Confirmation Modal state (Requirement #1)
+  const [confirmModalState, setConfirmModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    isDestructive?: boolean;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const toggleSelectionId = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = (displayedList: WardrobeItem[]) => {
+    if (selectedIds.size === displayedList.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(displayedList.map((i) => i.id)));
+    }
+  };
+
+  const handleTriggerBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    setConfirmModalState({
+      isOpen: true,
+      title: `Delete ${selectedIds.size} Items?`,
+      message: `Are you sure you want to remove ${selectedIds.size} selected items from your wardrobe?`,
+      confirmLabel: `Delete ${selectedIds.size} Items`,
+      isDestructive: true,
+      onConfirm: () => {
+        selectedIds.forEach((id) => onDeleteWardrobeItem(id));
+        setSelectedIds(new Set());
+        setIsSelectionMode(false);
+        setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+        setSaveToast(`✓ Deleted ${selectedIds.size} items`);
+        setTimeout(() => setSaveToast(null), 2500);
+      },
+    });
+  };
+
+  const handleBulkMarkPacked = (packed: boolean) => {
+    selectedIds.forEach((id) => onUpdateWardrobeItem(id, { isPacked: packed }));
+    setSaveToast(`✓ Marked ${selectedIds.size} items as ${packed ? 'Packed' : 'To Pack'}`);
+    setTimeout(() => setSaveToast(null), 2500);
+  };
+
+  const handleBulkChangeBag = (bag: string) => {
+    selectedIds.forEach((id) => onUpdateWardrobeItem(id, { targetBag: bag }));
+    setSaveToast(`✓ Moved ${selectedIds.size} items to ${bag}`);
+    setTimeout(() => setSaveToast(null), 2500);
+  };
+
+  const handleBulkChangeCategory = (cat: string) => {
+    selectedIds.forEach((id) => onUpdateWardrobeItem(id, { category: cat }));
+    setSaveToast(`✓ Reclassified ${selectedIds.size} items to ${cat}`);
+    setTimeout(() => setSaveToast(null), 2500);
+  };
+
+  const handleSaveInlineTitle = (id: string) => {
+    const trimmed = inlineEditingTitle.trim();
+    if (trimmed) {
+      onUpdateWardrobeItem(id, { name: trimmed });
+      setSaveToast('✓ Renamed item');
+      setTimeout(() => setSaveToast(null), 2000);
+    }
+    setInlineEditingId(null);
+  };
 
   // Auto-switch to print mode if window.print() or Ctrl+P is triggered
   React.useEffect(() => {
@@ -977,6 +1066,22 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         </button>
 
         <div className="flex items-center gap-2">
+          {/* Multi-Select Toggle Button (Requirement #6.3) */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsSelectionMode(!isSelectionMode);
+              setSelectedIds(new Set());
+            }}
+            className={`px-3 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer ${
+              isSelectionMode
+                ? 'bg-amber-500 text-white shadow-sm'
+                : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+            }`}
+          >
+            <span>{isSelectionMode ? 'Done Selecting' : '☑️ Select Multiple'}</span>
+          </button>
+
           {/* Catalog / Print Button */}
           <button
             type="button"
@@ -1046,19 +1151,38 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         {displayedItems.map((item) => {
           const visual = getCategoryVisual(item.name, item.category);
           const isPacked = item.isPacked;
+          const isSelected = selectedIds.has(item.id);
 
           return (
             <div
               key={item.id}
               className={`ios-card p-2.5 sm:p-3 rounded-2xl flex flex-col justify-between transition-all border shadow-xs relative ${
-                isPacked
-                  ? 'bg-emerald-50/40 border-emerald-300'
+                isSelected
+                  ? 'ring-2 ring-[#007AFF] border-[#007AFF] bg-blue-50/20'
+                  : isPacked
+                  ? 'bg-emerald-50/25 border-emerald-400 shadow-sm'
                   : 'bg-white border-black/10 hover:border-slate-300'
               }`}
             >
               <div>
                 {/* Large Square Photo (aspect-square, rounded-[14px]) */}
                 <div className="w-full aspect-square rounded-[14px] bg-slate-100 border border-black/5 overflow-hidden flex items-center justify-center relative group">
+                  {/* Multi-Select Checkbox Badge */}
+                  {isSelectionMode && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSelectionId(item.id);
+                      }}
+                      className={`absolute top-2 left-2 z-20 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-md ${
+                        isSelected ? 'bg-[#007AFF] text-white' : 'bg-white/90 text-slate-400 border border-black/20'
+                      }`}
+                    >
+                      {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                    </button>
+                  )}
+
                   {item.photoUrl ? (
                     <img
                       src={item.photoUrl}
@@ -1085,37 +1209,79 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   <button
                     type="button"
                     onClick={() => handleOpenEditModal(item)}
-                    className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                    className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
                     title="Edit photo"
                   >
                     <Camera className="w-5 h-5" />
                   </button>
                 </div>
 
-                {/* Clean Item Name Below Photo */}
-                <h3 className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight leading-snug line-clamp-2 mt-2">
-                  {item.name}
-                </h3>
+                {/* Inline Editable Item Name (Requirement #6.3) */}
+                {inlineEditingId === item.id ? (
+                  <div className="mt-2 flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={inlineEditingTitle}
+                      onChange={(e) => setInlineEditingTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveInlineTitle(item.id);
+                        if (e.key === 'Escape') setInlineEditingId(null);
+                      }}
+                      className="flex-1 px-2 py-1 text-xs border border-[#007AFF] rounded-lg bg-white focus:outline-none"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleSaveInlineTitle(item.id)}
+                      className="px-2 py-1 bg-[#007AFF] text-white rounded-lg text-xs font-bold cursor-pointer"
+                    >
+                      ✓
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex items-start justify-between gap-1 group/title">
+                    <h3
+                      onClick={() => {
+                        setInlineEditingId(item.id);
+                        setInlineEditingTitle(item.name);
+                      }}
+                      className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight leading-snug line-clamp-2 cursor-pointer hover:text-[#007AFF] transition-colors"
+                      title="Tap to rename inline"
+                    >
+                      {item.name}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInlineEditingId(item.id);
+                        setInlineEditingTitle(item.name);
+                      }}
+                      className="text-slate-400 hover:text-[#007AFF] p-0.5 opacity-60 group-hover/title:opacity-100 transition-opacity cursor-pointer shrink-0"
+                      title="Rename item inline"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
 
-                {/* Assigned Bag Pill */}
+                {/* Assigned Bag Pill (Clean canonical bag) */}
                 <div className="mt-1 text-[10px] font-mono text-slate-600 truncate bg-slate-100 px-2 py-0.5 rounded-md inline-block max-w-full">
-                  📍 {item.targetBag}
+                  📍 {normalizeBagLocation(item.targetBag)}
                 </div>
               </div>
 
-              {/* Compact Packed Toggle + Edit Icon */}
+              {/* 2-State Packed Toggle Pill & Action Icons (Requirement #1 & #2) */}
               <div className="mt-3 pt-2 border-t border-black/5 flex items-center justify-between gap-1">
                 <button
                   type="button"
                   onClick={() => onToggleWardrobePacked(item.id)}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
                     isPacked
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                      ? 'bg-[#16A34A] text-white hover:bg-[#15803D]'
+                      : 'border border-slate-300 hover:border-slate-400 bg-white text-slate-700'
                   }`}
                 >
-                  <Check className={`w-3 h-3 stroke-[3] ${isPacked ? 'text-white' : 'text-slate-400'}`} />
-                  <span>{isPacked ? 'Packed' : 'Pack'}</span>
+                  <span>{isPacked ? '✓ Packed' : '○ To Pack'}</span>
                 </button>
 
                 <div className="flex items-center gap-0.5">
@@ -1130,9 +1296,17 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if (window.confirm(`Are you sure you want to delete "${item.name}" from your packing list?`)) {
-                        onDeleteWardrobeItem(item.id);
-                      }
+                      setConfirmModalState({
+                        isOpen: true,
+                        title: 'Delete Item?',
+                        message: `Are you sure you want to remove "${item.name}" from your wardrobe?`,
+                        confirmLabel: 'Delete',
+                        isDestructive: true,
+                        onConfirm: () => {
+                          onDeleteWardrobeItem(item.id);
+                          setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+                        },
+                      });
                     }}
                     className="w-6 h-6 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 flex items-center justify-center transition-colors cursor-pointer"
                     title="Delete item"
@@ -1179,11 +1353,11 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                 />
               </div>
 
-              {/* Category Dropdown with + Add Custom... */}
+              {/* Category Dropdown with + Add Custom... (Requirement #3) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 font-semibold mb-1">
-                    Category (9 Standard + Custom)
+                    Category
                   </label>
                   <DynamicSelect
                     value={formCategory}
@@ -1197,10 +1371,10 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   />
                 </div>
 
-                {/* Target Suitcase / Location */}
+                {/* Target Suitcase / Location (Requirement #3) */}
                 <div>
                   <label className="block text-slate-700 font-semibold mb-1">
-                    Luggage Allocation (Target Bag)
+                    Location / Bag
                   </label>
                   <DynamicSelect
                     value={formTargetBag}
@@ -1383,11 +1557,19 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm(`Are you sure you want to delete "${editingItem.name}"?`)) {
-                      onDeleteWardrobeItem(editingItem.id);
-                      setIsModalOpen(false);
-                      setEditingItem(null);
-                    }
+                    setConfirmModalState({
+                      isOpen: true,
+                      title: 'Delete Item?',
+                      message: `Are you sure you want to remove "${editingItem.name}" from your wardrobe?`,
+                      confirmLabel: 'Delete',
+                      isDestructive: true,
+                      onConfirm: () => {
+                        onDeleteWardrobeItem(editingItem.id);
+                        setIsModalOpen(false);
+                        setEditingItem(null);
+                        setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+                      },
+                    });
                   }}
                   className="px-3.5 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
@@ -1444,6 +1626,97 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         documentItems={documents}
         giftItems={[]}
         onToggleWardrobePacked={onToggleWardrobePacked}
+      />
+
+      {/* 7. FLOATING BATCH ACTIONS BAR (Requirement #6.3) */}
+      {isSelectionMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-40 max-w-2xl bg-slate-900/95 backdrop-blur-md text-white rounded-2xl shadow-2xl p-3 border border-slate-700 flex flex-wrap items-center justify-between gap-2.5 animate-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 rounded-full bg-[#007AFF] text-white font-mono font-bold text-xs">
+              {selectedIds.size} Selected
+            </span>
+            <button
+              type="button"
+              onClick={() => handleToggleSelectAll(displayedItems)}
+              className="text-xs text-slate-300 hover:text-white underline cursor-pointer"
+            >
+              {selectedIds.size === displayedItems.length ? 'Deselect All' : 'Select All'}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Mark Packed */}
+            <button
+              type="button"
+              onClick={() => handleBulkMarkPacked(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <span>✓ Packed</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleBulkMarkPacked(false)}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors cursor-pointer"
+            >
+              <span>○ To Pack</span>
+            </button>
+
+            {/* Quick Bag Change */}
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  handleBulkChangeBag(e.target.value);
+                  e.target.value = '';
+                }
+              }}
+              defaultValue=""
+              className="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 cursor-pointer"
+            >
+              <option value="" disabled>Move Bag...</option>
+              {allLocations.map((loc) => (
+                <option key={loc} value={loc}>{loc}</option>
+              ))}
+            </select>
+
+            {/* Quick Category Change */}
+            <select
+              onChange={(e) => {
+                if (e.target.value) {
+                  handleBulkChangeCategory(e.target.value);
+                  e.target.value = '';
+                }
+              }}
+              defaultValue=""
+              className="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 cursor-pointer"
+            >
+              <option value="" disabled>Category...</option>
+              {allCategories.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+
+            {/* Bulk Delete */}
+            <button
+              type="button"
+              onClick={handleTriggerBulkDelete}
+              className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM IN-APP iOS FROSTED-GLASS CONFIRMATION MODAL (Requirement #1) */}
+      <IOSConfirmModal
+        isOpen={confirmModalState.isOpen}
+        title={confirmModalState.title}
+        message={confirmModalState.message}
+        confirmLabel={confirmModalState.confirmLabel || 'Delete'}
+        isDestructive={confirmModalState.isDestructive !== false}
+        onConfirm={confirmModalState.onConfirm}
+        onCancel={() => setConfirmModalState((prev) => ({ ...prev, isOpen: false }))}
       />
     </div>
   );

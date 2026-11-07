@@ -150,31 +150,57 @@ export interface TimelineEvent {
   items: TimelineEventItem[];
 }
 
-// 9 Exact Packing Categories
+// 10 Canonical Packing Categories (Requirement #4)
 export const DEFAULT_WARDROBE_CATEGORIES: string[] = [
   'Dresses & Frocks',
-  'Tops & T-Shirts',
-  'Bottoms & Jeans',
-  'Undergarments & Innerwear',
-  'Footwear & Slippers',
-  'Bottles, Liquids & Toiletries',
-  'Medicine & First Aid',
-  'Gifts & Souvenirs',
-  'Daily Essentials, Cutlery & Folders',
+  'Tops',
+  'Bottoms',
+  'Undergarments',
+  'Footwear',
+  'Bottles & Liquids',
+  'Medicine',
+  'Gifts',
+  'Essentials',
+  'Electronics',
 ];
 
 /**
- * Normalizes any category string (handling legacy, shorthand, or alternative spellings)
- * into one of the canonical 9 categories, or returns the trimmed custom category.
+ * Normalizes any category string into one of the 10 canonical categories,
+ * purges app categories, and preserves custom user categories.
  */
 export function normalizeCategoryName(rawCategory?: string): string {
   if (!rawCategory || !rawCategory.trim()) {
-    return 'Daily Essentials, Cutlery & Folders';
+    return 'Essentials';
   }
   const trimmed = rawCategory.trim();
   const lower = trimmed.toLowerCase();
 
-  // Match variants of Tops
+  // Purge app categories from wardrobe
+  if (
+    lower.includes('proxy') ||
+    lower.includes('bypass') ||
+    lower.includes('stock ai') ||
+    lower.includes('transit & maps') ||
+    lower.includes('transit and maps')
+  ) {
+    return 'Essentials';
+  }
+
+  // Match Electronics / Tech items
+  if (
+    lower.includes('electronic') ||
+    lower.includes('tech') ||
+    lower.includes('device') ||
+    lower.includes('hardware') ||
+    lower.includes('charger') ||
+    lower.includes('adapter') ||
+    lower.includes('cable') ||
+    lower.includes('powerbank')
+  ) {
+    return 'Electronics';
+  }
+
+  // Match Tops
   if (
     lower === 'tops' ||
     lower === 'top' ||
@@ -185,11 +211,13 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'blouse' ||
     lower === 'blouses' ||
     lower === 'tops & t-shirts' ||
+    lower === 'tops and t-shirts' ||
     lower.startsWith('top')
   ) {
-    return 'Tops & T-Shirts';
+    return 'Tops';
   }
-  // Match variants of Dresses & Frocks
+
+  // Match Dresses & Frocks
   if (
     lower === 'dresses' ||
     lower === 'dress' ||
@@ -202,7 +230,8 @@ export function normalizeCategoryName(rawCategory?: string): string {
   ) {
     return 'Dresses & Frocks';
   }
-  // Match variants of Bottoms & Jeans
+
+  // Match Bottoms
   if (
     lower === 'bottoms' ||
     lower === 'bottom' ||
@@ -214,21 +243,29 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'trouser' ||
     lower === 'skirts' ||
     lower === 'skirt' ||
-    lower === 'bottoms & jeans'
+    lower === 'bottoms & jeans' ||
+    lower === 'bottoms and jeans'
   ) {
-    return 'Bottoms & Jeans';
+    return 'Bottoms';
   }
-  // Match variants of Undergarments & Innerwear
+
+  // Match Undergarments
   if (
     lower === 'undergarments' ||
     lower === 'undergarment' ||
     lower === 'innerwear' ||
     lower === 'underwear' ||
-    lower === 'undergarments & innerwear'
+    lower === 'undergarments & innerwear' ||
+    lower === 'undergarments and innerwear' ||
+    lower.includes('bra') ||
+    lower.includes('panty') ||
+    lower.includes('panties') ||
+    lower.includes('underpant')
   ) {
-    return 'Undergarments & Innerwear';
+    return 'Undergarments';
   }
-  // Match variants of Footwear & Slippers
+
+  // Match Footwear
   if (
     lower === 'footwear' ||
     lower === 'slippers' ||
@@ -237,11 +274,13 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'shoe' ||
     lower === 'sandals' ||
     lower === 'sandal' ||
-    lower === 'footwear & slippers'
+    lower === 'footwear & slippers' ||
+    lower === 'footwear and slippers'
   ) {
-    return 'Footwear & Slippers';
+    return 'Footwear';
   }
-  // Match variants of Bottles, Liquids & Toiletries
+
+  // Match Bottles & Liquids
   if (
     lower === 'bottles, liquids & toiletries' ||
     lower === 'bottles & liquids' ||
@@ -253,9 +292,10 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'bottles' ||
     lower === 'bottle'
   ) {
-    return 'Bottles, Liquids & Toiletries';
+    return 'Bottles & Liquids';
   }
-  // Match variants of Medicine & First Aid
+
+  // Match Medicine
   if (
     lower === 'medicine & first aid' ||
     lower === 'medicine and first aid' ||
@@ -264,9 +304,10 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'first aid' ||
     lower === 'pharmacy'
   ) {
-    return 'Medicine & First Aid';
+    return 'Medicine';
   }
-  // Match variants of Gifts & Souvenirs
+
+  // Match Gifts
   if (
     lower === 'gifts & souvenirs' ||
     lower === 'gifts and souvenirs' ||
@@ -275,13 +316,16 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'souvenirs' ||
     lower === 'souvenir'
   ) {
-    return 'Gifts & Souvenirs';
+    return 'Gifts';
   }
-  // Match variants of Daily Essentials, Cutlery & Folders
+
+  // Match Essentials
   if (
     lower === 'daily essentials, cutlery & folders' ||
     lower === 'daily essentials' ||
     lower === 'essentials' ||
+    lower === 'essential' ||
+    lower === 'essential daily' ||
     lower === 'cutlery' ||
     lower === 'folders' ||
     lower === 'folder' ||
@@ -289,24 +333,103 @@ export function normalizeCategoryName(rawCategory?: string): string {
     lower === 'lab coat' ||
     lower === 'lab coats'
   ) {
-    return 'Daily Essentials, Cutlery & Folders';
+    return 'Essentials';
   }
 
-  // Exact case-insensitive match against default categories
+  // Exact case-insensitive match against canonical categories
   const exactDefault = DEFAULT_WARDROBE_CATEGORIES.find((c) => c.toLowerCase() === lower);
   if (exactDefault) return exactDefault;
 
   return trimmed;
 }
 
+// 4 Exact Canonical Luggage / Bag Names (Requirement #5 - No Dimensions!)
+export const DEFAULT_BAG_LOCATIONS: string[] = [
+  'Main Large Rolling Suitcase',
+  'Medium Rolling Suitcase',
+  'Tech Laptop Backpack',
+  'Compact Fanny Pack',
+];
+
 /**
- * Automatically normalizes wardrobe items to canonical categories
+ * Normalizes any luggage location string (stripping dimensions and variant text)
+ * to one of the 4 exact canonical bag names, or returns the custom location.
+ */
+export function normalizeBagLocation(rawLoc?: string): string {
+  if (!rawLoc || !rawLoc.trim()) {
+    return 'Main Large Rolling Suitcase';
+  }
+  const trimmed = rawLoc.trim();
+  const lower = trimmed.toLowerCase();
+
+  // 1. Main Large Rolling Suitcase
+  if (
+    lower.includes('large') ||
+    lower.includes('30×40×70') ||
+    lower.includes('30x40x70') ||
+    lower.includes('checked bag 1') ||
+    lower === 'checked at colombo'
+  ) {
+    return 'Main Large Rolling Suitcase';
+  }
+
+  // 2. Medium Rolling Suitcase
+  if (
+    lower.includes('medium') ||
+    lower.includes('27×41×57') ||
+    lower.includes('27x41x57') ||
+    lower.includes('checked bag 2')
+  ) {
+    return 'Medium Rolling Suitcase';
+  }
+
+  // 3. Tech Laptop Backpack
+  if (
+    lower.includes('backpack') ||
+    lower.includes('tech laptop') ||
+    lower.includes('cabin laptop') ||
+    lower.includes('cabin carry-on')
+  ) {
+    return 'Tech Laptop Backpack';
+  }
+
+  // 4. Compact Fanny Pack
+  if (
+    lower.includes('fanny') ||
+    lower.includes('crossbody') ||
+    lower.includes('chest') ||
+    lower.includes('lifeline')
+  ) {
+    return 'Compact Fanny Pack';
+  }
+
+  const exactDefault = DEFAULT_BAG_LOCATIONS.find((b) => b.toLowerCase() === lower);
+  if (exactDefault) return exactDefault;
+
+  return trimmed;
+}
+
+/**
+ * Automatically normalizes wardrobe items to canonical categories, canonical bags,
+ * and recovers locked-in packed booleans (Requirement #2, #4, #5).
  */
 export function migrateWardrobeItems(items: WardrobeItem[]): WardrobeItem[] {
   if (!Array.isArray(items)) return [];
   return items.map((item) => {
-    const normalized = normalizeCategoryName(item.category);
-    return item.category !== normalized ? { ...item, category: normalized } : item;
+    const normalizedCategory = normalizeCategoryName(item.category);
+    const normalizedBag = normalizeBagLocation(item.targetBag);
+    const isPacked =
+      item.isPacked === true ||
+      (item as any).packed === true ||
+      (item as any).checked === true ||
+      (item as any).status === 'packed';
+
+    return {
+      ...item,
+      category: normalizedCategory,
+      targetBag: normalizedBag,
+      isPacked,
+    };
   });
 }
 
@@ -318,14 +441,6 @@ export const MEDICINE_SUBTYPES: string[] = [
   'Motion Sickness',
   'Balm/Inhaler',
   'General First Aid',
-];
-
-export const DEFAULT_BAG_LOCATIONS: string[] = [
-  'Main Large Rolling Suitcase',
-  'Medium Rolling Suitcase',
-  'Structured Tech Laptop Backpack',
-  'Compact Fanny Pack / Crossbody',
-  'Wear on Flight',
 ];
 
 export const DEFAULT_BANKS: string[] = [
@@ -440,7 +555,7 @@ export const INITIAL_BAGS: BagAsset[] = [
   },
   {
     id: 'bag-backpack',
-    name: 'Structured Tech Laptop Backpack',
+    name: 'Tech Laptop Backpack',
     type: 'Cabin Carry-On (With Passenger)',
     dimensions: '~45 cm (25–30L Structured)',
     weightLimit: 'Cabin Carry-On',
@@ -452,7 +567,7 @@ export const INITIAL_BAGS: BagAsset[] = [
   },
   {
     id: 'bag-fanny',
-    name: 'Compact Fanny Pack / Crossbody',
+    name: 'Compact Fanny Pack',
     type: 'Personal Lifeline (Worn Across Chest)',
     dimensions: 'Worn across chest at all times',
     weightLimit: 'Lifeline Bag',

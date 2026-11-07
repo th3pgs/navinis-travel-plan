@@ -23,6 +23,7 @@ import {
   isItemInBag,
 } from '../data';
 import { DynamicSelect } from './DynamicSelect';
+import { IOSConfirmModal } from './IOSConfirmModal';
 
 interface LuggageContentsModalProps {
   isOpen: boolean;
@@ -111,6 +112,19 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
   const [quickAddCategory, setQuickAddCategory] = useState('Tops');
   const [quickAddQty, setQuickAddQty] = useState(1);
   const [quickAddNotes, setQuickAddNotes] = useState('');
+
+  // Custom iOS In-App Confirm Dialog state
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   if (!isOpen || !bag) return null;
 
@@ -423,9 +437,15 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (window.confirm(`Are you sure you want to delete "${item.name}" from ${bag.name}?`)) {
-                            onDeleteWardrobeItem(item.id);
-                          }
+                          setConfirmModal({
+                            isOpen: true,
+                            title: 'Delete Item?',
+                            message: `Are you sure you want to remove "${item.name}" from ${bag.name}?`,
+                            onConfirm: () => {
+                              onDeleteWardrobeItem(item.id);
+                              setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                            },
+                          });
                         }}
                         className="text-slate-300 hover:text-[#FF3B30] p-1 transition-colors cursor-pointer shrink-0"
                         title="Delete item"
@@ -522,9 +542,15 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          if (window.confirm(`Are you sure you want to delete "${gift.name}"?`)) {
-                            onDeleteGift(gift.id);
-                          }
+                          setConfirmModal({
+                            isOpen: true,
+                            title: 'Delete Gift?',
+                            message: `Are you sure you want to remove "${gift.name}"?`,
+                            onConfirm: () => {
+                              onDeleteGift(gift.id);
+                              setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                            },
+                          });
                         }}
                         className="text-slate-300 hover:text-[#FF3B30] p-1 transition-colors cursor-pointer shrink-0"
                         title="Delete gift"
@@ -588,9 +614,15 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (window.confirm(`Are you sure you want to delete "${device.name}"?`)) {
-                          onDeleteDevice(device.id);
-                        }
+                        setConfirmModal({
+                          isOpen: true,
+                          title: 'Delete Device?',
+                          message: `Are you sure you want to remove "${device.name}" from your packing list?`,
+                          onConfirm: () => {
+                            onDeleteDevice(device.id);
+                            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                          },
+                        });
                       }}
                       className="text-slate-300 hover:text-[#FF3B30] p-1 transition-colors cursor-pointer shrink-0"
                       title="Delete device"
@@ -653,9 +685,15 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (window.confirm(`Are you sure you want to delete "${doc.title}"?`)) {
-                          onDeleteDoc(doc.id);
-                        }
+                        setConfirmModal({
+                          isOpen: true,
+                          title: 'Delete Document?',
+                          message: `Are you sure you want to remove "${doc.title}" from your packing list?`,
+                          onConfirm: () => {
+                            onDeleteDoc(doc.id);
+                            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                          },
+                        });
                       }}
                       className="text-slate-300 hover:text-[#FF3B30] p-1 transition-colors cursor-pointer shrink-0"
                       title="Delete document"
@@ -801,6 +839,14 @@ export const LuggageContentsModal: React.FC<LuggageContentsModalProps> = ({
           )}
         </div>
       </div>
+
+      <IOSConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

@@ -7,6 +7,7 @@ import {
 import { AppIcon } from './AppIcon';
 import { DynamicSelect } from './DynamicSelect';
 import { UniversityBuddyCard } from './UniversityBuddyCard';
+import { IOSConfirmModal } from './IOSConfirmModal';
 import {
   ChevronLeft,
   Plus,
@@ -75,6 +76,17 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
   const [newAppDevices, setNewAppDevices] = useState<('iPhone 17' | 'Samsung S20 FE' | 'Dell Laptop' | 'Apple iPad 11')[]>([
     'iPhone 17',
   ]);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   const allCategories = React.useMemo(() => {
     return Array.from(new Set([...DEFAULT_APP_CATEGORIES, ...customAppCategories]));
@@ -470,9 +482,15 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              if (window.confirm(`Are you sure you want to delete "${app.name}"?`)) {
-                                onDeleteApp(app.id);
-                              }
+                              setConfirmModal({
+                                isOpen: true,
+                                title: 'Delete App?',
+                                message: `Are you sure you want to remove "${app.name}"?`,
+                                onConfirm: () => {
+                                  onDeleteApp(app.id);
+                                  setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                                },
+                              });
                             }}
                             className="text-slate-300 hover:text-[#FF3B30] p-0.5 transition-colors cursor-pointer"
                             title="Delete app"
@@ -652,6 +670,14 @@ export const CommunicationHub: React.FC<CommunicationHubProps> = ({
           </div>
         </div>
       )}
+
+      <IOSConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

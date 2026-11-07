@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DocumentItem, DEFAULT_BAG_LOCATIONS } from '../data';
 import { DynamicSelect } from './DynamicSelect';
+import { IOSConfirmModal } from './IOSConfirmModal';
 import {
   ChevronLeft,
   Plus,
@@ -53,6 +54,17 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   // Form Fields
   const [formTitle, setFormTitle] = useState('');
@@ -283,9 +295,15 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (window.confirm(`Are you sure you want to delete "${doc.title}"?`)) {
-                          onDeleteDoc(doc.id);
-                        }
+                        setConfirmModal({
+                          isOpen: true,
+                          title: 'Delete Credential?',
+                          message: `Are you sure you want to remove "${doc.title}"?`,
+                          onConfirm: () => {
+                            onDeleteDoc(doc.id);
+                            setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                          },
+                        });
                       }}
                       className="w-7 h-7 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 flex items-center justify-center transition-colors cursor-pointer"
                       title="Delete credential"
@@ -386,11 +404,17 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm(`Are you sure you want to delete "${editingDoc.title}"?`)) {
-                      onDeleteDoc?.(editingDoc.id);
-                      setShowAddModal(false);
-                      setEditingDoc(null);
-                    }
+                    setConfirmModal({
+                      isOpen: true,
+                      title: 'Delete Credential?',
+                      message: `Are you sure you want to remove "${editingDoc.title}"?`,
+                      onConfirm: () => {
+                        onDeleteDoc?.(editingDoc.id);
+                        setShowAddModal(false);
+                        setEditingDoc(null);
+                        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                      },
+                    });
                   }}
                   className="px-4 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold text-xs transition-colors cursor-pointer"
                 >
@@ -418,6 +442,14 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
           </div>
         </div>
       )}
+
+      <IOSConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

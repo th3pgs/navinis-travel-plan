@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { WardrobeItem, BagAsset } from '../data';
 import { Plus, Trash2, Edit3, Check, X, Sparkles, Filter } from 'lucide-react';
+import { IOSConfirmModal } from './IOSConfirmModal';
 
 interface DressUpWardrobeModalProps {
   isOpen: boolean;
@@ -26,6 +27,17 @@ export const DressUpWardrobeModal: React.FC<DressUpWardrobeModalProps> = ({
   onDeleteItem,
 }) => {
   const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
 
   // New item form
   const [name, setName] = useState('');
@@ -297,9 +309,15 @@ export const DressUpWardrobeModal: React.FC<DressUpWardrobeModalProps> = ({
                         </button>
                         <button
                           onClick={() => {
-                            if (window.confirm(`Are you sure you want to delete "${item.name}"?`)) {
-                              onDeleteItem(item.id);
-                            }
+                            setConfirmModal({
+                              isOpen: true,
+                              title: 'Delete Item?',
+                              message: `Are you sure you want to remove "${item.name}" from your wardrobe?`,
+                              onConfirm: () => {
+                                onDeleteItem(item.id);
+                                setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                              },
+                            });
                           }}
                           className="p-1 rounded text-slate-400 hover:text-red-600"
                           title="Remove dress"
@@ -379,6 +397,14 @@ export const DressUpWardrobeModal: React.FC<DressUpWardrobeModalProps> = ({
           </button>
         </div>
       </div>
+
+      <IOSConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };
