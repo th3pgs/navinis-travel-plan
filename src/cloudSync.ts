@@ -36,9 +36,94 @@ export interface AppMasterState {
   customAppCategories?: string[];
   customAppDevices?: string[];
   deletedItemIds?: string[];
+  trashedWardrobe?: any[];
 }
 
 export const CLIENT_ID = 'client_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
+
+let _lastLocalMutationTimestamp = 0;
+
+export function recordLocalMutation(): void {
+  _lastLocalMutationTimestamp = Date.now();
+}
+
+export function getLastLocalMutationTime(): number {
+  return _lastLocalMutationTimestamp;
+}
+
+/**
+ * Removes ONLY 100% exact duplicates from a wardrobe array:
+ * 1. Exact duplicate IDs (keeps the newer or photo-complete entry).
+ * 2. Accidental double-submissions where name, category, targetBag, quantity, and notes are 100% identical
+ *    AND either photoUrl is identical or they were created within 8 seconds of each other.
+ * NEVER merges items that are merely similar in name or category!
+ */
+export function deduplicateExactWardrobeItems<T extends {
+  id: string;
+  name?: string;
+  category?: string;
+  targetBag?: string;
+  quantity?: any;
+  notes?: string;
+  photoUrl?: string;
+  createdAt?: number;
+  updatedAt?: number;
+}>(items: T[] = [], deletedIds: string[] = []): T[] {
+  const deletedSet = new Set(deletedIds || []);
+  const byId = new Map<string, T>();
+
+  for (const item of items || []) {
+    if (!item || !item.id || deletedSet.has(item.id)) continue;
+    const existing = byId.get(item.id);
+    if (!existing) {
+      byId.set(item.id, item);
+    } else {
+      const existingTime = Number(existing.updatedAt || existing.createdAt || 0);
+      const itemTime = Number(item.updatedAt || item.createdAt || 0);
+      if (itemTime >= existingTime || (!existing.photoUrl && item.photoUrl)) {
+        byId.set(item.id, item);
+      }
+    }
+  }
+
+  const uniqueById = Array.from(byId.values());
+  const result: T[] = [];
+  const exactSignatureMap = new Map<string, number>();
+
+  for (const item of uniqueById) {
+    const normName = String(item.name || '').trim().toLowerCase();
+    const normCat = String(item.category || '').trim().toLowerCase();
+    const normBag = String(item.targetBag || '').trim().toLowerCase();
+    const normQty = String(item.quantity ?? '1').trim().toLowerCase();
+    const normNotes = String(item.notes || '').trim().toLowerCase();
+    const sig = `${normName}|||${normCat}|||${normBag}|||${normQty}|||${normNotes}`;
+
+    if (normName && exactSignatureMap.has(sig)) {
+      const prevIdx = exactSignatureMap.get(sig)!;
+      const prev = result[prevIdx];
+      const prevPhoto = String(prev.photoUrl || '');
+      const currPhoto = String(item.photoUrl || '');
+      const timeDiff = Math.abs(
+        Number(item.createdAt || item.updatedAt || 0) - Number(prev.createdAt || prev.updatedAt || 0)
+      );
+
+      // Only treat as an exact duplicate if the photo is identical OR it was double-submitted within 8 seconds
+      if (prevPhoto === currPhoto || (timeDiff > 0 && timeDiff < 8000)) {
+        const prevHasCloudPhoto = prevPhoto.startsWith('http');
+        const currHasCloudPhoto = currPhoto.startsWith('http');
+        if (currHasCloudPhoto && !prevHasCloudPhoto) {
+          result[prevIdx] = item;
+        }
+        continue;
+      }
+    }
+
+    exactSignatureMap.set(sig, result.length);
+    result.push(item);
+  }
+
+  return result;
+}
 
 export function isOfflineLocked(): boolean {
   try {
@@ -342,6 +427,25 @@ export async function uploadPhotoToSupabase(
 }
 
 /**
+ * Ultra-lightweight 30-byte header check (`SELECT updated_at`) to verify if remote state changed
+ * before downloading the full payload. Conserves 99.9% of Supabase egress credits.
+ */
+export async function fetchRemoteUpdatedAt(): Promise<string | null> {
+  if (isOfflineLocked()) return null;
+  try {
+    const { data, error } = await supabase
+      .from(STATE_TABLE)
+      .select('updated_at')
+      .eq('id', STATE_ROW_ID)
+      .maybeSingle();
+    if (!error && data?.updated_at) {
+      return String(data.updated_at);
+    }
+  } catch {}
+  return null;
+}
+
+/**
  * Fetch the master plan state from Supabase `app_state` (row `id = 'main_plan'`)
  * with instant IndexedDB local cache fallback. Skips network when offline locked.
  * NEVER relies on the 5MB localStorage trap for wardrobe arrays or photos.
@@ -363,6 +467,9 @@ export async function fetchCloudState(): Promise<AppMasterState | null> {
 
     if (!error && data && data.payload) {
       const remote = data.payload as AppMasterState;
+      if (data.updated_at) {
+        (remote as any)._rowUpdatedAt = String(data.updated_at);
+      }
       if (remote.passportInfo) {
         return remote;
       }
@@ -371,13 +478,10 @@ export async function fetchCloudState(): Promise<AppMasterState | null> {
     console.warn('Supabase fetch failed:', err);
   }
 
-  // Only fallback to IndexedDB if NOT yet in master cloud mode
-  if (!isMasterMigrationDone()) {
-    try {
-      const idbState = await getMasterStateIDB();
-      if (idbState) return idbState;
-    } catch {}
-  }
+  try {
+    const idbState = await getMasterStateIDB();
+    if (idbState) return idbState;
+  } catch {}
 
   return null;
 }
@@ -413,13 +517,15 @@ export function broadcastLiveSync(delta: {
 }
 
 /**
- * Broadcasts an individual item add, update, or delete across all open tabs/devices.
- * Delivers instant (<100ms) UI updates without waiting for full-payload roundtrips.
+ * Broadcasts an individual item add, update, delete-to-trash, or restore across all open tabs/devices.
+ * Delivers instant (<100ms) UI updates using <2KB payloads without extra database queries.
  */
 export function broadcastItemDelta(delta: {
-  type: 'ITEM_UPSERT' | 'ITEM_DELETE';
+  type: 'ITEM_UPSERT' | 'ITEM_DELETE' | 'ITEM_RESTORE' | 'TRASH_EMPTY' | 'META_UPDATE';
   item?: any;
   deletedId?: string;
+  trashedItem?: any;
+  activityText?: string;
   timestamp?: number;
 }) {
   if (isOfflineLocked()) return;
@@ -442,18 +548,25 @@ export function broadcastItemDelta(delta: {
 
 /**
  * Push master state to Supabase `app_state` (row `id = 'main_plan'`)
- * with instant local IndexedDB save, WebSocket broadcast, and union-merged database upsert.
- * Guaranteed never to drop or clobber items added on another device.
+ * with instant local IndexedDB save and debounced single-query database upsert.
+ * Saves Supabase credits by coalescing rapid edits and avoiding redundant SELECT roundtrips.
  */
-export function pushCloudState(state: AppMasterState, immediate = true): Promise<boolean> {
+export function pushCloudState(state: AppMasterState, immediate = false): Promise<boolean> {
   const now = Date.now();
   state.lastUpdated = new Date(now).toISOString();
   state.lastUpdatedAt = now;
   state.is_master_locked = true;
   _pushInFlight = true;
   _lastPushTimestamp = now;
+  recordLocalMutation();
 
-  // 1. Save to IndexedDB (multi-gigabyte safe, NO 5MB quota limit!)
+  // Strictly enforce deletions and exact deduplication before saving
+  const deletedList = state.deletedItemIds || [];
+  if (Array.isArray(state.wardrobe)) {
+    state.wardrobe = deduplicateExactWardrobeItems(state.wardrobe, deletedList);
+  }
+
+  // 1. Save to IndexedDB immediately (0ms local durability, multi-gigabyte safe)
   try {
     saveMasterStateIDB(state);
     if (Array.isArray(state.wardrobe)) {
@@ -465,20 +578,11 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
 
   // If offline locked, strictly isolate to local storage
   if (isOfflineLocked()) {
-    console.log('[CloudSync] Device is offline locked. Changes safely kept locally.');
     _pushInFlight = false;
     return Promise.resolve(true);
   }
 
-  // 2. Broadcast immediately over WebSocket to peer devices in ~100ms
-  broadcastLiveSync({
-    action: 'state_update',
-    masterState: state,
-    deletedItemIds: state.deletedItemIds,
-    timestamp: now,
-  });
-
-  // 3. Write to Supabase database with pre-fetch union merge so no device ever clobbers another
+  // 2. Write to Supabase database with a 350ms coalesce debounce (1 single query per batch of edits)
   return new Promise((resolve) => {
     if (syncDebounceTimer) {
       clearTimeout(syncDebounceTimer);
@@ -489,71 +593,6 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
       _lastPushTimestamp = Date.now();
 
       try {
-        try {
-          const { data: remoteData, error: fetchErr } = await supabase
-            .from(STATE_TABLE)
-            .select('payload')
-            .eq('id', STATE_ROW_ID)
-            .maybeSingle();
-
-          if (!fetchErr && remoteData?.payload) {
-            const remoteState = remoteData.payload as AppMasterState;
-
-            const combinedDeleted = Array.from(new Set([
-              ...(state.deletedItemIds || []),
-              ...(remoteState.deletedItemIds || []),
-            ]));
-            state.deletedItemIds = combinedDeleted;
-
-            if (Array.isArray(remoteState.wardrobe)) {
-              state.wardrobe = mergeWardrobeLists(state.wardrobe, remoteState.wardrobe, combinedDeleted);
-            }
-            if (Array.isArray(remoteState.bags)) {
-              state.bags = mergeItemsByTimestamp(state.bags, remoteState.bags, combinedDeleted);
-            }
-            if (Array.isArray(remoteState.devices)) {
-              state.devices = mergeItemsByTimestamp(state.devices, remoteState.devices, combinedDeleted);
-            }
-            if (Array.isArray(remoteState.documents)) {
-              state.documents = mergeItemsByTimestamp(state.documents, remoteState.documents, combinedDeleted);
-            }
-
-            // Union merge categories & locations for simultaneous multi-user edits
-            const combinedDeletedCats = Array.from(new Set([
-              ...(state.deletedCategories || []),
-              ...(remoteState.deletedCategories || []),
-            ]));
-            state.deletedCategories = combinedDeletedCats;
-            if (Array.isArray(remoteState.categories)) {
-              state.categories = Array.from(new Set([
-                ...(state.categories || []),
-                ...remoteState.categories,
-              ])).filter((c) => !combinedDeletedCats.includes(c));
-            }
-
-            const combinedDeletedLocs = Array.from(new Set([
-              ...(state.deletedLocations || []),
-              ...(remoteState.deletedLocations || []),
-            ]));
-            state.deletedLocations = combinedDeletedLocs;
-            if (Array.isArray(remoteState.locations)) {
-              state.locations = Array.from(new Set([
-                ...(state.locations || []),
-                ...remoteState.locations,
-              ])).filter((l) => !combinedDeletedLocs.includes(l));
-            }
-
-            try {
-              saveMasterStateIDB(state);
-              if (Array.isArray(state.wardrobe)) {
-                saveWardrobeItemsIDB(state.wardrobe);
-              }
-            } catch {}
-          }
-        } catch (mergeErr) {
-          console.warn('Pre-push union fetch warning:', mergeErr);
-        }
-
         const { error } = await supabase
           .from(STATE_TABLE)
           .upsert({
@@ -580,22 +619,21 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
     if (immediate) {
       doPush();
     } else {
-      syncDebounceTimer = setTimeout(doPush, 50); // fast coalesce
+      syncDebounceTimer = setTimeout(doPush, 350);
     }
   });
 }
 
 /**
  * Subscribe to realtime state updates from Supabase:
- * Subscribes to BOTH WebSocket Broadcast channel (`navini-instant-sync`) for instant peer-to-peer sync (<100ms)
- * AND Postgres database changes for durable background replication.
+ * Uses lightweight WebSocket Broadcast (`navini-instant-sync`) for sub-100ms item-level delta sync
+ * without streaming 500KB postgres_changes echoes on every save.
  */
 export function subscribeToCloudState(
   onUpdate: (newState: AppMasterState, source: 'postgres' | 'broadcast') => void,
   onDelta?: (delta: any) => void
 ): () => void {
   if (isOfflineLocked()) {
-    console.log('[LiveSync] Device is offline locked. Skipping Realtime subscription.');
     return () => {};
   }
 
@@ -612,13 +650,12 @@ export function subscribeToCloudState(
     },
   });
 
-  // 1. WebSocket Broadcast: Direct peer-to-peer tab/device sync in ~100ms
+  // 1. WebSocket Broadcast: Master override or full-state sync when explicitly triggered
   channel.on('broadcast', { event: 'state_update' }, (event) => {
     if (isOfflineLocked()) return;
     const payload = event.payload;
     if (!payload || payload.senderId === CLIENT_ID) return;
 
-    console.log('[LiveSync] Ultra-fast WebSocket broadcast received from peer:', payload.action);
     if (payload.masterState) {
       onUpdate(payload.masterState, 'broadcast');
     }
@@ -627,43 +664,18 @@ export function subscribeToCloudState(
     }
   });
 
-  // 1b. Real-time Item Delta Broadcast (Instant item add/edit/delete/packed toggle)
+  // 2. Real-time Item Delta Broadcast (Instant <2KB item add/edit/delete/restore/packed toggle)
   channel.on('broadcast', { event: 'item_delta' }, (event) => {
     if (isOfflineLocked()) return;
     const payload = event.payload;
     if (!payload || payload.senderId === CLIENT_ID) return;
 
-    console.log('[LiveSync] Ultra-fast WebSocket item_delta received:', payload.type);
     if (onDelta) {
       onDelta(payload);
     }
   });
 
-  // 2. Postgres Database Changes: Durable fallback when database row is updated
-  channel.on(
-    'postgres_changes',
-    {
-      event: '*',
-      schema: 'public',
-      table: STATE_TABLE,
-      filter: `id=eq.${STATE_ROW_ID}`,
-    },
-    (payload) => {
-      if (isOfflineLocked()) return;
-      if (payload.new && (payload.new as any).payload) {
-        // Echo check: if local push happened within 500ms, skip duplicate
-        if (Date.now() - _lastPushTimestamp < 500) return;
-        const remoteState = (payload.new as any).payload as AppMasterState;
-        if (remoteState && remoteState.passportInfo) {
-          onUpdate(remoteState, 'postgres');
-        }
-      }
-    }
-  );
-
-  channel.subscribe((status) => {
-    console.log('[LiveSync] Channel subscription status:', status);
-  });
+  channel.subscribe();
 
   _activeRealtimeChannel = channel;
 

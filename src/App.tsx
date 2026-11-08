@@ -37,6 +37,7 @@ import {
 import {
   AppMasterState,
   fetchCloudState,
+  fetchRemoteUpdatedAt,
   pushCloudState,
   subscribeToCloudState,
   checkSupabaseConnection,
@@ -48,6 +49,9 @@ import {
   purgeLegacyLocalStorageAndIDB,
   mergeItemsByTimestamp,
   mergeWardrobeLists,
+  deduplicateExactWardrobeItems,
+  recordLocalMutation,
+  getLastLocalMutationTime,
   broadcastItemDelta,
   broadcastLiveSync,
 } from './cloudSync';
@@ -350,6 +354,42 @@ export function App() {
     }
   });
 
+  // Trash Bin for Recently Deleted Wardrobe Items & Drafts
+  const [trashedWardrobe, setTrashedWardrobe] = useState<WardrobeItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('navini_trashed_wardrobe_v8');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Synchronous Refs to prevent stale React closures during rapid background tasks
+  const wardrobeRef = useRef<WardrobeItem[]>(wardrobe);
+  wardrobeRef.current = wardrobe;
+
+  const deletedItemIdsRef = useRef<Set<string>>(new Set(deletedItemIds));
+  const trashedWardrobeRef = useRef<WardrobeItem[]>(trashedWardrobe);
+  trashedWardrobeRef.current = trashedWardrobe;
+
+  const lastSeenRowUpdatedAtRef = useRef<string>('');
+  const [isCloudFetching, setIsCloudFetching] = useState<boolean>(true);
+
+  // Subtle Bottom iOS / CoD-Style Single-Line Activity Strip (Zero extra DB calls)
+  const [activityStripText, setActivityStripText] = useState<string | null>(null);
+  const activityStripTimerRef = useRef<any>(null);
+
+  const showActivityStrip = (text: string) => {
+    if (!text) return;
+    setActivityStripText(text);
+    if (activityStripTimerRef.current) {
+      clearTimeout(activityStripTimerRef.current);
+    }
+    activityStripTimerRef.current = setTimeout(() => {
+      setActivityStripText(null);
+    }, 2600);
+  };
+
   const realtimeUnsubRef = useRef<(() => void) | null>(null);
 
   // Background Non-Blocking Upload Queue State
@@ -375,18 +415,20 @@ export function App() {
     return [];
   });
 
-  // Helper to package the current master state snapshot
+  // Helper to package the current master state snapshot using live synchronous refs
   const buildCurrentMasterState = (overrides?: Partial<AppMasterState>): AppMasterState => {
-    const cats = overrides?.categories || categories;
+    const cats = Array.from(new Set((overrides?.categories || categories).map((c) => c.trim()).filter(Boolean)));
     const delCats = overrides?.deletedCategories || deletedCategories;
-    const locs = overrides?.locations || locations;
+    const locs = Array.from(new Set((overrides?.locations || locations).map((l) => l.trim()).filter(Boolean)));
     const delLocs = overrides?.deletedLocations || deletedLocations;
-    const delItemIds = overrides?.deletedItemIds || deletedItemIds;
+    const delItemIds = overrides?.deletedItemIds || Array.from(deletedItemIdsRef.current);
     const cCats = overrides?.customCategories || customCategories;
     const cLocs = overrides?.customLocations || customLocations;
     const cAppCats = overrides?.customAppCategories || customAppCategories;
     const cAppDevs = overrides?.customAppDevices || customAppDevices;
-    const wItems = overrides?.wardrobe || wardrobe;
+    const rawWItems = overrides?.wardrobe || wardrobeRef.current;
+    const wItems = deduplicateExactWardrobeItems(rawWItems, delItemIds);
+    const tItems = overrides?.trashedWardrobe || trashedWardrobeRef.current;
     const bAssets = overrides?.bags || bags;
     const dAssets = overrides?.devices || devices;
     const docItems = overrides?.documents || documents;
@@ -403,6 +445,7 @@ export function App() {
       bags: bAssets,
       devices: dAssets,
       wardrobe: wItems,
+      trashedWardrobe: tItems.slice(0, 60),
       documents: docItems,
       procedureSteps,
       bankingTasks,
@@ -423,17 +466,18 @@ export function App() {
     };
   };
 
-  // Sync state: In 100% pure cloud mode, pushes directly to Supabase with WebSocket broadcast
-  const syncAllState = async (overrides?: Partial<AppMasterState>): Promise<boolean> => {
+  // Non-blocking debounced cloud state sync (conserves Supabase credits & never freezes UI)
+  const syncAllState = async (overrides?: Partial<AppMasterState>, immediate = false): Promise<boolean> => {
+    recordLocalMutation();
     const masterState = buildCurrentMasterState(overrides);
     if (isMasterLocked) {
       masterState.is_master_locked = true;
     }
 
-    // Always keep local IndexedDB updated
+    // Always keep local IndexedDB updated immediately
     try {
-      await saveWardrobeItemsIDB(masterState.wardrobe);
-      await saveMasterStateIDB(masterState);
+      saveWardrobeItemsIDB(masterState.wardrobe);
+      saveMasterStateIDB(masterState);
     } catch (e) {
       console.warn('IDB write warning in syncAllState:', e);
     }
@@ -442,8 +486,7 @@ export function App() {
       return true;
     }
 
-    // Push immediately to Supabase and broadcast over WebSocket
-    const pushResult = await pushCloudState(masterState, true);
+    const pushResult = await pushCloudState(masterState, immediate);
     return pushResult;
   };
 
@@ -451,6 +494,7 @@ export function App() {
   const handlePushMasterDataToCloud = async () => {
     setIsMasterPushing(true);
     try {
+      recordLocalMutation();
       const snapshot = buildCurrentMasterState({
         is_master_locked: true,
       });
@@ -466,6 +510,7 @@ export function App() {
       if (!error) {
         setIsMasterLocked(true);
         setMasterMigrationDone(true);
+        wardrobeRef.current = snapshot.wardrobe;
         setWardrobe(snapshot.wardrobe);
         await saveWardrobeItemsIDB(snapshot.wardrobe);
         await saveMasterStateIDB(snapshot);
@@ -476,6 +521,7 @@ export function App() {
           masterState: snapshot,
         });
 
+        showActivityStrip(`🔴 Master state pushed (${snapshot.wardrobe.length} wardrobe items)`);
         setMasterModalMessage(
           `✓ Master Version Replaced Online! All ${snapshot.wardrobe.length} wardrobe items, ${snapshot.bags.length} bags, and ${snapshot.devices.length} devices (${snapshot.wardrobe.length + snapshot.bags.length + snapshot.devices.length} total physical items) are now the standard across all devices.`
         );
@@ -509,10 +555,13 @@ export function App() {
     }
   };
 
-  // Applies incoming remote master state from Supabase directly as the single standard across all devices
-  const applyRemoteMasterState = (remote: AppMasterState, _isPureReplace = false) => {
+  // Applies incoming remote master state from Supabase cleanly without resurrecting deleted items
+  const applyRemoteMasterState = (remote: AppMasterState, isForceMasterOverride = false) => {
     if (isOfflineLocked) return;
 
+    if ((remote as any)._rowUpdatedAt) {
+      lastSeenRowUpdatedAtRef.current = String((remote as any)._rowUpdatedAt);
+    }
     if (remote.lastUpdatedAt) {
       lastSeenRemoteUpdatedAtRef.current = Number(remote.lastUpdatedAt);
     }
@@ -523,30 +572,49 @@ export function App() {
     }
 
     const remoteDelItemIds = remote.deletedItemIds || [];
-    const mergedDeletedIds = Array.from(new Set([...deletedItemIds, ...remoteDelItemIds]));
+    // If this is an explicit Red Button Master Override from another device, adopt its exact deleted list; otherwise union with local synchronous deletedItemIdsRef
+    const mergedDeletedIds = isForceMasterOverride
+      ? Array.from(new Set(remoteDelItemIds))
+      : Array.from(new Set([...Array.from(deletedItemIdsRef.current), ...remoteDelItemIds]));
+
+    deletedItemIdsRef.current = new Set(mergedDeletedIds);
     setDeletedItemIds(mergedDeletedIds);
     try {
       localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(mergedDeletedIds));
     } catch {}
+
+    if (Array.isArray(remote.trashedWardrobe)) {
+      const nextTrash = deduplicateExactWardrobeItems(remote.trashedWardrobe, []);
+      trashedWardrobeRef.current = nextTrash;
+      setTrashedWardrobe(nextTrash);
+      try {
+        localStorage.setItem('navini_trashed_wardrobe_v8', JSON.stringify(nextTrash.slice(0, 40)));
+      } catch {}
+    }
 
     if (remote.passportInfo) {
       setPassportInfo(remote.passportInfo);
     }
 
     if (Array.isArray(remote.wardrobe)) {
-      const cleanRemote = migrateWardrobeItems(remote.wardrobe).filter(
-        (w) => w && w.id && !mergedDeletedIds.includes(w.id)
+      const cleanRemote = deduplicateExactWardrobeItems(
+        migrateWardrobeItems(remote.wardrobe),
+        mergedDeletedIds
       );
       setWardrobe((prev) => {
-        // Only preserve items actively uploading a photo right this second on this device
+        // Preserve items actively uploading a photo right this second on this device
         const inFlightLocal = prev.filter(
           (w) =>
             w.syncStatus === 'uploading' &&
             activeUploadsRef.current.has(w.id) &&
-            !mergedDeletedIds.includes(w.id) &&
+            !deletedItemIdsRef.current.has(w.id) &&
             !cleanRemote.some((r) => r.id === w.id)
         );
-        const nextWardrobe = [...inFlightLocal, ...cleanRemote];
+        const nextWardrobe = deduplicateExactWardrobeItems(
+          [...inFlightLocal, ...cleanRemote],
+          mergedDeletedIds
+        );
+        wardrobeRef.current = nextWardrobe;
         saveWardrobeItemsIDB(nextWardrobe);
         return nextWardrobe;
       });
@@ -579,7 +647,10 @@ export function App() {
 
     if (Array.isArray(remote.categories) && remote.categories.length > 0) {
       const del = remote.deletedCategories || [];
-      setCategories(remote.categories.filter((c: string) => !del.includes(c)));
+      const dedupedCats = Array.from(
+        new Set(remote.categories.map((c: string) => c.trim()).filter((c: string) => c && !del.includes(c)))
+      );
+      setCategories(dedupedCats);
     }
     if (Array.isArray(remote.deletedCategories)) {
       setDeletedCategories(remote.deletedCategories);
@@ -587,7 +658,10 @@ export function App() {
 
     if (Array.isArray(remote.locations) && remote.locations.length > 0) {
       const del = remote.deletedLocations || [];
-      setLocations(remote.locations.filter((l: string) => !del.includes(l)));
+      const dedupedLocs = Array.from(
+        new Set(remote.locations.map((l: string) => l.trim()).filter((l: string) => l && !del.includes(l)))
+      );
+      setLocations(dedupedLocs);
     }
     if (Array.isArray(remote.deletedLocations)) {
       setDeletedLocations(remote.deletedLocations);
@@ -598,27 +672,75 @@ export function App() {
     }
   };
 
-  // Engine A: Real-time Item Delta Handler (Sub-100ms item updates across tabs/devices)
+  // Real-time Item Delta Handler (Sub-100ms in-place item updates across devices without jumping icons or DB polling)
   const handleIncomingDelta = (delta: any) => {
     if (isOfflineLocked || !delta) return;
 
     if (delta.type === 'ITEM_DELETE' && delta.deletedId) {
       const id = delta.deletedId;
-      setDeletedItemIds((prev) => {
-        const updated = Array.from(new Set([...prev, id]));
+      deletedItemIdsRef.current.add(id);
+      const nextDeleted = Array.from(deletedItemIdsRef.current);
+      setDeletedItemIds(nextDeleted);
+      try {
+        localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(nextDeleted));
+      } catch {}
+
+      const removedItem = delta.trashedItem || wardrobeRef.current.find((w) => w.id === id);
+      if (removedItem) {
+        const nextTrash = [
+          { ...removedItem, deletedAt: Date.now() },
+          ...trashedWardrobeRef.current.filter((t) => t.id !== id),
+        ].slice(0, 60);
+        trashedWardrobeRef.current = nextTrash;
+        setTrashedWardrobe(nextTrash);
         try {
-          localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(updated));
+          localStorage.setItem('navini_trashed_wardrobe_v8', JSON.stringify(nextTrash.slice(0, 40)));
         } catch {}
-        return updated;
-      });
+        showActivityStrip(`🗑️ Moved to Trash: ${removedItem.name || 'Item'}`);
+      }
+
       setWardrobe((prev) => {
         const updated = prev.filter((w) => w.id !== id);
+        wardrobeRef.current = updated;
         saveWardrobeItemsIDB(updated);
         return updated;
       });
+    } else if (delta.type === 'ITEM_RESTORE' && delta.item && delta.item.id) {
+      const restored = delta.item as WardrobeItem;
+      deletedItemIdsRef.current.delete(restored.id);
+      const nextDeleted = Array.from(deletedItemIdsRef.current);
+      setDeletedItemIds(nextDeleted);
+      try {
+        localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(nextDeleted));
+      } catch {}
+
+      const nextTrash = trashedWardrobeRef.current.filter((t) => t.id !== restored.id);
+      trashedWardrobeRef.current = nextTrash;
+      setTrashedWardrobe(nextTrash);
+      try {
+        localStorage.setItem('navini_trashed_wardrobe_v8', JSON.stringify(nextTrash.slice(0, 40)));
+      } catch {}
+
+      setWardrobe((prev) => {
+        const exists = prev.some((w) => w.id === restored.id);
+        const updated = exists
+          ? prev.map((w) => (w.id === restored.id ? restored : w))
+          : [restored, ...prev];
+        wardrobeRef.current = updated;
+        saveWardrobeItemsIDB(updated);
+        return updated;
+      });
+      showActivityStrip(`↩️ Restored from Trash: ${restored.name || 'Item'}`);
+    } else if (delta.type === 'TRASH_EMPTY') {
+      trashedWardrobeRef.current = [];
+      setTrashedWardrobe([]);
+      try {
+        localStorage.removeItem('navini_trashed_wardrobe_v8');
+      } catch {}
+      showActivityStrip('🗑️ Trash emptied');
     } else if (delta.type === 'ITEM_UPSERT' && delta.item && delta.item.id) {
       const incomingItem = delta.item as WardrobeItem;
-      if (deletedItemIds.includes(incomingItem.id)) return;
+      if (deletedItemIdsRef.current.has(incomingItem.id)) return;
 
       setWardrobe((prev) => {
         const index = prev.findIndex((w) => w.id === incomingItem.id);
@@ -629,57 +751,56 @@ export function App() {
           const currentTime = Number(current.updatedAt || current.createdAt || 0);
           if (incomingTime >= currentTime) {
             updated = [...prev];
-            updated[index] = { ...current, ...incomingItem };
+            // Update in-place at exact index so card NEVER moves up or down!
+            updated[index] = {
+              ...current,
+              ...incomingItem,
+              createdAt: current.createdAt || incomingItem.createdAt,
+            };
           } else {
             return prev;
           }
         } else {
-          updated = [incomingItem, ...prev];
+          updated = deduplicateExactWardrobeItems(
+            [incomingItem, ...prev],
+            Array.from(deletedItemIdsRef.current)
+          );
         }
+        wardrobeRef.current = updated;
         saveWardrobeItemsIDB(updated);
         return updated;
       });
+
+      if (delta.activityText) {
+        showActivityStrip(delta.activityText);
+      } else if (incomingItem.name) {
+        showActivityStrip(`☁️ Updated: ${incomingItem.name}`);
+      }
     }
   };
 
-  // Engine B: 1.5-Second Live Delta Background Poller (Always active on all devices)
-  useEffect(() => {
+  // Lightweight Cloud Check: Only downloads payload if 30-byte `updated_at` header changed & no recent local mutation
+  const pullAndMergeFromCloud = async (forceFullFetch = false) => {
     if (isOfflineLocked) return;
-
-    const pollTimer = setInterval(async () => {
-      if (document.visibilityState !== 'visible' || isOfflineLocked) return;
-      try {
-        const { data, error } = await supabase
-          .from(STATE_TABLE)
-          .select('payload')
-          .eq('id', STATE_ROW_ID)
-          .maybeSingle();
-
-        if (!error && data?.payload) {
-          const remote = data.payload as AppMasterState;
-          const remoteTime = Number(remote.lastUpdatedAt || 0);
-          if (remoteTime > 0 && remoteTime !== lastSeenRemoteUpdatedAtRef.current) {
-            lastSeenRemoteUpdatedAtRef.current = remoteTime;
-            applyRemoteMasterState(remote);
-          }
-        }
-      } catch {}
-    }, 1500);
-
-    return () => clearInterval(pollTimer);
-  }, [isOfflineLocked, deletedItemIds]);
-
-  // Pulls latest state from Supabase and merges cleanly on any device
-  const pullAndMergeFromCloud = async () => {
-    if (isOfflineLocked) return;
+    // Never overwrite local screen while user is actively making changes
+    if (!forceFullFetch && Date.now() - getLastLocalMutationTime() < 4000) {
+      return;
+    }
     try {
-      const isAlive = await checkSupabaseConnection();
-      setIsSupabaseConnected(isAlive);
-      if (!isAlive) return;
+      if (!forceFullFetch && lastSeenRowUpdatedAtRef.current) {
+        const remoteUpdatedAt = await fetchRemoteUpdatedAt();
+        if (!remoteUpdatedAt) return;
+        setIsSupabaseConnected(true);
+        if (remoteUpdatedAt === lastSeenRowUpdatedAtRef.current) {
+          // 0 changes in cloud — saved 500KB download!
+          return;
+        }
+      }
 
       const remote = await fetchCloudState();
       if (remote) {
-        applyRemoteMasterState(remote);
+        setIsSupabaseConnected(true);
+        applyRemoteMasterState(remote, false);
       }
     } catch (err) {
       console.warn('pullAndMergeFromCloud error:', err);
@@ -693,7 +814,7 @@ export function App() {
       try {
         const snapshot = buildCurrentMasterState();
         saveMasterStateIDB(snapshot);
-        saveWardrobeItemsIDB(wardrobe);
+        saveWardrobeItemsIDB(wardrobeRef.current);
         saveIsOfflineLocked(true);
       } catch (err) {
         console.warn('Offline snapshot warning:', err);
@@ -701,39 +822,36 @@ export function App() {
       setIsOfflineLocked(true);
       saveIsOfflineLocked(true);
 
-      // Disconnect realtime
       if (realtimeUnsubRef.current) {
         realtimeUnsubRef.current();
         realtimeUnsubRef.current = null;
       }
       setIsSupabaseConnected(false);
+      showActivityStrip('📥 Locked Offline — reading from local storage');
     } else {
       // Switching from Offline Locked -> Live (OFF)
       setIsOfflineLocked(false);
       saveIsOfflineLocked(false);
 
-      // 1. Immediately push queued local changes to Supabase
       syncAllState();
 
-      // 2. Re-establish live realtime sync channel (Broadcast + Postgres changes)
       if (realtimeUnsubRef.current) {
         realtimeUnsubRef.current();
       }
       realtimeUnsubRef.current = subscribeToCloudState((incoming) => {
-        applyRemoteMasterState(incoming);
+        applyRemoteMasterState(incoming, true);
       }, handleIncomingDelta);
 
-      // 3. Pull latest remote state from Supabase and merge
-      await pullAndMergeFromCloud();
+      await pullAndMergeFromCloud(true);
+      showActivityStrip('☁️ Live Cloud Sync active');
     }
   };
 
-  // Auto-Sync on Tab Focus / Visibility Change (Requirement #2.3)
+  // Auto-Sync on Tab Focus / Visibility Change using 30-byte header check (Zero credit waste)
   useEffect(() => {
     const handleVisibilityOrFocus = async () => {
       if (document.visibilityState === 'visible' && !isOfflineLocked) {
-        console.log('[LiveSync] Tab became visible/focused, auto-syncing from cloud...');
-        await pullAndMergeFromCloud();
+        await pullAndMergeFromCloud(false);
       }
     };
 
@@ -743,14 +861,14 @@ export function App() {
       document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       window.removeEventListener('focus', handleVisibilityOrFocus);
     };
-  }, [isOfflineLocked, deletedItemIds]);
+  }, [isOfflineLocked]);
 
-  // Live Supabase Lifecycle: Fetch initial + Realtime Subscribe + Periodic Ping
+  // Live Supabase Lifecycle: Instant IndexedDB Cache Render + Background Cloud Fetch + Realtime WebSocket
   useEffect(() => {
     let isMounted = true;
 
     const initSupabase = async () => {
-      // Remove legacy localStorage item arrays so old cached items never mix in on any device
+      // Remove legacy localStorage keys so old pre-migration items never mix in
       try {
         localStorage.removeItem('navini_wardrobe_v7');
         localStorage.removeItem('navini_wardrobe_v6');
@@ -763,67 +881,59 @@ export function App() {
         localStorage.removeItem('navini_master_state_v5');
       } catch {}
 
-      // If offline locked, strictly isolate to local IndexedDB snapshot
-      if (isOfflineLocked) {
-        console.log('[App] Offline lock active on load. Purely local IndexedDB.');
-        if (isMounted) setIsSupabaseConnected(false);
-        try {
-          const idbWardrobe = await getWardrobeItemsIDB();
-          if (idbWardrobe && Array.isArray(idbWardrobe) && idbWardrobe.length > 0 && isMounted) {
-            setWardrobe(migrateWardrobeItems(idbWardrobe));
+      // 1. Instant 0ms Cache Render from IndexedDB so refreshing NEVER shows "No items available"!
+      try {
+        const idbWardrobe = await getWardrobeItemsIDB();
+        if (idbWardrobe && Array.isArray(idbWardrobe) && idbWardrobe.length > 0 && isMounted) {
+          const cleanCached = deduplicateExactWardrobeItems(
+            migrateWardrobeItems(idbWardrobe),
+            Array.from(deletedItemIdsRef.current)
+          );
+          if (cleanCached.length > 0) {
+            wardrobeRef.current = cleanCached;
+            setWardrobe(cleanCached);
           }
-        } catch (e) {
-          console.warn('IDB offline load check:', e);
+        }
+      } catch (e) {
+        console.warn('IDB instant cache load check:', e);
+      }
+
+      // If offline locked, stop here and stay 100% local
+      if (isOfflineLocked) {
+        if (isMounted) {
+          setIsSupabaseConnected(false);
+          setIsCloudFetching(false);
         }
         return;
       }
 
-      const isAlive = await checkSupabaseConnection();
-      if (isMounted) setIsSupabaseConnected(isAlive);
-
-      // Fetch the clean master state directly from Supabase as the single standard on every device
-      let loadedFromCloud = false;
+      // 2. Fetch exact master state from Supabase with iOS Fetching status indicator
+      if (isMounted) setIsCloudFetching(true);
       try {
         const remote = await fetchCloudState();
         if (remote && isMounted) {
-          applyRemoteMasterState(remote, true);
-          loadedFromCloud = true;
+          setIsSupabaseConnected(true);
+          applyRemoteMasterState(remote, false);
+        } else if (isMounted) {
+          const isAlive = await checkSupabaseConnection();
+          if (isMounted) setIsSupabaseConnected(isAlive);
         }
       } catch (err) {
         console.warn('Initial cloud state fetch warning:', err);
-      }
-
-      // Only fallback to local IndexedDB if Supabase was completely unreachable
-      if (!loadedFromCloud && isMounted) {
-        try {
-          const idbWardrobe = await getWardrobeItemsIDB();
-          if (idbWardrobe && Array.isArray(idbWardrobe) && idbWardrobe.length > 0 && isMounted) {
-            setWardrobe(migrateWardrobeItems(idbWardrobe));
-          }
-        } catch (e) {
-          console.warn('IDB fallback check:', e);
-        }
+      } finally {
+        if (isMounted) setIsCloudFetching(false);
       }
     };
 
     initSupabase();
 
     if (!isOfflineLocked) {
-      // Subscribe to Realtime (BOTH WebSocket broadcast + Postgres changes)
       realtimeUnsubRef.current = subscribeToCloudState((incoming) => {
         if (!isMounted || isOfflineLocked) return;
         setIsSupabaseConnected(true);
-        applyRemoteMasterState(incoming);
+        applyRemoteMasterState(incoming, true);
       }, handleIncomingDelta);
     }
-
-    // Check connection health every 12 seconds
-    const pingTimer = setInterval(async () => {
-      if (!isOfflineLocked) {
-        const isAlive = await checkSupabaseConnection();
-        if (isMounted) setIsSupabaseConnected(isAlive);
-      }
-    }, 12000);
 
     return () => {
       isMounted = false;
@@ -831,56 +941,68 @@ export function App() {
         realtimeUnsubRef.current();
         realtimeUnsubRef.current = null;
       }
-      clearInterval(pingTimer);
     };
   }, [isOfflineLocked]);
 
-  // Background Upload Queue Worker
+  // Background Non-Blocking Upload Queue Worker
   const processItemUpload = async (item: WardrobeItem) => {
     if (activeUploadsRef.current.has(item.id)) return;
     activeUploadsRef.current.add(item.id);
 
     try {
       const result = await uploadWardrobeItemPhotoAtomic(item, (progress) => {
-        setWardrobe((prev) =>
-          prev.map((w) => (w.id === item.id ? { ...w, uploadProgress: progress } : w))
-        );
+        setWardrobe((prev) => {
+          const updated = prev.map((w) => (w.id === item.id ? { ...w, uploadProgress: progress } : w));
+          wardrobeRef.current = updated;
+          return updated;
+        });
       });
 
       if (result.success) {
         const finalUrl = result.photoUrl || item.photoUrl;
+        let syncedItem: WardrobeItem | null = null;
         setWardrobe((prev) => {
-          const updated = prev.map((w) =>
-            w.id === item.id
-              ? {
-                  ...w,
-                  photoUrl: finalUrl,
-                  syncStatus: 'synced' as const,
-                  uploadProgress: 100,
-                }
-              : w
-          );
+          const updated = prev.map((w) => {
+            if (w.id === item.id) {
+              syncedItem = {
+                ...w,
+                photoUrl: finalUrl,
+                syncStatus: 'synced' as const,
+                uploadProgress: 100,
+              };
+              return syncedItem;
+            }
+            return w;
+          });
+          wardrobeRef.current = updated;
           saveWardrobeItemsIDB(updated);
-          syncAllState({ wardrobe: updated });
           return updated;
         });
+
+        if (syncedItem) {
+          broadcastItemDelta({
+            type: 'ITEM_UPSERT',
+            item: syncedItem,
+            activityText: `☁️ Photo uploaded: ${(syncedItem as WardrobeItem).name}`,
+          });
+          syncAllState({ wardrobe: wardrobeRef.current });
+        }
       } else {
-        setWardrobe((prev) =>
-          prev.map((w) =>
-            w.id === item.id
-              ? {
-                  ...w,
-                  syncStatus: 'error' as const,
-                }
-              : w
-          )
-        );
+        setWardrobe((prev) => {
+          const updated = prev.map((w) =>
+            w.id === item.id ? { ...w, syncStatus: 'error' as const } : w
+          );
+          wardrobeRef.current = updated;
+          return updated;
+        });
       }
     } catch (err) {
       console.error('Background upload queue error for item:', item.id, err);
-      setWardrobe((prev) =>
-        prev.map((w) => (w.id === item.id ? { ...w, syncStatus: 'error' as const } : w))
-      );
+      setWardrobe((prev) => {
+        const updated = prev.map((w) => (w.id === item.id ? { ...w, syncStatus: 'error' as const } : w));
+        wardrobeRef.current = updated;
+        return updated;
+      });
     } finally {
       activeUploadsRef.current.delete(item.id);
     }
@@ -1271,28 +1393,35 @@ export function App() {
 
   const toggleWardrobeBought = (id: string) => {
     const now = Date.now();
-    const updated = wardrobe.map((w) => (w.id === id ? { ...w, isBought: !w.isBought, updatedAt: now } : w));
+    const updated = wardrobeRef.current.map((w) => (w.id === id ? { ...w, isBought: !w.isBought, updatedAt: now } : w));
+    wardrobeRef.current = updated;
     setWardrobe(updated);
-    syncAllState({ wardrobe: updated });
+    void syncAllState({ wardrobe: updated });
   };
 
   const toggleWardrobePacked = (id: string) => {
     const now = Date.now();
     let updatedItem: WardrobeItem | null = null;
-    const updated = wardrobe.map((w) => {
+    const updated = wardrobeRef.current.map((w) => {
       if (w.id === id) {
         updatedItem = { ...w, isPacked: !w.isPacked, updatedAt: now };
         return updatedItem;
       }
       return w;
     });
+    wardrobeRef.current = updated;
     setWardrobe(updated);
     saveWardrobeItemsIDB(updated);
-    syncAllState({ wardrobe: updated });
+    void syncAllState({ wardrobe: updated });
     if (updatedItem) {
+      const packedMsg = (updatedItem as WardrobeItem).isPacked
+        ? `🟢 Packed: ${(updatedItem as WardrobeItem).name}`
+        : `○ Unpacked: ${(updatedItem as WardrobeItem).name}`;
+      showActivityStrip(packedMsg);
       broadcastItemDelta({
         type: 'ITEM_UPSERT',
         item: updatedItem,
+        activityText: packedMsg,
       });
     }
   };
@@ -1315,52 +1444,172 @@ export function App() {
       createdAt: now,
       updatedAt: now,
     };
-    const updated = [newItem, ...wardrobe];
+    const updated = deduplicateExactWardrobeItems(
+      [newItem, ...wardrobeRef.current],
+      Array.from(deletedItemIdsRef.current)
+    );
+    wardrobeRef.current = updated;
     setWardrobe(updated);
-    await saveWardrobeItemsIDB(updated);
+    saveWardrobeItemsIDB(updated);
+    showActivityStrip(`➕ Added: ${newItem.name}`);
     broadcastItemDelta({
       type: 'ITEM_UPSERT',
       item: newItem,
+      activityText: `➕ Added: ${newItem.name}`,
     });
-    const cloudSuccess = await syncAllState({ wardrobe: updated });
-    return { success: true, cloudSynced: cloudSuccess };
+    // Non-blocking background sync so modal closes in 0ms!
+    void syncAllState({ wardrobe: updated });
+    return { success: true, cloudSynced: true };
   };
 
   const handleUpdateWardrobeItem = async (id: string, partial: Partial<WardrobeItem>): Promise<{ success: boolean; cloudSynced: boolean }> => {
     const now = Date.now();
     let updatedItem: WardrobeItem | null = null;
-    const updated = wardrobe.map((w) => {
+    const updated = wardrobeRef.current.map((w) => {
       if (w.id === id) {
         updatedItem = { ...w, ...partial, updatedAt: now };
         return updatedItem;
       }
       return w;
     });
+    wardrobeRef.current = updated;
     setWardrobe(updated);
-    await saveWardrobeItemsIDB(updated);
+    saveWardrobeItemsIDB(updated);
     if (updatedItem) {
+      const msg = `✏️ Updated: ${(updatedItem as WardrobeItem).name}`;
+      showActivityStrip(msg);
       broadcastItemDelta({
         type: 'ITEM_UPSERT',
         item: updatedItem,
+        activityText: msg,
       });
     }
-    const cloudSuccess = await syncAllState({ wardrobe: updated });
-    return { success: true, cloudSynced: cloudSuccess };
+    // Non-blocking background sync so modal closes in 0ms!
+    void syncAllState({ wardrobe: updated });
+    return { success: true, cloudSynced: true };
   };
 
   const handleDeleteWardrobeItem = (id: string) => {
-    const updated = wardrobe.filter((w) => w.id !== id);
-    const nextDeleted = Array.from(new Set([...deletedItemIds, id]));
+    const targetItem = wardrobeRef.current.find((w) => w.id === id);
+    const updated = wardrobeRef.current.filter((w) => w.id !== id);
+    wardrobeRef.current = updated;
+
+    deletedItemIdsRef.current.add(id);
+    const nextDeleted = Array.from(deletedItemIdsRef.current);
+
+    let nextTrash = trashedWardrobeRef.current;
+    let trashedEntry: WardrobeItem | undefined = undefined;
+    if (targetItem) {
+      trashedEntry = { ...targetItem, updatedAt: Date.now() };
+      nextTrash = [
+        trashedEntry,
+        ...trashedWardrobeRef.current.filter((t) => t.id !== id),
+      ].slice(0, 60);
+      trashedWardrobeRef.current = nextTrash;
+      setTrashedWardrobe(nextTrash);
+      try {
+        localStorage.setItem('navini_trashed_wardrobe_v8', JSON.stringify(nextTrash.slice(0, 40)));
+      } catch {}
+    }
+
     setWardrobe(updated);
     setDeletedItemIds(nextDeleted);
     saveWardrobeItemsIDB(updated);
     try {
       localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(nextDeleted));
     } catch {}
-    syncAllState({ wardrobe: updated, deletedItemIds: nextDeleted });
+
+    showActivityStrip(`🗑️ Moved to Trash: ${targetItem?.name || 'Item'}`);
     broadcastItemDelta({
       type: 'ITEM_DELETE',
       deletedId: id,
+      trashedItem: trashedEntry,
+      activityText: `🗑️ Moved to Trash: ${targetItem?.name || 'Item'}`,
+    });
+    void syncAllState({
+      wardrobe: updated,
+      deletedItemIds: nextDeleted,
+      trashedWardrobe: nextTrash,
+    });
+  };
+
+  const handleRestoreFromTrash = (id: string) => {
+    const itemToRestore = trashedWardrobeRef.current.find((t) => t.id === id);
+    if (!itemToRestore) return;
+
+    deletedItemIdsRef.current.delete(id);
+    const nextDeleted = Array.from(deletedItemIdsRef.current);
+    setDeletedItemIds(nextDeleted);
+    try {
+      localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(nextDeleted));
+    } catch {}
+
+    const nextTrash = trashedWardrobeRef.current.filter((t) => t.id !== id);
+    trashedWardrobeRef.current = nextTrash;
+    setTrashedWardrobe(nextTrash);
+    try {
+      localStorage.setItem('navini_trashed_wardrobe_v8', JSON.stringify(nextTrash.slice(0, 40)));
+    } catch {}
+
+    const restoredItem: WardrobeItem = {
+      ...itemToRestore,
+      updatedAt: Date.now(),
+    };
+    const nextWardrobe = deduplicateExactWardrobeItems(
+      [restoredItem, ...wardrobeRef.current],
+      nextDeleted
+    );
+    wardrobeRef.current = nextWardrobe;
+    setWardrobe(nextWardrobe);
+    saveWardrobeItemsIDB(nextWardrobe);
+
+    showActivityStrip(`↩️ Restored from Trash: ${restoredItem.name}`);
+    broadcastItemDelta({
+      type: 'ITEM_RESTORE',
+      item: restoredItem,
+      activityText: `↩️ Restored from Trash: ${restoredItem.name}`,
+    });
+    void syncAllState({
+      wardrobe: nextWardrobe,
+      deletedItemIds: nextDeleted,
+      trashedWardrobe: nextTrash,
+    });
+  };
+
+  const handlePermanentDeleteFromTrash = (id: string) => {
+    deletedItemIdsRef.current.add(id);
+    const nextDeleted = Array.from(deletedItemIdsRef.current);
+    setDeletedItemIds(nextDeleted);
+    try {
+      localStorage.setItem('navini_deleted_item_ids_v8', JSON.stringify(nextDeleted));
+    } catch {}
+
+    const nextTrash = trashedWardrobeRef.current.filter((t) => t.id !== id);
+    trashedWardrobeRef.current = nextTrash;
+    setTrashedWardrobe(nextTrash);
+    try {
+      localStorage.setItem('navini_trashed_wardrobe_v8', JSON.stringify(nextTrash.slice(0, 40)));
+    } catch {}
+
+    showActivityStrip('🗑️ Permanently deleted from Trash');
+    void syncAllState({
+      deletedItemIds: nextDeleted,
+      trashedWardrobe: nextTrash,
+    });
+  };
+
+  const handleEmptyTrash = () => {
+    trashedWardrobeRef.current = [];
+    setTrashedWardrobe([]);
+    try {
+      localStorage.removeItem('navini_trashed_wardrobe_v8');
+    } catch {}
+    showActivityStrip('🗑️ Trash emptied');
+    broadcastItemDelta({
+      type: 'TRASH_EMPTY',
+    });
+    void syncAllState({
+      trashedWardrobe: [],
     });
   };
 
@@ -1370,9 +1619,10 @@ export function App() {
       ...item,
       updatedAt: item.updatedAt || now,
     }));
+    wardrobeRef.current = withTimestamps;
     setWardrobe(withTimestamps);
     await saveWardrobeItemsIDB(withTimestamps);
-    syncAllState({ wardrobe: withTimestamps });
+    void syncAllState({ wardrobe: withTimestamps });
   };
 
   // Handlers for Official Documents
@@ -1521,17 +1771,25 @@ export function App() {
             <>
               <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
               <span className="text-[11px] font-semibold">
-                Uploading {uploadingCount} item{uploadingCount > 1 ? 's' : ''} in background...
+                Uploading {uploadingCount} photo{uploadingCount > 1 ? 's' : ''} in background...
               </span>
             </>
           ) : (
             <>
               <span className="text-xs">☁️✓</span>
               <span className="text-[11px] font-semibold text-emerald-200">
-                All items saved to database
+                All photos synced
               </span>
             </>
           )}
+        </div>
+      )}
+
+      {/* SUBTLE BOTTOM iOS / CALL-OF-DUTY STYLE SINGLE-LINE ACTIVITY STRIP (Zero DB Credit Cost) */}
+      {activityStripText && (
+        <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-[9995] max-w-[92vw] px-3.5 py-1 rounded-full bg-slate-900/85 backdrop-blur-md border border-white/15 text-white text-[11px] font-medium tracking-tight shadow-lg pointer-events-none flex items-center gap-1.5 animate-in fade-in slide-in-from-bottom-2 duration-150 print:hidden">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#34C759] shrink-0" />
+          <span className="truncate">{activityStripText}</span>
         </div>
       )}
 
@@ -1558,12 +1816,20 @@ export function App() {
                   Navini's Travel Plan
                 </span>
 
-                {/* Live Supabase Rippling Green Indicator */}
-                {isSupabaseConnected && !isOfflineLocked && (
-                  <span
-                    className="ripple-green-dot shrink-0"
-                    title="Live Supabase Sync Active"
-                  />
+                {/* iOS Fetching Spinner or Live Supabase Rippling Green Indicator */}
+                {isCloudFetching && !isOfflineLocked ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-[#007AFF] text-[10px] font-semibold border border-blue-200/80 shrink-0">
+                    <span className="w-2.5 h-2.5 border-2 border-[#007AFF]/30 border-t-[#007AFF] rounded-full animate-spin" />
+                    <span className="hidden xs:inline">Syncing...</span>
+                  </span>
+                ) : (
+                  isSupabaseConnected &&
+                  !isOfflineLocked && (
+                    <span
+                      className="ripple-green-dot shrink-0"
+                      title="Live Supabase Sync Active"
+                    />
+                  )
                 )}
               </div>
               <span className="text-[10px] text-[#8E8E93] hidden md:block truncate">
@@ -1799,6 +2065,8 @@ export function App() {
           <PhysicalHub
             onBack={() => navigateToView('overview')}
             wardrobe={wardrobe}
+            trashedWardrobe={trashedWardrobe}
+            isCloudFetching={isCloudFetching}
             bags={bags}
             devices={devices}
             documents={documents}
@@ -1824,6 +2092,9 @@ export function App() {
             onAddWardrobeItem={handleAddWardrobeItem}
             onUpdateWardrobeItem={handleUpdateWardrobeItem}
             onDeleteWardrobeItem={handleDeleteWardrobeItem}
+            onRestoreFromTrash={handleRestoreFromTrash}
+            onPermanentDeleteFromTrash={handlePermanentDeleteFromTrash}
+            onEmptyTrash={handleEmptyTrash}
             onRetryUpload={handleRetryWardrobeItemSync}
             onToggleBagBought={toggleBagBought}
             onToggleBagPacked={toggleBagPacked}

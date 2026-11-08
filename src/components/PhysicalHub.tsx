@@ -50,6 +50,8 @@ import { ManageCategoriesModal } from './ManageCategoriesModal';
 interface PhysicalHubProps {
   onBack: () => void;
   wardrobe: WardrobeItem[];
+  trashedWardrobe?: WardrobeItem[];
+  isCloudFetching?: boolean;
   bags: BagAsset[];
   devices: DeviceAsset[];
   gifts?: any[];
@@ -76,6 +78,9 @@ interface PhysicalHubProps {
   onAddWardrobeItem: (item: Omit<WardrobeItem, 'id'>) => Promise<any> | void;
   onUpdateWardrobeItem: (id: string, updated: Partial<WardrobeItem>) => Promise<any> | void;
   onDeleteWardrobeItem: (id: string) => void;
+  onRestoreFromTrash?: (id: string) => void;
+  onPermanentDeleteFromTrash?: (id: string) => void;
+  onEmptyTrash?: () => void;
   onRetryUpload?: (id: string) => void;
   onToggleBagBought: (id: string) => void;
   onToggleBagPacked?: (id: string) => void;
@@ -367,9 +372,13 @@ async function processImageCanvas(dataUrl: string, action: 'rotate-left' | 'rota
   });
 }
 
+const MODAL_DRAFT_KEY = 'navini_item_modal_draft_v1';
+
 export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   onBack,
   wardrobe,
+  trashedWardrobe = [],
+  isCloudFetching = false,
   bags,
   devices,
   documents = [],
@@ -395,11 +404,14 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   onAddWardrobeItem,
   onUpdateWardrobeItem,
   onDeleteWardrobeItem,
+  onRestoreFromTrash,
+  onPermanentDeleteFromTrash,
+  onEmptyTrash,
   onRetryUpload,
   onToggleBagBought,
   onToggleDeviceBought,
 }) => {
-  // Active Category Filter ('all' or one of the canonical categories)
+  // Active Category Filter ('all', 'trash', 'unnamed', or one of the canonical categories)
   const [internalCategory, setInternalCategory] = useState<string>('all');
   const selectedCategory = propSelectedCategory !== undefined ? propSelectedCategory : internalCategory;
 
@@ -435,6 +447,68 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   const [formColorHex, setFormColorHex] = useState('#38bdf8');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  // Auto-saved Draft state (when closing Add Item window without pressing Save Changes)
+  const [hasSavedDraft, setHasSavedDraft] = useState<boolean>(() => {
+    try {
+      return Boolean(localStorage.getItem(MODAL_DRAFT_KEY));
+    } catch {
+      return false;
+    }
+  });
+  const [restoredDraftBanner, setRestoredDraftBanner] = useState<boolean>(false);
+
+  // Automatically persist unsaved Add Modal fields as a draft in localStorage
+  React.useEffect(() => {
+    if (!isModalOpen || editingItem) return;
+    const hasContent =
+      formName.trim().length > 0 ||
+      formNotes.trim().length > 0 ||
+      (formPhotoUrl && !formPhotoUrl.startsWith('blob:'));
+
+    if (hasContent) {
+      try {
+        const draftPayload = {
+          name: formName,
+          category: formCategory,
+          subType: formSubType,
+          quantity: formQuantity,
+          targetBag: formTargetBag,
+          notes: formNotes,
+          photoUrl: formPhotoUrl && !formPhotoUrl.startsWith('blob:') ? formPhotoUrl : '',
+          colorHex: formColorHex,
+          savedAt: Date.now(),
+        };
+        localStorage.setItem(MODAL_DRAFT_KEY, JSON.stringify(draftPayload));
+        setHasSavedDraft(true);
+      } catch {}
+    }
+  }, [
+    isModalOpen,
+    editingItem,
+    formName,
+    formCategory,
+    formSubType,
+    formQuantity,
+    formTargetBag,
+    formNotes,
+    formPhotoUrl,
+    formColorHex,
+  ]);
+
+  const handleDiscardDraft = () => {
+    try {
+      localStorage.removeItem(MODAL_DRAFT_KEY);
+    } catch {}
+    setHasSavedDraft(false);
+    setRestoredDraftBanner(false);
+    cleanupRawBlobUrl();
+    selectedFileRef.current = null;
+    setFormName('');
+    setFormNotes('');
+    setFormPhotoUrl('');
+    setFormQuantity('1');
+  };
 
   const rawBlobUrlRef = useRef<string | null>(null);
   const selectedFileRef = useRef<File | null>(null);
@@ -715,18 +789,42 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   const packedCount = wardrobe.filter((w) => w.isPacked).length;
   const packedPercent = Math.round((packedCount / (wardrobe.length || 1)) * 100);
 
-  // Handlers for Add / Edit Modal with Sticky Category & Bag Defaults (Requirement #3)
+  // Handlers for Add / Edit Modal with Auto-Restored Drafts & Sticky Category/Bag Defaults
   const handleOpenAddModal = () => {
     cleanupRawBlobUrl();
     selectedFileRef.current = null;
     setEditingItem(null);
+
+    // Check if there is an unsaved draft from an accidentally closed window
+    try {
+      const savedDraftRaw = localStorage.getItem(MODAL_DRAFT_KEY);
+      if (savedDraftRaw) {
+        const draft = JSON.parse(savedDraftRaw);
+        if (draft && (draft.name || draft.notes || draft.photoUrl)) {
+          setFormName(draft.name || '');
+          setFormCategory(draft.category || 'Dresses & Frocks');
+          setFormTargetBag(draft.targetBag || 'Main Large Rolling Suitcase');
+          setFormSubType(draft.subType || '');
+          setFormQuantity(String(draft.quantity ?? '1'));
+          setFormNotes(draft.notes || '');
+          setFormPhotoUrl(draft.photoUrl || '');
+          setFormColorHex(draft.colorHex || '#38bdf8');
+          setRestoredDraftBanner(true);
+          setHasSavedDraft(true);
+          setIsModalOpen(true);
+          return;
+        }
+      }
+    } catch {}
+
+    setRestoredDraftBanner(false);
     setFormName('');
 
     const savedLastCat = localStorage.getItem('navini_last_used_category') || 'Dresses & Frocks';
     const savedLastBag = localStorage.getItem('navini_last_used_bag') || 'Main Large Rolling Suitcase';
 
     const defaultCat =
-      selectedCategory !== 'all' && selectedCategory !== 'unnamed'
+      selectedCategory !== 'all' && selectedCategory !== 'unnamed' && selectedCategory !== 'trash'
         ? selectedCategory
         : savedLastCat;
 
@@ -743,6 +841,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   const handleOpenEditModal = (item: WardrobeItem) => {
     cleanupRawBlobUrl();
     selectedFileRef.current = null;
+    setRestoredDraftBanner(false);
     setEditingItem(item);
     setFormName(item.name);
     setFormCategory(item.category);
@@ -756,79 +855,89 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
   };
 
   const handleSaveModal = async (keepOpenForNext = false) => {
-    cleanupRawBlobUrl();
-    selectedFileRef.current = null;
     const trimmedName = formName.trim();
     if (!trimmedName) return;
 
-    // Persist sticky category & bag selection in localStorage (Requirement #3)
-    try {
-      localStorage.setItem('navini_last_used_category', formCategory);
-      localStorage.setItem('navini_last_used_bag', formTargetBag);
-    } catch {}
+    const pendingFile = selectedFileRef.current;
+    const currentPhotoUrl = formPhotoUrl;
+    const currentEditingItem = editingItem;
+    const currentCategory = formCategory;
+    const currentSubType = formSubType;
+    const currentQuantity = formQuantity.trim() || '1';
+    const currentTargetBag = formTargetBag;
+    const currentNotes = formNotes.trim();
+    const currentColorHex = formColorHex;
 
+    // Clear auto-saved draft immediately since user explicitly saved
     try {
-      const finalPhotoUrl = formPhotoUrl;
-      const isLocalDataPhoto = finalPhotoUrl && finalPhotoUrl.startsWith('data:image');
+      localStorage.removeItem(MODAL_DRAFT_KEY);
+      localStorage.setItem('navini_last_used_category', currentCategory);
+      localStorage.setItem('navini_last_used_bag', currentTargetBag);
+    } catch {}
+    setHasSavedDraft(false);
+    setRestoredDraftBanner(false);
+
+    // 1. CLOSE THE MODAL IMMEDIATELY (0ms) OR CLEAR FOR NEXT ITEM WITHOUT WAITING ON NETWORK!
+    if (keepOpenForNext) {
+      cleanupRawBlobUrl();
+      selectedFileRef.current = null;
+      setFormName('');
+      setFormNotes('');
+      setFormPhotoUrl('');
+      setFormQuantity('1');
+      setEditingItem(null);
+    } else {
+      setIsModalOpen(false);
+      setEditingItem(null);
+      setFormName('');
+      setFormNotes('');
+      setFormPhotoUrl('');
+      setFormQuantity('1');
+      selectedFileRef.current = null;
+    }
+
+    // 2. Process item & dispatch background upload non-blockingly
+    try {
+      let resolvedPhotoUrl = currentPhotoUrl;
+      if (resolvedPhotoUrl && resolvedPhotoUrl.startsWith('blob:') && pendingFile) {
+        try {
+          resolvedPhotoUrl = await downscalePhotoTo600(pendingFile, 480, 0.68);
+        } catch {}
+        cleanupRawBlobUrl();
+      } else {
+        cleanupRawBlobUrl();
+      }
+
+      const isLocalDataPhoto = Boolean(resolvedPhotoUrl && resolvedPhotoUrl.startsWith('data:image'));
 
       const itemPayload = {
         name: trimmedName,
-        category: formCategory,
-        subType: formCategory === 'Medicine & First Aid' ? formSubType : undefined,
-        quantity: formQuantity.trim() || '1',
-        targetBag: formTargetBag,
-        notes: formNotes.trim(),
-        photoUrl: finalPhotoUrl,
-        colorHex: formColorHex,
+        category: currentCategory,
+        subType: currentCategory === 'Medicine & First Aid' ? currentSubType : undefined,
+        quantity: currentQuantity,
+        targetBag: currentTargetBag,
+        notes: currentNotes,
+        photoUrl: resolvedPhotoUrl,
+        colorHex: currentColorHex,
         syncStatus: (isLocalDataPhoto ? 'uploading' : 'synced') as 'uploading' | 'synced',
-        uploadProgress: isLocalDataPhoto ? 15 : 100,
+        uploadProgress: isLocalDataPhoto ? 20 : 100,
       };
 
-      let saveResult: any = null;
-      if (editingItem) {
-        saveResult = await onUpdateWardrobeItem(editingItem.id, itemPayload);
+      if (currentEditingItem) {
+        void onUpdateWardrobeItem(currentEditingItem.id, itemPayload);
       } else {
-        saveResult = await onAddWardrobeItem({
+        void onAddWardrobeItem({
           ...itemPayload,
           isBought: true,
           isPacked: false,
         });
       }
-
-      // Verified save toast: Only display "✓ Updated to Database" after genuinely resolving without error! (Requirement #2.3)
-      if (saveResult && saveResult.cloudSynced === false) {
-        setSaveToast('💾 Saved to Local Vault (Cloud Sync Pending)');
-      } else {
-        setSaveToast('✓ Updated to Database');
-      }
-      setTimeout(() => setSaveToast(null), 2500);
-
-      if (keepOpenForNext) {
-        // Clear name, notes, and photo, but preserve selected category and luggage allocation (Requirement #3)
-        setFormName('');
-        setFormNotes('');
-        setFormPhotoUrl('');
-        setFormQuantity('1');
-        setEditingItem(null);
-      } else {
-        setIsModalOpen(false);
-        setEditingItem(null);
-        setFormName('');
-        setFormNotes('');
-        setFormPhotoUrl('');
-        setFormQuantity('1');
-      }
     } catch (err) {
-      console.error('Error saving wardrobe item:', err);
-      setSaveToast('⚠️ Save error occurred');
-      setTimeout(() => setSaveToast(null), 3000);
-      if (!keepOpenForNext) {
-        setIsModalOpen(false);
-      }
+      console.error('Error saving wardrobe item in background:', err);
     }
   };
 
-  // Image Upload with Instant 0ms Preview + Background HTML5 Canvas Downscaling (15MB -> ~25KB, max 600px, 0.72 quality)
+  // Image Selection with Instant 0ms Preview + Fast Local Canvas Downscaling (Cloud upload runs in background after Save!)
   const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -865,22 +974,10 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         }
       }
 
-      // 2. Immediate Background Canvas Compression (15MB -> ~25KB, max 600px, 0.72 quality)
-      const compressedDataUrl = await downscalePhotoTo600(processableBlob, 600, 0.72);
-      
-      // Swap preview's underlying save payload to compressed Base64 string & revoke blob URL to free phone RAM
+      // 2. Fast Local Canvas Downscale (15MB -> ~20KB, max 480px, 0.68 quality)
+      const compressedDataUrl = await downscalePhotoTo600(processableBlob, 480, 0.68);
       setFormPhotoUrl(compressedDataUrl);
       cleanupRawBlobUrl();
-
-      // 3. Parallel background Supabase upload
-      try {
-        const publicUrl = await uploadPhotoToSupabase(file, 'wardrobe');
-        if (publicUrl) {
-          setFormPhotoUrl(publicUrl);
-        }
-      } catch (err) {
-        console.warn('Supabase upload background fallback (local compressed photo is safe):', err);
-      }
     } catch (err) {
       console.error('Photo processing error:', err);
     } finally {
@@ -1370,14 +1467,14 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
             <span>Print</span>
           </button>
 
-          {/* Add Item Button */}
+          {/* Add Item Button (with Unsaved Draft Indicator) */}
           <button
             type="button"
             onClick={handleOpenAddModal}
-            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-blue-600 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-all cursor-pointer whitespace-nowrap"
+            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#007AFF] hover:bg-blue-600 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-all cursor-pointer whitespace-nowrap relative"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add</span>
+            <span>{hasSavedDraft ? 'Add (📝 Draft)' : 'Add'}</span>
           </button>
         </div>
       </div>
@@ -1423,7 +1520,12 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         {allCategories.map((cat) => {
           const normCat = normalizeCategoryName(cat);
           const count = wardrobe.filter((w) => normalizeCategoryName(w.category) === normCat || w.category === cat).length;
-          const isActive = selectedCategory === cat || (selectedCategory !== 'all' && selectedCategory !== 'unnamed' && normalizeCategoryName(selectedCategory) === normCat);
+          const isActive =
+            selectedCategory === cat ||
+            (selectedCategory !== 'all' &&
+              selectedCategory !== 'unnamed' &&
+              selectedCategory !== 'trash' &&
+              normalizeCategoryName(selectedCategory) === normCat);
           return (
             <button
               key={cat}
@@ -1446,6 +1548,28 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
             </button>
           );
         })}
+
+        {/* 🗑️ Trash / Recently Deleted Pill */}
+        <button
+          type="button"
+          onClick={() => setSelectedCategory('trash')}
+          className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+            selectedCategory === 'trash'
+              ? 'bg-rose-600 text-white shadow-xs'
+              : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+          }`}
+          title="View recently deleted items & restore drafts"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          <span>Trash</span>
+          <span
+            className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              selectedCategory === 'trash' ? 'bg-white/20 text-white' : 'bg-rose-200/70 text-rose-900'
+            }`}
+          >
+            {trashedWardrobe.length}
+          </span>
+        </button>
 
         {/* ⚠️ Unnamed / Retakes Filter Pill (Requirement #4.2) */}
         {unnamedItems.length > 0 && (
@@ -1493,254 +1617,411 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         </button>
       </div>
 
-      {/* 3. 2-COLUMN SQUARE PHOTO GRID FOR WARDROBE ITEMS (iOS Visual Cards) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 px-1 sm:px-0">
-        {displayedItems.map((item) => {
-          const visual = getCategoryVisual(item?.name, item?.category);
-          const isPacked = Boolean(item?.isPacked);
-          const isSelected = selectedIds.has(item.id);
-          const { mainTitle, colorLabel } = parseTitleAndColor(item?.name);
+      {/* 2.5 TRASH & DRAFTS RECOVERY VIEW (When selectedCategory === 'trash') */}
+      {selectedCategory === 'trash' ? (
+        <div className="space-y-3">
+          <div className="ios-card p-3.5 sm:p-4 bg-rose-50/50 border border-rose-200/80 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-xs sm:text-sm font-bold text-rose-950 flex items-center gap-1.5">
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>Trash & Deleted Items ({trashedWardrobe.length})</span>
+              </h3>
+              <p className="text-[11px] text-rose-800/80 mt-0.5">
+                Items deleted on any device are held here safely so you can restore or edit them in one tap without re-adding.
+              </p>
+            </div>
+            {trashedWardrobe.length > 0 && onEmptyTrash && (
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmModalState({
+                    isOpen: true,
+                    title: 'Empty Trash Forever?',
+                    message: `Permanently delete all ${trashedWardrobe.length} items in Trash? This cannot be undone.`,
+                    confirmLabel: 'Empty Trash',
+                    isDestructive: true,
+                    onConfirm: () => {
+                      onEmptyTrash();
+                      setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+                    },
+                  });
+                }}
+                className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-2xs transition-colors cursor-pointer"
+              >
+                Empty Trash
+              </button>
+            )}
+          </div>
 
-          return (
-            <div
-              key={item.id}
-              className={`ios-card p-2 sm:p-2.5 rounded-2xl flex flex-col justify-between transition-all border shadow-xs relative overflow-hidden ${
-                isSelected
-                  ? 'ring-2 ring-[#007AFF] border-[#007AFF] bg-blue-50/20'
-                  : isPacked
-                  ? 'bg-emerald-50/25 border-emerald-400 shadow-sm'
-                  : 'bg-white border-black/10 hover:border-slate-300'
-              }`}
-            >
-              {/* Photo Container */}
-              <div className="w-full aspect-square rounded-[14px] bg-slate-100 border border-black/5 overflow-hidden flex items-center justify-center relative group shrink-0">
-                {/* Multi-Select Checkbox Badge */}
-                {isSelectionMode && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleSelectionId(item.id);
-                    }}
-                    className={`absolute top-2 left-2 z-30 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-md ${
-                      isSelected ? 'bg-[#007AFF] text-white' : 'bg-white/90 text-slate-400 border border-black/20'
-                    }`}
+          {trashedWardrobe.length === 0 ? (
+            <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-slate-200 bg-white/60">
+              <p className="text-sm font-semibold text-slate-700">Trash is empty</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Deleted wardrobe items will appear here so you never lose work by accident.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 px-1 sm:px-0">
+              {trashedWardrobe.map((item) => {
+                const visual = getCategoryVisual(item?.name, item?.category);
+                const { mainTitle, colorLabel } = parseTitleAndColor(item?.name);
+                return (
+                  <div
+                    key={item.id}
+                    className="ios-card p-2 sm:p-2.5 rounded-2xl flex flex-col justify-between border border-rose-200 bg-white/90 shadow-xs relative overflow-hidden"
                   >
-                    {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                  </button>
-                )}
-
-                {item.photoUrl ? (
-                  <img
-                    src={item.photoUrl}
-                    alt={String(item.name || '')}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-4xl">{visual.emoji}</span>
-                )}
-
-                {/* Live In-Card Shimmer & Background Upload Progress (Requirement #2) */}
-                {item.syncStatus === 'uploading' && (
-                  <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-xs flex flex-col items-center justify-center p-2.5 text-white z-20 animate-pulse">
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mb-1.5" />
-                    <span className="text-[10px] font-bold tracking-tight text-white/95">
-                      Uploading to DB...
-                    </span>
-                    <div className="w-full max-w-[85%] h-1.5 bg-white/20 rounded-full mt-2 overflow-hidden">
-                      <div
-                        className="h-full bg-[#007AFF] transition-all duration-300 rounded-full"
-                        style={{ width: `${item.uploadProgress || 20}%` }}
-                      />
+                    <div className="w-full aspect-square rounded-[14px] bg-slate-100 border border-black/5 overflow-hidden flex items-center justify-center relative shrink-0">
+                      {item.photoUrl ? (
+                        <img
+                          src={item.photoUrl}
+                          alt={String(item.name || '')}
+                          className="w-full h-full object-cover opacity-85"
+                        />
+                      ) : (
+                        <span className="text-4xl opacity-75">{visual.emoji}</span>
+                      )}
+                      <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 text-white font-mono font-bold text-[10px]">
+                        {formatQuantityBadge(item.quantity)}
+                      </span>
                     </div>
-                    <span className="text-[8px] font-mono text-white/70 mt-1">
-                      {item.uploadProgress || 20}%
-                    </span>
+
+                    <div className="flex-1 flex flex-col justify-between gap-1.5 pt-2">
+                      <div>
+                        <h3 className="font-bold text-[12px] sm:text-xs text-slate-900 leading-tight line-clamp-2">
+                          {mainTitle}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                          {colorLabel && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-semibold">
+                              🎨 {colorLabel}
+                            </span>
+                          )}
+                          <span className="text-[9px] font-mono text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md truncate max-w-full">
+                            {item.category}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-auto pt-1.5 border-t border-black/5 flex items-center justify-between gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onRestoreFromTrash?.(item.id);
+                          }}
+                          className="flex-1 py-1.5 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center justify-center gap-1 cursor-pointer shadow-2xs transition-colors"
+                          title="Restore back to wardrobe"
+                        >
+                          <span>↩️ Restore</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onRestoreFromTrash?.(item.id);
+                            setSelectedCategory('all');
+                            handleOpenEditModal(item);
+                          }}
+                          className="py-1.5 px-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#007AFF] font-bold text-[11px] cursor-pointer transition-colors"
+                          title="Restore and open in editor"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfirmModalState({
+                              isOpen: true,
+                              title: 'Delete Forever?',
+                              message: `Permanently delete "${item.name}" from Trash?`,
+                              confirmLabel: 'Delete Forever',
+                              isDestructive: true,
+                              onConfirm: () => {
+                                onPermanentDeleteFromTrash?.(item.id);
+                                setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+                              },
+                            });
+                          }}
+                          className="py-1.5 px-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[11px] cursor-pointer transition-colors"
+                          title="Delete permanently"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                )}
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* 3. 2-COLUMN SQUARE PHOTO GRID FOR WARDROBE ITEMS (iOS Visual Cards) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 px-1 sm:px-0">
+            {displayedItems.map((item) => {
+              const visual = getCategoryVisual(item?.name, item?.category);
+              const isPacked = Boolean(item?.isPacked);
+              const isSelected = selectedIds.has(item.id);
+              const { mainTitle, colorLabel } = parseTitleAndColor(item?.name);
 
-                {/* Sync Error State & In-Card Retry Button */}
-                {item.syncStatus === 'error' && (
-                  <div className="absolute inset-0 bg-red-950/85 backdrop-blur-xs flex flex-col items-center justify-center p-2 text-white z-20 text-center">
-                    <span className="text-base mb-1">⚠️</span>
-                    <span className="text-[10px] font-bold text-red-200 leading-tight mb-2">Sync Failed</span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRetryUpload?.(item.id);
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold shadow-xs transition-colors cursor-pointer"
-                    >
-                      Retry Sync
-                    </button>
-                  </div>
-                )}
-
-                {/* Quantity Badge in Corner */}
-                <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 text-white font-mono font-bold text-[10px] shadow-2xs z-10">
-                  {formatQuantityBadge(item.quantity)}
-                </span>
-
-                {/* Medicine SubType Badge */}
-                {item.subType && (
-                  <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-red-600 text-white font-bold text-[9px] shadow-2xs z-10">
-                    {item.subType}
-                  </span>
-                )}
-
-                {/* Quick photo change on hover */}
-                <button
-                  type="button"
-                  onClick={() => handleOpenEditModal(item)}
-                  className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer z-10"
-                  title="Edit photo"
+              return (
+                <div
+                  key={item.id}
+                  className={`ios-card p-2 sm:p-2.5 rounded-2xl flex flex-col justify-between transition-all border shadow-xs relative overflow-hidden ${
+                    isSelected
+                      ? 'ring-2 ring-[#007AFF] border-[#007AFF] bg-blue-50/20'
+                      : isPacked
+                      ? 'bg-emerald-50/25 border-emerald-400 shadow-sm'
+                      : 'bg-white border-black/10 hover:border-slate-300'
+                  }`}
                 >
-                  <Camera className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Natural Flex Flow Text Body below Image (Requirement #2 - No Dead Empty Gaps!) */}
-              <div className="flex-1 flex flex-col justify-between gap-1.5 pt-2">
-                {/* Top Text Group */}
-                <div className="min-w-0">
-                  {inlineEditingId === item.id ? (
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        value={inlineEditingTitle}
-                        onChange={(e) => setInlineEditingTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveInlineTitle(item.id);
-                          if (e.key === 'Escape') setInlineEditingId(null);
+                  {/* Photo Container */}
+                  <div className="w-full aspect-square rounded-[14px] bg-slate-100 border border-black/5 overflow-hidden flex items-center justify-center relative group shrink-0">
+                    {/* Multi-Select Checkbox Badge */}
+                    {isSelectionMode && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSelectionId(item.id);
                         }}
-                        className="flex-1 px-2 py-1 text-xs border border-[#007AFF] rounded-lg bg-white focus:outline-none"
-                        autoFocus
+                        className={`absolute top-2 left-2 z-30 w-6 h-6 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-md ${
+                          isSelected ? 'bg-[#007AFF] text-white' : 'bg-white/90 text-slate-400 border border-black/20'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                      </button>
+                    )}
+
+                    {item.photoUrl ? (
+                      <img
+                        src={item.photoUrl}
+                        alt={String(item.name || '')}
+                        className="w-full h-full object-cover"
                       />
-                      <button
-                        type="button"
-                        onClick={() => handleSaveInlineTitle(item.id)}
-                        className="px-2 py-1 bg-[#007AFF] text-white rounded-lg text-xs font-bold cursor-pointer"
-                      >
-                        ✓
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-start justify-between gap-1 group/title">
-                      <h3
-                        onClick={() => {
-                          setInlineEditingId(item.id);
-                          setInlineEditingTitle(String(item.name || ''));
-                        }}
-                        className="font-bold text-[12px] sm:text-xs text-slate-900 tracking-tight leading-[1.25] line-clamp-2 cursor-pointer hover:text-[#007AFF] transition-colors"
-                        title="Tap to rename inline"
-                      >
-                        {mainTitle}
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setInlineEditingId(item.id);
-                          setInlineEditingTitle(String(item.name || ''));
-                        }}
-                        className="text-slate-400 hover:text-[#007AFF] p-0.5 opacity-60 group-hover/title:opacity-100 transition-opacity cursor-pointer shrink-0"
-                        title="Rename item inline"
-                      >
-                        <Edit3 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
+                    ) : (
+                      <span className="text-4xl">{visual.emoji}</span>
+                    )}
 
-                  {/* Inline/Compact Metadata Pills in a single wrapping flex row */}
-                  <div className="flex flex-wrap items-center gap-1 mt-1">
-                    {colorLabel && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200/80 text-[9.5px] font-semibold max-w-full truncate">
-                        <span>🎨</span>
-                        <span className="truncate">{colorLabel}</span>
+                    {/* Non-Blocking Corner Icon for Background Image Upload (Photo remains 100% visible!) */}
+                    {item.syncStatus === 'uploading' && (
+                      <div
+                        className="absolute bottom-2 left-2 z-20 px-2 py-1 rounded-full bg-slate-900/85 backdrop-blur-md border border-white/20 text-white flex items-center gap-1.5 shadow-md pointer-events-none"
+                        title="Uploading image in background..."
+                      >
+                        <div className="w-3 h-3 border-2 border-white/30 border-t-[#38bdf8] rounded-full animate-spin shrink-0" />
+                        <span className="text-[9.5px] font-semibold tracking-tight">
+                          ☁️ Uploading
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Sync Error State & In-Card Retry Badge */}
+                    {item.syncStatus === 'error' && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRetryUpload?.(item.id);
+                        }}
+                        className="absolute bottom-2 left-2 z-20 px-2 py-1 rounded-full bg-red-600/95 text-white text-[9.5px] font-bold flex items-center gap-1 shadow-md cursor-pointer"
+                        title="Tap to retry photo upload"
+                      >
+                        <span>⚠️ Retry Upload</span>
+                      </button>
+                    )}
+
+                    {/* Quantity Badge in Corner */}
+                    <span className="absolute top-2 right-2 px-1.5 py-0.5 rounded-md bg-black/70 text-white font-mono font-bold text-[10px] shadow-2xs z-10">
+                      {formatQuantityBadge(item.quantity)}
+                    </span>
+
+                    {/* Medicine SubType Badge */}
+                    {item.subType && (
+                      <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded-md bg-red-600 text-white font-bold text-[9px] shadow-2xs z-10">
+                        {item.subType}
                       </span>
                     )}
-                    <span className="text-[9.5px] font-mono text-slate-600 truncate bg-slate-100 px-1.5 py-0.5 rounded-md inline-block max-w-full">
-                      📍 {normalizeBagLocation(item?.targetBag)}
-                    </span>
-                  </div>
-                </div>
 
-                {/* Bottom Action Row: Anchored at bottom with mt-auto */}
-                <div className="mt-auto pt-1.5 border-t border-black/5 flex items-center justify-between gap-1">
-                  <button
-                    type="button"
-                    onClick={() => onToggleWardrobePacked(item.id)}
-                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs ${
-                      isPacked
-                        ? 'bg-[#16A34A] text-white hover:bg-[#15803D]'
-                        : 'border border-slate-300 hover:border-slate-400 bg-white text-slate-700'
-                    }`}
-                  >
-                    <span>{isPacked ? '✓ Packed' : '○ To Pack'}</span>
-                  </button>
-
-                  <div className="flex items-center gap-0.5">
+                    {/* Quick photo change on hover */}
                     <button
                       type="button"
                       onClick={() => handleOpenEditModal(item)}
-                      className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
-                      title="Edit item"
+                      className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer z-10"
+                      title="Edit photo"
                     >
-                      <Edit3 className="w-3 h-3" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setConfirmModalState({
-                          isOpen: true,
-                          title: 'Delete Item?',
-                          message: `Are you sure you want to remove "${String(item.name || '')}" from your wardrobe?`,
-                          confirmLabel: 'Delete',
-                          isDestructive: true,
-                          onConfirm: () => {
-                            onDeleteWardrobeItem(item.id);
-                            setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
-                          },
-                        });
-                      }}
-                      className="w-6 h-6 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 flex items-center justify-center transition-colors cursor-pointer"
-                      title="Delete item"
-                    >
-                      <Trash2 className="w-3 h-3" />
+                      <Camera className="w-5 h-5" />
                     </button>
                   </div>
+
+                  {/* Natural Flex Flow Text Body below Image (Requirement #2 - No Dead Empty Gaps!) */}
+                  <div className="flex-1 flex flex-col justify-between gap-1.5 pt-2">
+                    {/* Top Text Group */}
+                    <div className="min-w-0">
+                      {inlineEditingId === item.id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={inlineEditingTitle}
+                            onChange={(e) => setInlineEditingTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveInlineTitle(item.id);
+                              if (e.key === 'Escape') setInlineEditingId(null);
+                            }}
+                            className="flex-1 px-2 py-1 text-xs border border-[#007AFF] rounded-lg bg-white focus:outline-none"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSaveInlineTitle(item.id)}
+                            className="px-2 py-1 bg-[#007AFF] text-white rounded-lg text-xs font-bold cursor-pointer"
+                          >
+                            ✓
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-start justify-between gap-1 group/title">
+                          <h3
+                            onClick={() => {
+                              setInlineEditingId(item.id);
+                              setInlineEditingTitle(String(item.name || ''));
+                            }}
+                            className="font-bold text-[12px] sm:text-xs text-slate-900 tracking-tight leading-[1.25] line-clamp-2 cursor-pointer hover:text-[#007AFF] transition-colors"
+                            title="Tap to rename inline"
+                          >
+                            {mainTitle}
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInlineEditingId(item.id);
+                              setInlineEditingTitle(String(item.name || ''));
+                            }}
+                            className="text-slate-400 hover:text-[#007AFF] p-0.5 opacity-60 group-hover/title:opacity-100 transition-opacity cursor-pointer shrink-0"
+                            title="Rename item inline"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Inline/Compact Metadata Pills in a single wrapping flex row */}
+                      <div className="flex flex-wrap items-center gap-1 mt-1">
+                        {colorLabel && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200/80 text-[9.5px] font-semibold max-w-full truncate">
+                            <span>🎨</span>
+                            <span className="truncate">{colorLabel}</span>
+                          </span>
+                        )}
+                        <span className="text-[9.5px] font-mono text-slate-600 truncate bg-slate-100 px-1.5 py-0.5 rounded-md inline-block max-w-full">
+                          📍 {normalizeBagLocation(item?.targetBag)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Bottom Action Row: Anchored at bottom with mt-auto */}
+                    <div className="mt-auto pt-1.5 border-t border-black/5 flex items-center justify-between gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onToggleWardrobePacked(item.id)}
+                        className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs ${
+                          isPacked
+                            ? 'bg-[#16A34A] text-white hover:bg-[#15803D]'
+                            : 'border border-slate-300 hover:border-slate-400 bg-white text-slate-700'
+                        }`}
+                      >
+                        <span>{isPacked ? '✓ Packed' : '○ To Pack'}</span>
+                      </button>
+
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditModal(item)}
+                          className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+                          title="Edit item"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfirmModalState({
+                              isOpen: true,
+                              title: 'Move Item to Trash?',
+                              message: `Move "${String(item.name || '')}" to Trash? You can restore it anytime from the Trash tab.`,
+                              confirmLabel: 'Move to Trash',
+                              isDestructive: true,
+                              onConfirm: () => {
+                                onDeleteWardrobeItem(item.id);
+                                setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+                              },
+                            });
+                          }}
+                          className="w-6 h-6 rounded-full bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 flex items-center justify-center transition-colors cursor-pointer"
+                          title="Move item to Trash"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* iOS Native Fetching Shimmer Screen OR Empty State */}
+          {displayedItems.length === 0 && (
+            isCloudFetching && wardrobe.length === 0 ? (
+              <div className="space-y-4 py-4">
+                <div className="ios-card p-4 flex items-center justify-center gap-3 bg-white/90 backdrop-blur-md border border-blue-100 shadow-xs">
+                  <div className="w-5 h-5 border-2 border-[#007AFF]/30 border-t-[#007AFF] rounded-full animate-spin shrink-0" />
+                  <div className="text-left">
+                    <p className="text-xs sm:text-sm font-bold text-slate-900">
+                      Fetching your travel inventory...
+                    </p>
+                    <p className="text-[11px] text-[#8E8E93]">
+                      Syncing exact items and photos from cloud database
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 px-1 sm:px-0">
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                    <div key={n} className="ios-card p-2.5 rounded-2xl bg-white border border-black/5 space-y-2.5 animate-pulse">
+                      <div className="w-full aspect-square rounded-[14px] bg-slate-200/80" />
+                      <div className="h-3 bg-slate-200 rounded-md w-3/4" />
+                      <div className="h-2.5 bg-slate-100 rounded-md w-1/2" />
+                      <div className="h-6 bg-slate-100 rounded-full w-full mt-1" />
+                    </div>
+                  ))}
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Empty State for Wardrobe Search or Empty Category */}
-      {displayedItems.length === 0 && (
-        <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
-          <p className="text-sm font-semibold text-slate-700">
-            {wardrobeSearch.trim()
-              ? `No items matching "${wardrobeSearch.trim()}"`
-              : selectedCategory !== 'all'
-              ? `No items found in "${selectedCategory}"`
-              : 'No wardrobe items yet'}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            {wardrobeSearch.trim()
-              ? 'Try searching for a different color, item title, or suitcase.'
-              : 'Tap "+ Add" above to add your first item to this category.'}
-          </p>
-          {wardrobeSearch.trim() && (
-            <button
-              type="button"
-              onClick={() => setWardrobeSearch('')}
-              className="mt-3 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              Clear Search
-            </button>
+            ) : (
+              <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
+                <p className="text-sm font-semibold text-slate-700">
+                  {wardrobeSearch.trim()
+                    ? `No items matching "${wardrobeSearch.trim()}"`
+                    : selectedCategory !== 'all'
+                    ? `No items found in "${selectedCategory}"`
+                    : 'No wardrobe items yet'}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {wardrobeSearch.trim()
+                    ? 'Try searching for a different color, item title, or suitcase.'
+                    : 'Tap "+ Add" above to add your first item to this category.'}
+                </p>
+                {wardrobeSearch.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => setWardrobeSearch('')}
+                    className="mt-3 px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    Clear Search
+                  </button>
+                )}
+              </div>
+            )
           )}
-        </div>
+        </>
       )}
 
       {/* 5. ENLARGED "ADD / EDIT ITEM" MODAL WITH LIVE PHOTO & ORIENTATION PREVIEW */}
@@ -1760,6 +2041,25 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {/* Auto-Restored Unsaved Draft Banner */}
+            {!editingItem && restoredDraftBanner && (
+              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200/90 flex items-center justify-between gap-2 text-xs text-amber-900 animate-in fade-in">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm shrink-0">📝</span>
+                  <span className="font-semibold truncate">
+                    Restored your unsaved draft from earlier
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[11px] shrink-0 cursor-pointer transition-colors"
+                >
+                  Clear Draft
+                </button>
+              </div>
+            )}
 
             <div className="space-y-4 text-xs sm:text-sm">
               {/* Item Name */}

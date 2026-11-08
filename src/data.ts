@@ -240,7 +240,8 @@ export function formatQuantityBadge(rawQuantity: string | number | undefined): s
 
 /**
  * Resolves the creation timestamp of an item for newest-first sorting.
- * Checks `createdAt`, extracts timestamp from ID (e.g. `w-custom-1731000...`), or falls back to `updatedAt`.
+ * Checks `createdAt` or extracts creation timestamp from ID (e.g. `w-custom-1731000...`).
+ * NEVER falls back to `updatedAt` so editing or packing an item never causes cards to jump or reorder!
  */
 export function getItemCreationTime(item?: { id?: string; createdAt?: number; updatedAt?: number } | null): number {
   if (!item) return 0;
@@ -252,7 +253,7 @@ export function getItemCreationTime(item?: { id?: string; createdAt?: number; up
       if (!isNaN(parsed) && parsed > 1000000000) return parsed;
     }
   }
-  return item.updatedAt || 0;
+  return 0;
 }
 
 /**
