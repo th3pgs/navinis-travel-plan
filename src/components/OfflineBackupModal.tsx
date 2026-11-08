@@ -7,7 +7,10 @@ interface OfflineBackupModalProps {
   onClose: () => void;
   checklistItems: ChecklistItem[];
   wardrobeItems: WardrobeItem[];
-  onImportJson: (data: { checklistItems: ChecklistItem[]; wardrobeItems: WardrobeItem[] }) => void;
+  onImportJson: (data: any) => void;
+  onPushMasterToCloud?: () => Promise<void> | void;
+  isMasterPushing?: boolean;
+  onDownloadMasterJson?: () => void;
 }
 
 export const OfflineBackupModal: React.FC<OfflineBackupModalProps> = ({
@@ -16,12 +19,22 @@ export const OfflineBackupModal: React.FC<OfflineBackupModalProps> = ({
   checklistItems,
   wardrobeItems,
   onImportJson,
+  onPushMasterToCloud,
+  isMasterPushing = false,
+  onDownloadMasterJson,
 }) => {
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [confirmStep, setConfirmStep] = useState<0 | 1 | 2>(0);
+  const [deleteTypedText, setDeleteTypedText] = useState<string>('');
 
   if (!isOpen) return null;
 
   const exportJSON = () => {
+    if (onDownloadMasterJson) {
+      onDownloadMasterJson();
+      setStatusMsg({ type: 'success', text: 'Full Master JSON backup downloaded!' });
+      return;
+    }
     const data = {
       exportDate: new Date().toISOString(),
       student: 'Parana Gamage Navini Ravishka Priyantha',
@@ -47,9 +60,9 @@ export const OfflineBackupModal: React.FC<OfflineBackupModalProps> = ({
     reader.onload = (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
-        if (parsed.checklistItems && parsed.wardrobeItems) {
+        if (parsed.wardrobe || parsed.wardrobeItems || parsed.checklistItems) {
           onImportJson(parsed);
-          setStatusMsg({ type: 'success', text: 'State backup imported successfully!' });
+          setStatusMsg({ type: 'success', text: 'State backup imported & synced successfully!' });
           setTimeout(() => {
             onClose();
           }, 1200);
@@ -208,7 +221,7 @@ export const OfflineBackupModal: React.FC<OfflineBackupModalProps> = ({
         )}
 
         <p className="text-xs text-[#8E8E93] leading-relaxed">
-          Mainland China network environments can be restrictive. Save an offline snapshot so you have guaranteed access without internet.
+          Mainland China network environments can be restrictive. Save an offline snapshot so you have guaranteed access without internet, or publish your current progress globally across all devices.
         </p>
 
         {/* Offline HTML Card */}
@@ -237,13 +250,13 @@ export const OfflineBackupModal: React.FC<OfflineBackupModalProps> = ({
             <span>JSON State File</span>
           </div>
           <p className="text-xs text-[#8E8E93] leading-relaxed">
-            Export your current checkbox progress to a backup file, or restore on another device.
+            Export your complete master state to a JSON backup file for offline viewing, or restore on another device.
           </p>
           <div className="grid grid-cols-2 gap-2 pt-1">
             <button
               type="button"
               onClick={exportJSON}
-              className="py-2.5 px-3 rounded-xl border border-black/10 bg-[#F2F2F7] hover:bg-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors text-slate-700"
+              className="py-2.5 px-3 rounded-xl border border-black/10 bg-[#F2F2F7] hover:bg-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors text-slate-700 cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Export JSON</span>
@@ -254,7 +267,127 @@ export const OfflineBackupModal: React.FC<OfflineBackupModalProps> = ({
             </label>
           </div>
         </div>
+
+        {/* Emergency Global Cloud Master Override Card */}
+        <div className="ios-card p-4 sm:p-5 space-y-3 border-l-4 border-l-red-600 bg-red-50/30">
+          <div className="text-sm font-bold text-red-900 flex items-center gap-2">
+            <span>🔴</span>
+            <span>Emergency Master Cloud Override</span>
+          </div>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Replaces all available versions online in the cloud database with this device&apos;s exact current version ({wardrobeItems.length} wardrobe items) and forces every connected device to adopt this copy as the standard.
+          </p>
+          {onPushMasterToCloud && (
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteTypedText('');
+                setConfirmStep(1);
+              }}
+              disabled={isMasterPushing}
+              className="w-full py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer active:scale-98"
+            >
+              <span>🔴</span>
+              <span>
+                {isMasterPushing
+                  ? 'Overwriting Online Database...'
+                  : `Push Master Data to Cloud (${wardrobeItems.length} Items)`}
+              </span>
+            </button>
+          )}
+        </div>
       </main>
+
+      {/* 2-STEP CONFIRMATION MODAL FOR MASTER PUSH OVERWRITE */}
+      {confirmStep > 0 && (
+        <div className="fixed inset-0 z-[100005] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white/95 backdrop-blur-xl border border-black/10 rounded-2xl overflow-hidden max-w-sm w-full shadow-2xl text-center">
+            {confirmStep === 1 ? (
+              <>
+                <div className="p-5 space-y-2">
+                  <div className="text-2xl">⚠️</div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Overwrite Online Version?
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                    This will remove all the available versions online and replace it with the current version. Do you want to continue?
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 border-t border-black/10 divide-x divide-black/10">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmStep(0)}
+                    className="py-3 text-sm font-normal text-[#007AFF] hover:bg-black/5 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteTypedText('');
+                      setConfirmStep(2);
+                    }}
+                    className="py-3 text-sm font-bold text-[#FF3B30] hover:bg-black/5 transition-colors cursor-pointer"
+                  >
+                    OK
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-5 space-y-3">
+                  <div className="text-2xl">🔴</div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Final Security Confirmation
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                    Type <strong className="text-red-600 font-mono">delete</strong> below and press OK to permanently replace all online versions with this device&apos;s current copy:
+                  </p>
+                  <input
+                    type="text"
+                    value={deleteTypedText}
+                    onChange={(e) => setDeleteTypedText(e.target.value)}
+                    placeholder="Type delete here..."
+                    autoFocus
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-center text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+                <div className="grid grid-cols-2 border-t border-black/10 divide-x divide-black/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteTypedText('');
+                      setConfirmStep(0);
+                    }}
+                    className="py-3 text-sm font-normal text-[#007AFF] hover:bg-black/5 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deleteTypedText.trim().toLowerCase() !== 'delete' || isMasterPushing}
+                    onClick={async () => {
+                      if (deleteTypedText.trim().toLowerCase() !== 'delete') return;
+                      setConfirmStep(0);
+                      setDeleteTypedText('');
+                      if (onPushMasterToCloud) {
+                        await onPushMasterToCloud();
+                      }
+                    }}
+                    className={`py-3 text-sm font-bold transition-colors ${
+                      deleteTypedText.trim().toLowerCase() === 'delete'
+                        ? 'text-[#FF3B30] hover:bg-black/5 cursor-pointer'
+                        : 'text-slate-300 cursor-not-allowed'
+                    }`}
+                  >
+                    OK
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -518,6 +518,31 @@ export function pushCloudState(state: AppMasterState, immediate = true): Promise
               state.documents = mergeItemsByTimestamp(state.documents, remoteState.documents, combinedDeleted);
             }
 
+            // Union merge categories & locations for simultaneous multi-user edits
+            const combinedDeletedCats = Array.from(new Set([
+              ...(state.deletedCategories || []),
+              ...(remoteState.deletedCategories || []),
+            ]));
+            state.deletedCategories = combinedDeletedCats;
+            if (Array.isArray(remoteState.categories)) {
+              state.categories = Array.from(new Set([
+                ...(state.categories || []),
+                ...remoteState.categories,
+              ])).filter((c) => !combinedDeletedCats.includes(c));
+            }
+
+            const combinedDeletedLocs = Array.from(new Set([
+              ...(state.deletedLocations || []),
+              ...(remoteState.deletedLocations || []),
+            ]));
+            state.deletedLocations = combinedDeletedLocs;
+            if (Array.isArray(remoteState.locations)) {
+              state.locations = Array.from(new Set([
+                ...(state.locations || []),
+                ...remoteState.locations,
+              ])).filter((l) => !combinedDeletedLocs.includes(l));
+            }
+
             try {
               saveMasterStateIDB(state);
               if (Array.isArray(state.wardrobe)) {
