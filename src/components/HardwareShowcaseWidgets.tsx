@@ -1,5 +1,5 @@
 import React from 'react';
-import { BagAsset, DeviceAsset } from '../data';
+import { BagAsset, DeviceAsset, normalizeBagLocation } from '../data';
 import { Check, AlertCircle, PackageCheck } from 'lucide-react';
 
 interface HardwareShowcaseWidgetsProps {
@@ -13,13 +13,13 @@ interface HardwareShowcaseWidgetsProps {
 }
 
 // Vector Graphic for Bags
-function renderWidgetBagIcon(kind: BagAsset['kind'] | string, isLightBg: boolean) {
+export function renderWidgetBagIcon(kind: BagAsset['kind'] | string, isLightBg: boolean, sizeClass?: string) {
   const iconStroke = isLightBg ? '#065F46' : '#FFFFFF';
   const iconFill = isLightBg ? '#A7F3D0' : 'rgba(255, 255, 255, 0.25)';
 
   if (kind === 'rolling-large') {
     return (
-      <svg viewBox="0 0 36 48" className="w-8 h-10 shrink-0" fill="none">
+      <svg viewBox="0 0 36 48" className={`${sizeClass || 'w-8 h-10'} shrink-0`} fill="none">
         <path d="M13 10V4C13 2.9 13.9 2 15 2H21C22.1 2 23 2.9 23 4V10" stroke={iconStroke} strokeWidth="2" strokeLinecap="round" />
         <rect x="5" y="10" width="26" height="32" rx="4" fill={iconFill} stroke={iconStroke} strokeWidth="2" />
         <line x1="10" y1="18" x2="26" y2="18" stroke={iconStroke} strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
@@ -33,7 +33,7 @@ function renderWidgetBagIcon(kind: BagAsset['kind'] | string, isLightBg: boolean
 
   if (kind === 'rolling-medium') {
     return (
-      <svg viewBox="0 0 36 48" className="w-8 h-10 shrink-0" fill="none">
+      <svg viewBox="0 0 36 48" className={`${sizeClass || 'w-8 h-10'} shrink-0`} fill="none">
         <path d="M14 12V5C14 3.9 14.9 3 16 3H20C21.1 3 22 3.9 22 5V12" stroke={iconStroke} strokeWidth="2" strokeLinecap="round" />
         <rect x="6" y="12" width="24" height="29" rx="4" fill={iconFill} stroke={iconStroke} strokeWidth="2" />
         <line x1="11" y1="20" x2="25" y2="20" stroke={iconStroke} strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
@@ -46,7 +46,7 @@ function renderWidgetBagIcon(kind: BagAsset['kind'] | string, isLightBg: boolean
 
   if (kind === 'backpack') {
     return (
-      <svg viewBox="0 0 36 48" className="w-8 h-10 shrink-0" fill="none">
+      <svg viewBox="0 0 36 48" className={`${sizeClass || 'w-8 h-10'} shrink-0`} fill="none">
         <path d="M14 9C14 6 22 6 22 9" stroke={iconStroke} strokeWidth="2" strokeLinecap="round" />
         <path d="M8 15C8 11.7 10.7 9 14 9H22C25.3 9 28 11.7 28 15V40C28 42.2 26.2 44 24 44H12C9.8 44 8 42.2 8 40V15Z" fill={iconFill} stroke={iconStroke} strokeWidth="2" />
         <rect x="11" y="24" width="14" height="15" rx="2" fill="none" stroke={iconStroke} strokeWidth="1.5" />
@@ -56,7 +56,7 @@ function renderWidgetBagIcon(kind: BagAsset['kind'] | string, isLightBg: boolean
 
   // Sling / Fanny Pack
   return (
-    <svg viewBox="0 0 44 32" className="w-9 h-7 shrink-0" fill="none">
+    <svg viewBox="0 0 44 32" className={`${sizeClass || 'w-9 h-7'} shrink-0`} fill="none">
       <path d="M4 14C4 9 12 7 22 7C32 7 40 9 40 14" stroke={iconStroke} strokeWidth="2" strokeLinecap="round" />
       <path d="M7 13C7 11.3 8.3 10 10 10H34C35.7 10 37 11.3 37 13L35 24C34.7 26.2 32.8 28 30.6 28H13.4C11.2 28 9.3 26.2 9 24L7 13Z" fill={iconFill} stroke={iconStroke} strokeWidth="2" />
       <line x1="12" y1="15" x2="32" y2="15" stroke={iconStroke} strokeWidth="1.5" strokeLinecap="round" />
@@ -224,7 +224,7 @@ export const HardwareShowcaseWidgets: React.FC<HardwareShowcaseWidgetsProps> = (
 
               {/* Bold Title */}
               <div className="font-bold text-xs tracking-tight truncate w-full">
-                {bag.name}
+                {normalizeBagLocation(bag.name)}
               </div>
             </div>
           );

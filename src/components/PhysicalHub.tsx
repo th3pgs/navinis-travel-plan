@@ -40,12 +40,15 @@ import {
   Filter,
   Settings2,
   Battery,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
-import { uploadPhotoToSupabase, compressPhotoToMax400 } from '../cloudSync';
+import { uploadPhotoToSupabase, compressPhotoToMax400, preUploadCompressedDataUrl } from '../cloudSync';
 import { DynamicSelect } from './DynamicSelect';
 import { LuggageContentsModal } from './LuggageContentsModal';
 import { IOSConfirmModal } from './IOSConfirmModal';
 import { ManageCategoriesModal } from './ManageCategoriesModal';
+import { renderWidgetBagIcon } from './HardwareShowcaseWidgets';
 
 interface PhysicalHubProps {
   onBack: () => void;
@@ -422,8 +425,10 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
 
   // Modern Apple iOS Wardrobe Search Bar State (Requirement #5)
   const [wardrobeSearch, setWardrobeSearch] = useState('');
+  const [isLocationIconsOpen, setIsLocationIconsOpen] = useState(false);
 
   const [selectedSuitcaseFilter, setSelectedSuitcaseFilter] = useState<string>('all');
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
   const [isPrintMode, setIsPrintMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [catalogViewMode, setCatalogViewMode] = useState<'detailed' | 'list' | 'pictures'>('detailed');
@@ -886,6 +891,9 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
       setFormPhotoUrl('');
       setFormQuantity('1');
       setEditingItem(null);
+      setTimeout(() => {
+        nameInputRef.current?.focus();
+      }, 10);
     } else {
       setIsModalOpen(false);
       setEditingItem(null);
@@ -901,7 +909,8 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
       let resolvedPhotoUrl = currentPhotoUrl;
       if (resolvedPhotoUrl && resolvedPhotoUrl.startsWith('blob:') && pendingFile) {
         try {
-          resolvedPhotoUrl = await downscalePhotoTo600(pendingFile, 480, 0.68);
+          resolvedPhotoUrl = await downscalePhotoTo600(pendingFile, 440, 0.65);
+          void preUploadCompressedDataUrl(resolvedPhotoUrl);
         } catch {}
         cleanupRawBlobUrl();
       } else {
@@ -974,10 +983,12 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         }
       }
 
-      // 2. Fast Local Canvas Downscale (15MB -> ~20KB, max 480px, 0.68 quality)
-      const compressedDataUrl = await downscalePhotoTo600(processableBlob, 480, 0.68);
+      // 2. Fast Local Canvas Downscale (15MB -> ~18KB, max 440px, 0.65 quality) + Immediate Background Pre-Upload!
+      const compressedDataUrl = await downscalePhotoTo600(processableBlob, 440, 0.65);
       setFormPhotoUrl(compressedDataUrl);
       cleanupRawBlobUrl();
+      // Start uploading to Supabase Storage right now while user is still typing the item name!
+      void preUploadCompressedDataUrl(compressedDataUrl);
     } catch (err) {
       console.error('Photo processing error:', err);
     } finally {
@@ -1421,10 +1432,10 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200 pb-16">
-      {/* FLOATING SAVE TOAST */}
+      {/* FLOATING SAVE TOAST (Tucked in corner so it never obstructs modal panels) */}
       {saveToast && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100000] bg-emerald-600 text-white font-bold text-xs sm:text-sm px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 border border-emerald-400 animate-in fade-in slide-in-from-top-4 duration-200 pointer-events-none">
-          <Check className="w-4 h-4 stroke-[3]" />
+        <div className="fixed bottom-12 right-3 z-[100000] bg-emerald-600/95 backdrop-blur-md text-white font-bold text-xs px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 border border-emerald-400 animate-in fade-in duration-150 pointer-events-none">
+          <Check className="w-3.5 h-3.5 stroke-[3]" />
           <span>{saveToast}</span>
         </div>
       )}
@@ -1479,75 +1490,175 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
         </div>
       </div>
 
-      {/* 1.5 APPLE iOS SEARCH BAR (Requirement #5) */}
-      <div className="relative w-full">
-        <div className="relative flex items-center w-full rounded-[10px] bg-[rgba(118,118,128,0.12)] px-3 py-2 transition-all focus-within:bg-[rgba(118,118,128,0.18)] focus-within:ring-2 focus-within:ring-[#007AFF]/50">
-          <Search className="w-4 h-4 text-slate-500 mr-2.5 shrink-0 pointer-events-none" />
+      {/* 1.5 APPLE iOS SEARCH BAR WITH CORNER EXPANDABLE WIDGET LOCATION ICONS */}
+      <div className="relative w-full space-y-2">
+        <div className="relative flex items-center w-full rounded-[12px] bg-[rgba(118,118,128,0.12)] px-3 py-1.5 transition-all focus-within:bg-[rgba(118,118,128,0.18)] focus-within:ring-2 focus-within:ring-[#007AFF]/50">
+          <Search className="w-4 h-4 text-slate-500 mr-2 shrink-0 pointer-events-none" />
           <input
             type="text"
             value={wardrobeSearch}
             onChange={(e) => setWardrobeSearch(e.target.value)}
-            placeholder="Search items, colors, bags (e.g., dress, red, paracetamol)..."
-            className="w-full bg-transparent text-[15px] text-slate-900 placeholder:text-slate-500 focus:outline-none leading-normal font-normal"
+            placeholder="Search items, colors, bags..."
+            className="w-full bg-transparent text-[14px] sm:text-[15px] text-slate-900 placeholder:text-slate-500 focus:outline-none leading-normal font-normal min-w-0"
           />
           {wardrobeSearch && (
             <button
               type="button"
               onClick={() => setWardrobeSearch('')}
-              className="ml-2 w-5 h-5 rounded-full bg-slate-400 hover:bg-slate-500 text-white flex items-center justify-center text-xs font-bold transition-colors cursor-pointer shrink-0"
+              className="ml-1.5 w-5 h-5 rounded-full bg-slate-400 hover:bg-slate-500 text-white flex items-center justify-center text-xs font-bold transition-colors cursor-pointer shrink-0"
               title="Clear search"
             >
               ✕
             </button>
           )}
+
+          {/* Active Location Filter Reset Chip (when a luggage icon is selected) */}
+          {selectedSuitcaseFilter !== 'all' && (
+            <button
+              type="button"
+              onClick={() => setSelectedSuitcaseFilter('all')}
+              className="ml-1.5 px-2 py-0.5 rounded-full bg-[#007AFF] text-white text-[10px] font-bold flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+              title="Clear bag location filter"
+            >
+              <span>✕</span>
+            </button>
+          )}
+
+          {/* Corner Expand Icon to Toggle the 4 Widget Location Icons */}
+          <button
+            type="button"
+            onClick={() => setIsLocationIconsOpen((prev) => !prev)}
+            className={`ml-1.5 w-8 h-8 rounded-[9px] flex items-center justify-center transition-all cursor-pointer shrink-0 relative ${
+              isLocationIconsOpen || selectedSuitcaseFilter !== 'all'
+                ? 'bg-[#007AFF] text-white shadow-xs'
+                : 'bg-white/85 hover:bg-white text-slate-700 border border-black/10 shadow-2xs'
+            }`}
+            title={isLocationIconsOpen ? 'Hide luggage location icons' : 'Expand luggage location icons'}
+          >
+            {isLocationIconsOpen ? (
+              <Minimize2 className="w-3.5 h-3.5" />
+            ) : (
+              <Maximize2 className="w-3.5 h-3.5" />
+            )}
+            {selectedSuitcaseFilter !== 'all' && !isLocationIconsOpen && (
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-white" />
+            )}
+          </button>
         </div>
+
+        {/* EXPANDED WIDGET LOCATION ICONS BAR (Pure Icons from Widgets — Fits 320px phones, iPads & Laptops) */}
+        {isLocationIconsOpen && (
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2.5 p-1.5 sm:p-2 rounded-2xl bg-white/90 backdrop-blur-md border border-black/10 shadow-xs animate-in fade-in slide-in-from-top-1 duration-150">
+            {bags.slice(0, 4).map((bag) => {
+              const isBagActive =
+                selectedSuitcaseFilter === bag.id || selectedSuitcaseFilter === bag.name;
+              const bagItemCount = wardrobe.filter((w) => isItemInBag(w.targetBag, bag)).length;
+              const canonicalBagTitle = normalizeBagLocation(bag.name);
+
+              return (
+                <button
+                  key={bag.id}
+                  type="button"
+                  onClick={() => {
+                    if (isBagActive) {
+                      setSelectedSuitcaseFilter('all');
+                    } else {
+                      setSelectedSuitcaseFilter(bag.id);
+                      setSelectedCategory('all');
+                    }
+                  }}
+                  title={`${canonicalBagTitle} (${bagItemCount} items)`}
+                  aria-label={canonicalBagTitle}
+                  className={`relative h-12 sm:h-14 rounded-xl border transition-all flex items-center justify-center cursor-pointer select-none active:scale-95 ${
+                    isBagActive
+                      ? 'bg-[#16A34A] border-[#16A34A] text-white ring-2 ring-[#16A34A]/30 shadow-sm'
+                      : 'bg-[#D1FAE5]/70 hover:bg-[#D1FAE5] border-[#10B981]/60 text-[#065F46]'
+                  }`}
+                >
+                  {renderWidgetBagIcon(
+                    bag.kind,
+                    !isBagActive,
+                    bag.kind === 'fannypack' ? 'w-8 h-6 sm:w-9 sm:h-7' : 'w-6 h-8 sm:w-7 sm:h-9'
+                  )}
+
+                  {/* Tiny Item Count Badge in Corner */}
+                  <span
+                    className={`absolute top-1 right-1 px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold leading-tight ${
+                      isBagActive
+                        ? 'bg-white text-[#065F46]'
+                        : 'bg-[#065F46]/15 text-[#065F46]'
+                    }`}
+                  >
+                    {bagItemCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 2. CATEGORY PILLS (Horizontal Scrolling, Starting Immediately without Summary Card) */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none pt-1">
-        <button
-          type="button"
-          onClick={() => setSelectedCategory('all')}
-          className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-            selectedCategory === 'all'
-              ? 'bg-slate-900 text-white shadow-xs'
-              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          All ({wardrobe.length})
-        </button>
+        {(() => {
+          const activeBagObj =
+            selectedSuitcaseFilter !== 'all'
+              ? bags.find((b) => b.id === selectedSuitcaseFilter || b.name === selectedSuitcaseFilter)
+              : null;
+          const bagScopedWardrobe = activeBagObj
+            ? wardrobe.filter((w) => isItemInBag(w.targetBag, activeBagObj))
+            : wardrobe;
 
-        {allCategories.map((cat) => {
-          const normCat = normalizeCategoryName(cat);
-          const count = wardrobe.filter((w) => normalizeCategoryName(w.category) === normCat || w.category === cat).length;
-          const isActive =
-            selectedCategory === cat ||
-            (selectedCategory !== 'all' &&
-              selectedCategory !== 'unnamed' &&
-              selectedCategory !== 'trash' &&
-              normalizeCategoryName(selectedCategory) === normCat);
           return (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
-                isActive
-                  ? 'bg-[#007AFF] text-white shadow-xs'
-                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-              }`}
-            >
-              <span>{cat}</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                  isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+            <>
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('all')}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  selectedCategory === 'all'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
                 }`}
               >
-                {count}
-              </span>
-            </button>
+                All ({bagScopedWardrobe.length})
+              </button>
+
+              {allCategories.map((cat) => {
+                const normCat = normalizeCategoryName(cat);
+                const count = bagScopedWardrobe.filter(
+                  (w) => normalizeCategoryName(w.category) === normCat || w.category === cat
+                ).length;
+                const isActive =
+                  selectedCategory === cat ||
+                  (selectedCategory !== 'all' &&
+                    selectedCategory !== 'unnamed' &&
+                    selectedCategory !== 'trash' &&
+                    normalizeCategoryName(selectedCategory) === normCat);
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isActive
+                        ? 'bg-[#007AFF] text-white shadow-xs'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    <span>{cat}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                        isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </>
           );
-        })}
+        })()}
 
         {/* 🗑️ Trash / Recently Deleted Pill */}
         <button
@@ -2068,6 +2179,7 @@ export const PhysicalHub: React.FC<PhysicalHubProps> = ({
                   Item Name & Description *
                 </label>
                 <input
+                  ref={nameInputRef}
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}

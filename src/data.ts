@@ -425,7 +425,7 @@ export function normalizeCategoryName(rawCategory?: string): string {
 export const DEFAULT_BAG_LOCATIONS: string[] = [
   'Main Large Rolling Suitcase',
   'Medium Rolling Suitcase',
-  'Tech Laptop Backpack',
+  'Travel Backpack',
   'Compact Fanny Pack',
 ];
 
@@ -461,14 +461,15 @@ export function normalizeBagLocation(rawLoc?: string): string {
     return 'Medium Rolling Suitcase';
   }
 
-  // 3. Tech Laptop Backpack
+  // 3. Travel Backpack
   if (
     lower.includes('backpack') ||
     lower.includes('tech laptop') ||
     lower.includes('cabin laptop') ||
-    lower.includes('cabin carry-on')
+    lower.includes('cabin carry-on') ||
+    lower.includes('travel backpack')
   ) {
-    return 'Tech Laptop Backpack';
+    return 'Travel Backpack';
   }
 
   // 4. Compact Fanny Pack
@@ -639,7 +640,7 @@ export const INITIAL_BAGS: BagAsset[] = [
   },
   {
     id: 'bag-backpack',
-    name: 'Tech Laptop Backpack',
+    name: 'Travel Backpack',
     type: 'Cabin Carry-On (With Passenger)',
     dimensions: '~45 cm (25–30L Structured)',
     weightLimit: 'Cabin Carry-On',
@@ -693,7 +694,7 @@ export const INITIAL_DEVICES: DeviceAsset[] = [
     model: '14" Windows Research Laptop',
     role: 'Food Science coursework + Hiddify TUN Mode + Offline Document Vault',
     carrierOrOs: 'Windows 11 Pro',
-    carryLocation: 'Structured Tech Laptop Backpack',
+    carryLocation: 'Travel Backpack',
     isBought: true,
     isPacked: false,
     type: 'laptop',
@@ -704,7 +705,7 @@ export const INITIAL_DEVICES: DeviceAsset[] = [
     model: 'Tablet Workstation',
     role: 'Hiddify + Pleco + Offline Taxi Address Sign display',
     carrierOrOs: 'iPadOS',
-    carryLocation: 'Structured Tech Laptop Backpack',
+    carryLocation: 'Travel Backpack',
     isBought: true,
     isPacked: false,
     type: 'tablet',
@@ -726,7 +727,7 @@ export const INITIAL_DEVICES: DeviceAsset[] = [
     model: 'Safety Certified Battery',
     role: 'Aviation Rule: MUST carry in cabin backpack. Confiscated if checked!',
     carrierOrOs: 'CCC / CE Certified Mark',
-    carryLocation: 'Structured Tech Laptop Backpack',
+    carryLocation: 'Travel Backpack',
     isBought: false, // Default unbought (Red)
     isPacked: false,
     type: 'powerbank',
@@ -749,7 +750,7 @@ export const INITIAL_DOCUMENTS: DocumentItem[] = [
     id: 'doc-admit',
     title: 'Printed Admission Notice (#263660001)',
     issuer: 'School of Food Science and Engineering, Hainan University',
-    carryLocation: 'Structured Tech Laptop Backpack',
+    carryLocation: 'Travel Backpack',
     isReady: true,
     isPacked: false,
     notes: 'Page 1 (Chinese stamped full scholarship) & Page 2 (English). Signed & official red university stamp.',
@@ -759,7 +760,7 @@ export const INITIAL_DOCUMENTS: DocumentItem[] = [
     id: 'doc-jw202',
     title: 'Confirmation Form for Study in China (JW201/JW202)',
     issuer: 'Ministry of Education of the People\'s Republic of China',
-    carryLocation: 'Structured Tech Laptop Backpack',
+    carryLocation: 'Travel Backpack',
     isReady: true,
     isPacked: false,
     notes: 'Official government stamped visa authorization certificate in A4 waterproof folder.',
@@ -779,7 +780,7 @@ export const INITIAL_DOCUMENTS: DocumentItem[] = [
     id: 'doc-med',
     title: 'ORIGINAL Physical Examination Record & Blood Test Reports',
     issuer: 'Designated Government Hospital Stamp',
-    carryLocation: 'Structured Tech Laptop Backpack',
+    carryLocation: 'Travel Backpack',
     isReady: true,
     isPacked: false,
     notes: 'Physical clinic/physician ink stamp, HIV/Hepatitis/Syphilis blood slips, chest X-ray report.',
@@ -799,7 +800,7 @@ export const INITIAL_DOCUMENTS: DocumentItem[] = [
     id: 'doc-deg',
     title: 'Bachelor\'s Degree Certificate & Official Transcripts',
     issuer: 'Graduating University',
-    carryLocation: 'Structured Tech Laptop Backpack',
+    carryLocation: 'Travel Backpack',
     isReady: true,
     isPacked: false,
     notes: 'Original diploma + certified English notarized copies for Master\'s degree registration.',
@@ -1306,7 +1307,7 @@ export const INITIAL_WARDROBE: WardrobeItem[] = [
     name: 'Spare Fresh Top (Transit Emergency)',
     category: 'Tops & T-Shirts',
     quantity: 1,
-    targetBag: 'Structured Tech Laptop Backpack',
+    targetBag: 'Travel Backpack',
     isBought: true,
     isPacked: false,
     colorHex: '#8b5cf6',
@@ -1479,7 +1480,7 @@ export const INITIAL_WARDROBE: WardrobeItem[] = [
     name: 'Toothbrush & Travel Toothpaste (<100ml)',
     category: 'Bottles, Liquids & Toiletries',
     quantity: 1,
-    targetBag: 'Structured Tech Laptop Backpack',
+    targetBag: 'Travel Backpack',
     isBought: true,
     isPacked: false,
     colorHex: '#14b8a6',
@@ -1645,7 +1646,7 @@ export const INITIAL_WARDROBE: WardrobeItem[] = [
     name: 'A4 Waterproof Zippered Document Folder',
     category: 'Daily Essentials, Cutlery & Folders',
     quantity: 1,
-    targetBag: 'Structured Tech Laptop Backpack',
+    targetBag: 'Travel Backpack',
     isBought: true,
     isPacked: false,
     colorHex: '#059669',
@@ -1656,7 +1657,7 @@ export const INITIAL_WARDROBE: WardrobeItem[] = [
     name: 'Compact Windproof Sturdy Umbrella',
     category: 'Daily Essentials, Cutlery & Folders',
     quantity: 1,
-    targetBag: 'Structured Tech Laptop Backpack',
+    targetBag: 'Travel Backpack',
     isBought: true,
     isPacked: false,
     colorHex: '#0284c7',
@@ -1667,7 +1668,7 @@ export const INITIAL_WARDROBE: WardrobeItem[] = [
     name: 'Academic Stationery & Black Ink Pens',
     category: 'Daily Essentials, Cutlery & Folders',
     quantity: 4,
-    targetBag: 'Structured Tech Laptop Backpack',
+    targetBag: 'Travel Backpack',
     isBought: true,
     isPacked: false,
     colorHex: '#1e293b',
@@ -1678,7 +1679,7 @@ export const INITIAL_WARDROBE: WardrobeItem[] = [
     name: 'Universal Travel Power Adaptors (China Type A/I)',
     category: 'Daily Essentials, Cutlery & Folders',
     quantity: 2,
-    targetBag: 'Structured Tech Laptop Backpack',
+    targetBag: 'Travel Backpack',
     isBought: true,
     isPacked: false,
     colorHex: '#b45309',

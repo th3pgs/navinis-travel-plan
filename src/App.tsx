@@ -319,11 +319,15 @@ export function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter((l: string) => !deleted.includes(l));
+          return Array.from(
+            new Set(parsed.map((l: string) => normalizeBagLocation(l)).filter((l: string) => !deleted.includes(l)))
+          );
         }
       }
       const legacyCustom = JSON.parse(localStorage.getItem('navini_custom_locations_v7') || '[]');
-      const combined = Array.from(new Set([...DEFAULT_BAG_LOCATIONS, ...legacyCustom]));
+      const combined = Array.from(
+        new Set([...DEFAULT_BAG_LOCATIONS, ...legacyCustom.map((l: string) => normalizeBagLocation(l))])
+      );
       return combined.filter((l) => !deleted.includes(l));
     } catch {
       return DEFAULT_BAG_LOCATIONS;
@@ -628,12 +632,16 @@ export function App() {
     }
 
     if (Array.isArray(remote.devices) && remote.devices.length > 0) {
-      const cleanDevices = remote.devices.filter((d) => d && d.id && !mergedDeletedIds.includes(d.id));
+      const cleanDevices = remote.devices
+        .filter((d) => d && d.id && !mergedDeletedIds.includes(d.id))
+        .map((d) => ({ ...d, carryLocation: normalizeBagLocation(d.carryLocation) }));
       setDevices(cleanDevices);
     }
 
     if (Array.isArray(remote.documents) && remote.documents.length > 0) {
-      const cleanDocs = remote.documents.filter((d) => d && d.id && !mergedDeletedIds.includes(d.id));
+      const cleanDocs = remote.documents
+        .filter((d) => d && d.id && !mergedDeletedIds.includes(d.id))
+        .map((d) => ({ ...d, carryLocation: normalizeBagLocation(d.carryLocation) }));
       setDocuments(cleanDocs);
     }
 
@@ -659,7 +667,11 @@ export function App() {
     if (Array.isArray(remote.locations) && remote.locations.length > 0) {
       const del = remote.deletedLocations || [];
       const dedupedLocs = Array.from(
-        new Set(remote.locations.map((l: string) => l.trim()).filter((l: string) => l && !del.includes(l)))
+        new Set(
+          remote.locations
+            .map((l: string) => normalizeBagLocation(l.trim()))
+            .filter((l: string) => l && !del.includes(l))
+        )
       );
       setLocations(dedupedLocs);
     }
@@ -1756,31 +1768,53 @@ export function App() {
   const verifiedApps = apps.filter((a) => a.isVerified || a.isConfigured).length;
   const appPercent = Math.round((verifiedApps / (apps.length || 1)) * 100);
 
+  const activeUploadingItems = wardrobe.filter((w) => w.syncStatus === 'uploading');
+  const avgUploadProgress =
+    activeUploadingItems.length > 0
+      ? Math.round(
+          activeUploadingItems.reduce((sum, w) => sum + (Number(w.uploadProgress) || 30), 0) /
+            activeUploadingItems.length
+        )
+      : 100;
+
   return (
     <div className="min-h-screen bg-[#F2F2F7] text-slate-900 pb-20 font-sans overflow-x-hidden print:bg-white print:pb-0 print:overflow-visible">
-      {/* COMPACT FLOATING SYNC PILL (TOP-RIGHT VIEWPORT) */}
+      {/* NON-OBSTRUCTING CORNER LOADING BAR (TOP-LEFT VIEWPORT — NEVER BLOCKS ADD ITEM PANEL OR CLOSE BUTTON) */}
       {(uploadingCount > 0 || showSyncedPill) && (
         <div
-          className={`fixed top-3 right-3 sm:top-4 sm:right-4 z-[100000] h-7 px-3 rounded-full flex items-center gap-1.5 backdrop-blur-md shadow-lg pointer-events-none transition-all duration-300 ${
+          className={`fixed top-1.5 left-2 z-[100000] px-2.5 py-1 rounded-xl flex flex-col gap-1 backdrop-blur-md shadow-md pointer-events-none transition-all duration-200 max-w-[165px] ${
             uploadingCount > 0
-              ? 'bg-slate-900/90 text-white border border-slate-700/80 animate-in fade-in slide-in-from-top-2'
-              : 'bg-emerald-900/90 text-emerald-100 border border-emerald-500/50 animate-in fade-in slide-in-from-top-2'
+              ? 'bg-slate-900/85 text-white border border-white/15 animate-in fade-in'
+              : 'bg-emerald-900/85 text-emerald-100 border border-emerald-500/40 animate-in fade-in'
           }`}
         >
           {uploadingCount > 0 ? (
             <>
-              <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin shrink-0" />
-              <span className="text-[11px] font-semibold">
-                Uploading {uploadingCount} photo{uploadingCount > 1 ? 's' : ''} in background...
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="w-2.5 h-2.5 border-2 border-white/30 border-t-[#38bdf8] rounded-full animate-spin shrink-0" />
+                  <span className="text-[10px] font-semibold truncate">
+                    ☁️ Syncing {uploadingCount > 1 ? `(${uploadingCount})` : ''}
+                  </span>
+                </div>
+                <span className="text-[9.5px] font-mono font-bold text-[#38bdf8] shrink-0">
+                  {avgUploadProgress}%
+                </span>
+              </div>
+              <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#38bdf8] rounded-full transition-all duration-200"
+                  style={{ width: `${Math.max(15, Math.min(100, avgUploadProgress))}%` }}
+                />
+              </div>
             </>
           ) : (
-            <>
-              <span className="text-xs">☁️✓</span>
-              <span className="text-[11px] font-semibold text-emerald-200">
-                All photos synced
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px]">☁️✓</span>
+              <span className="text-[10px] font-semibold text-emerald-200">
+                Synced
               </span>
-            </>
+            </div>
           )}
         </div>
       )}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DocumentItem, DEFAULT_BAG_LOCATIONS } from '../data';
+import { DocumentItem, DEFAULT_BAG_LOCATIONS, normalizeBagLocation } from '../data';
 import { DynamicSelect } from './DynamicSelect';
 import { IOSConfirmModal } from './IOSConfirmModal';
 import {
@@ -84,7 +84,7 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
     setEditingDoc(null);
     setFormTitle('');
     setFormIssuer('');
-    setFormLocation('Structured Tech Laptop Backpack');
+    setFormLocation('Travel Backpack');
     setFormPriority('High');
     setFormNotes('');
     setShowAddModal(true);
@@ -94,7 +94,7 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
     setEditingDoc(doc);
     setFormTitle(doc.title);
     setFormIssuer(doc.issuer);
-    setFormLocation(doc.carryLocation);
+    setFormLocation(normalizeBagLocation(doc.carryLocation));
     setFormPriority(doc.priority);
     setFormNotes(doc.notes);
     setShowAddModal(true);
@@ -263,7 +263,7 @@ export const DocumentationHub: React.FC<DocumentationHubProps> = ({
                     )}
 
                     <div className="mt-2 flex items-center gap-2 text-xs font-mono text-slate-500">
-                      <span>Carry: <strong>{doc.carryLocation}</strong></span>
+                      <span>Carry: <strong>{normalizeBagLocation(doc.carryLocation)}</strong></span>
                     </div>
                   </div>
                 </div>

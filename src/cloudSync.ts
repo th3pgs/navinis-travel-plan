@@ -619,7 +619,7 @@ export function pushCloudState(state: AppMasterState, immediate = false): Promis
     if (immediate) {
       doPush();
     } else {
-      syncDebounceTimer = setTimeout(doPush, 350);
+      syncDebounceTimer = setTimeout(doPush, 150);
     }
   });
 }
@@ -706,8 +706,71 @@ export async function checkSupabaseConnection(): Promise<boolean> {
 }
 
 /**
- * Atomically compresses a photo (if dataUrl), uploads to Supabase Storage,
- * and returns confirmed CDN url. Safe for non-blocking background queue.
+ * Ultra-fast synchronous base64 dataURL to Blob converter (<1ms, avoids extra fetch/canvas overhead)
+ */
+export function dataUrlToBlobFast(dataUrl: string): Blob {
+  const parts = dataUrl.split(',');
+  const mimeMatch = parts[0].match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const bstr = atob(parts[1] || '');
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
+// In-flight pre-upload cache keyed by compressed dataUrl prefix/length so snapping a photo starts uploading before Save is even pressed
+const _preUploadCache = new Map<string, Promise<string>>();
+
+/**
+ * Starts uploading a compressed dataUrl to Supabase Storage immediately in the background
+ * the moment the user snaps/selects a photo in the modal.
+ */
+export function preUploadCompressedDataUrl(compressedDataUrl: string): Promise<string> {
+  if (!compressedDataUrl || !compressedDataUrl.startsWith('data:image')) {
+    return Promise.resolve(compressedDataUrl);
+  }
+  const cacheKey = `${compressedDataUrl.length}:${compressedDataUrl.slice(-64)}`;
+  const existing = _preUploadCache.get(cacheKey);
+  if (existing) return existing;
+
+  const uploadPromise = (async () => {
+    try {
+      const blob = dataUrlToBlobFast(compressedDataUrl);
+      const fileName = `wardrobe/${Date.now()}_${Math.random().toString(36).substring(2, 8)}.jpg`;
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(fileName, blob, {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
+
+      if (!uploadErr && uploadData?.path) {
+        const { data: publicData } = supabase.storage
+          .from(STORAGE_BUCKET)
+          .getPublicUrl(uploadData.path);
+        return publicData.publicUrl;
+      }
+    } catch (err) {
+      console.warn('Pre-upload storage fallback to compressed dataUrl:', err);
+    }
+    return compressedDataUrl;
+  })();
+
+  _preUploadCache.set(cacheKey, uploadPromise);
+  // Keep cache bounded
+  if (_preUploadCache.size > 30) {
+    const firstKey = _preUploadCache.keys().next().value;
+    if (firstKey) _preUploadCache.delete(firstKey);
+  }
+  return uploadPromise;
+}
+
+/**
+ * Atomically uploads a photo (reusing any in-flight pre-upload started on camera snap)
+ * and returns confirmed CDN url. Safe for non-blocking rapid-fire background queue.
  */
 export async function uploadWardrobeItemPhotoAtomic(
   item: WardrobeItem,
@@ -717,40 +780,16 @@ export async function uploadWardrobeItemPhotoAtomic(
     let finalPhotoUrl = item.photoUrl;
 
     if (item.photoUrl && item.photoUrl.startsWith('data:image')) {
-      onProgress?.(25);
-      // Compress to 400x400 JPEG
-      const compressedDataUrl = await compressPhotoToMax400(item.photoUrl, 400, 0.65);
-      onProgress?.(50);
+      onProgress?.(35);
+      // Only re-compress if the dataUrl wasn't already downscaled (<95KB base64 ~ 70KB binary)
+      const compressedDataUrl =
+        item.photoUrl.length < 95000
+          ? item.photoUrl
+          : await compressPhotoToMax400(item.photoUrl, 400, 0.65);
+      onProgress?.(65);
 
-      try {
-        // Convert dataUrl to blob
-        const res = await fetch(compressedDataUrl);
-        const blob = await res.blob();
-        onProgress?.(65);
-
-        // Upload blob to Supabase Storage
-        const fileName = `wardrobe/${Date.now()}_${Math.random().toString(36).substring(2, 8)}.jpg`;
-        const { data: uploadData, error: uploadErr } = await supabase.storage
-          .from(STORAGE_BUCKET)
-          .upload(fileName, blob, {
-            contentType: 'image/jpeg',
-            upsert: true,
-          });
-
-        if (!uploadErr && uploadData?.path) {
-          const { data: publicData } = supabase.storage
-            .from(STORAGE_BUCKET)
-            .getPublicUrl(uploadData.path);
-          finalPhotoUrl = publicData.publicUrl;
-        } else {
-          // Fallback to compressed base64 if network offline
-          finalPhotoUrl = compressedDataUrl;
-        }
-      } catch (uploadErr) {
-        console.warn('Storage upload warning, using local compressed image:', uploadErr);
-        finalPhotoUrl = compressedDataUrl;
-      }
-      onProgress?.(85);
+      finalPhotoUrl = await preUploadCompressedDataUrl(compressedDataUrl);
+      onProgress?.(90);
     }
 
     onProgress?.(100);
